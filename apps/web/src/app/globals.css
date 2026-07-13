@@ -1,0 +1,531 @@
+@import "tailwindcss";
+
+/* ============================================
+   EasyJapanese Design System — Neon/Gradient
+   ============================================ */
+
+@theme {
+  /* Primary Violet→Indigo */
+  --color-primary-50: #f5f3ff;
+  --color-primary-100: #ede9fe;
+  --color-primary-200: #ddd6fe;
+  --color-primary-300: #c4b5fd;
+  --color-primary-400: #a78bfa;
+  --color-primary-500: #8b5cf6;
+  --color-primary-600: #7c3aed;
+  --color-primary-700: #6d28d9;
+  --color-primary-800: #5b21b6;
+  --color-primary-900: #4c1d95;
+
+  /* Accent Cyan→Emerald */
+  --color-accent-50: #ecfeff;
+  --color-accent-100: #cffafe;
+  --color-accent-200: #a5f3fc;
+  --color-accent-300: #67e8f9;
+  --color-accent-400: #22d3ee;
+  --color-accent-500: #06b6d4;
+  --color-accent-600: #0891b2;
+  --color-accent-700: #0e7490;
+  --color-accent-800: #155e75;
+  --color-accent-900: #164e63;
+
+  /* Sakura Pink */
+  --color-sakura-300: #f9a8d4;
+  --color-sakura-400: #f472b6;
+  --color-sakura-500: #ec4899;
+  --color-sakura-600: #db2777;
+
+  /* Gold for XP/Achievements */
+  --color-gold-300: #fcd34d;
+  --color-gold-400: #fbbf24;
+  --color-gold-500: #f59e0b;
+  --color-gold-600: #d97706;
+
+  /* Surfaces - Fixed Neon/Glass Theme */
+  --color-surface-light: #0b0f19;
+  --color-surface-card-light: #12182b;
+  --color-surface-dark: #0b0f19;
+  --color-surface-card-dark: #12182b;
+
+  /* Font families */
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-jp: "Noto Sans JP", "Inter", sans-serif;
+
+  /* Border radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+}
+
+/* Base styles */
+* {
+  border-color: theme("colors.gray.200");
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Dark mode surface overrides */
+.dark * {
+  border-color: theme("colors.gray.800");
+}
+
+/* ============================================
+   Neon Glow Effects
+   ============================================ */
+
+.neon-glow {
+  box-shadow:
+    0 0 20px rgba(124, 58, 237, 0.15),
+    0 0 60px rgba(124, 58, 237, 0.05);
+}
+
+.neon-glow:hover {
+  box-shadow:
+    0 0 30px rgba(124, 58, 237, 0.25),
+    0 0 80px rgba(124, 58, 237, 0.1);
+}
+
+.dark .neon-glow {
+  box-shadow:
+    0 0 20px rgba(124, 58, 237, 0.3),
+    0 0 60px rgba(124, 58, 237, 0.1);
+}
+
+.dark .neon-glow:hover {
+  box-shadow:
+    0 0 30px rgba(124, 58, 237, 0.5),
+    0 0 80px rgba(124, 58, 237, 0.2);
+}
+
+.neon-glow-accent {
+  box-shadow:
+    0 0 20px rgba(6, 182, 212, 0.15),
+    0 0 60px rgba(6, 182, 212, 0.05);
+}
+
+.dark .neon-glow-accent {
+  box-shadow:
+    0 0 20px rgba(6, 182, 212, 0.3),
+    0 0 60px rgba(6, 182, 212, 0.1);
+}
+
+/* ============================================
+   Gradient Utilities
+   ============================================ */
+
+.gradient-text {
+  background: linear-gradient(135deg, #7c3aed, #06b6d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-sakura {
+  background: linear-gradient(135deg, #ec4899, #f472b6, #7c3aed);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-bg-primary {
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+}
+
+.gradient-bg-accent {
+  background: linear-gradient(135deg, #06b6d4, #10b981);
+}
+
+.gradient-bg-hero {
+  background: linear-gradient(
+    135deg,
+    rgba(124, 58, 237, 0.05) 0%,
+    rgba(6, 182, 212, 0.05) 50%,
+    rgba(236, 72, 153, 0.05) 100%
+  );
+}
+
+.dark .gradient-bg-hero {
+  background: linear-gradient(
+    135deg,
+    rgba(124, 58, 237, 0.15) 0%,
+    rgba(6, 182, 212, 0.1) 50%,
+    rgba(236, 72, 153, 0.1) 100%
+  );
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes pulse-neon {
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(124, 58, 237, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 40px rgba(124, 58, 237, 0.5),
+      0 0 80px rgba(124, 58, 237, 0.2);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-pulse-neon {
+  animation: pulse-neon 2s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent 25%, rgba(124, 58, 237, 0.1) 50%, transparent 75%);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.5s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.3s ease-out forwards;
+}
+
+@keyframes wave {
+  0% {
+    transform: rotate(0deg);
+  }
+  10% {
+    transform: rotate(14deg);
+  }
+  20% {
+    transform: rotate(-8deg);
+  }
+  30% {
+    transform: rotate(14deg);
+  }
+  40% {
+    transform: rotate(-4deg);
+  }
+  50% {
+    transform: rotate(10deg);
+  }
+  60% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+.animate-wave {
+  animation: wave 2.5s ease-in-out infinite;
+}
+
+/* Japanese font utility */
+.font-jp {
+  font-family: var(--font-jp);
+}
+
+/* Stagger children animations */
+.stagger-children > * {
+  opacity: 0;
+  animation: slide-up 0.5s ease-out forwards;
+}
+
+.stagger-children > *:nth-child(1) {
+  animation-delay: 0.1s;
+}
+.stagger-children > *:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.stagger-children > *:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.stagger-children > *:nth-child(4) {
+  animation-delay: 0.4s;
+}
+.stagger-children > *:nth-child(5) {
+  animation-delay: 0.5s;
+}
+.stagger-children > *:nth-child(6) {
+  animation-delay: 0.6s;
+}
+
+/* ============================================
+   Card Styles
+   ============================================ */
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dark .glass-card {
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Japanese Decorative Elements */
+.jp-pattern {
+  background-image: radial-gradient(circle at 1px 1px, rgba(124, 58, 237, 0.08) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+.dark .jp-pattern {
+  background-image: radial-gradient(circle at 1px 1px, rgba(124, 58, 237, 0.2) 1px, transparent 0);
+}
+
+/* ============================================
+   Kana Stroke Animation
+   ============================================ */
+
+@keyframes kana-draw {
+  0% {
+    stroke-dashoffset: 800;
+    fill: transparent;
+  }
+  70% {
+    stroke-dashoffset: 0;
+    fill: transparent;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    fill: currentColor;
+  }
+}
+
+.kana-stroke-draw {
+  stroke-dasharray: 800;
+  stroke-dashoffset: 800;
+  animation: kana-draw 2.5s ease-in-out forwards;
+}
+
+/* Advanced per-stroke path animation */
+@keyframes kana-stroke-path {
+  0% {
+    stroke-dashoffset: 300;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes kana-stroke-label {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ============================================
+   Vocabulary Page — Warm Parchment Reading Theme
+   Eye-comfort colors for long study sessions
+   Inspired by Kindle Sepia + Japanese washi paper
+   ============================================ */
+
+/* Token definitions */
+.vocab-page {
+  --vp-bg: #f7f4ee; /* Warm cream — main background */
+  --vp-bg-card: #ffffff; /* Pure white card surfaces */
+  --vp-bg-alt: #eee9de; /* Slightly deeper cream for sections */
+  --vp-bg-hover: #f0ebe3; /* Hover surface */
+  --vp-bg-input: #fdfaf5; /* Input field background */
+  --vp-text: #1c1510; /* Deep warm ink — primary text */
+  --vp-text-sub: #6b5f52; /* Medium warm brown — secondary text */
+  --vp-text-muted: #a09080; /* Muted text */
+  --vp-border: #ddd8cf; /* Warm tan border */
+  --vp-border-soft: #eae5dc; /* Softer border */
+  --vp-shadow: rgba(92, 72, 52, 0.08); /* Warm brown shadow */
+  --vp-shadow-md: rgba(92, 72, 52, 0.14);
+
+  background-color: var(--vp-bg);
+  color: var(--vp-text);
+  min-height: 100vh;
+}
+
+/* Page & section backgrounds */
+.vocab-page .vp-section-alt {
+  background-color: var(--vp-bg-alt);
+}
+
+.vocab-page .vp-hero {
+  background: linear-gradient(
+    135deg,
+    rgba(124, 58, 237, 0.06) 0%,
+    rgba(240, 235, 220, 0.8) 50%,
+    rgba(236, 72, 153, 0.04) 100%
+  );
+  border-bottom: 1px solid var(--vp-border);
+}
+
+/* ── Cards ─────────────────────────────────── */
+.vocab-page .vp-card {
+  background-color: var(--vp-bg-card);
+  border-color: var(--vp-border);
+  box-shadow:
+    0 1px 4px var(--vp-shadow),
+    0 0 0 1px var(--vp-border-soft);
+  transition:
+    box-shadow 0.2s,
+    transform 0.15s;
+  color: var(--vp-text);
+}
+
+.vocab-page .vp-card:hover {
+  box-shadow:
+    0 6px 20px var(--vp-shadow-md),
+    0 0 0 1px var(--vp-border);
+  transform: translateY(-2px);
+}
+
+/* ── Text helpers ───────────────────────────── */
+.vocab-page .vp-text {
+  color: var(--vp-text);
+}
+.vocab-page .vp-text-sub {
+  color: var(--vp-text-sub);
+}
+.vocab-page .vp-text-muted {
+  color: var(--vp-text-muted);
+}
+
+/* ── Inputs ─────────────────────────────────── */
+.vocab-page .vp-input {
+  background-color: var(--vp-bg-input);
+  border: 1.5px solid var(--vp-border);
+  color: var(--vp-text);
+  border-radius: 0.75rem;
+}
+
+.vocab-page .vp-input:focus {
+  outline: none;
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+  background-color: #ffffff;
+}
+
+.vocab-page .vp-input::placeholder {
+  color: var(--vp-text-muted);
+}
+
+/* ── Pills / Tabs ───────────────────────────── */
+.vocab-page .vp-pill {
+  background-color: var(--vp-bg-card);
+  border: 1.5px solid var(--vp-border);
+  color: var(--vp-text-sub);
+  border-radius: 9999px;
+  transition: all 0.15s;
+}
+
+.vocab-page .vp-pill:hover {
+  border-color: #7c3aed;
+  color: #7c3aed;
+  background-color: #f5f3ff;
+}
+
+.vocab-page .vp-pill.active {
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  border-color: transparent;
+  color: #ffffff;
+}
+
+/* ── Dropdown ───────────────────────────────── */
+.vocab-page .vp-dropdown {
+  background-color: var(--vp-bg-card);
+  border: 1.5px solid var(--vp-border);
+  box-shadow: 0 8px 24px var(--vp-shadow-md);
+}
+
+.vocab-page .vp-dropdown-item:hover {
+  background-color: var(--vp-bg-hover);
+}
+
+/* ── Dividers ───────────────────────────────── */
+.vocab-page .vp-divider {
+  border-color: var(--vp-border-soft);
+}
+
+/* ── Sticky level nav ───────────────────────── */
+.vocab-page .vp-sticky-nav {
+  background-color: var(--vp-bg);
+  border-bottom: 1px solid var(--vp-border);
+}
+
+/* ── Result count text ──────────────────────── */
+.vocab-page .vp-count {
+  color: var(--vp-text-muted);
+  font-size: 0.75rem;
+}
+
+/* Scrollbar styling for the vocab page */
+.vocab-page ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.vocab-page ::-webkit-scrollbar-track {
+  background: var(--vp-bg-alt);
+}
+.vocab-page ::-webkit-scrollbar-thumb {
+  background: var(--vp-border);
+  border-radius: 99px;
+}
+.vocab-page ::-webkit-scrollbar-thumb:hover {
+  background: #a09080;
+}

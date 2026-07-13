@@ -1,0 +1,13 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+allowBuilds:
+  "@sentry/cli": true
+  sharp: true
+  unrs-resolver: true
+
+onlyBuiltDependencies:
+  - "@sentry/cli"
+  - sharp
+  - unrs-resolver

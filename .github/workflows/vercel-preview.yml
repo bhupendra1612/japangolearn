@@ -1,0 +1,43 @@
+name: Vercel Preview
+
+on:
+  pull_request:
+
+jobs:
+  deploy-web-preview:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_WEB_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }} --cwd apps/web
+      - run: pnpm exec vercel build --token=${{ secrets.VERCEL_TOKEN }} --cwd apps/web
+      - run: pnpm exec vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --cwd apps/web
+
+  deploy-admin-preview:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_ADMIN_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }} --cwd apps/admin
+      - run: pnpm exec vercel build --token=${{ secrets.VERCEL_TOKEN }} --cwd apps/admin
+      - run: pnpm exec vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --cwd apps/admin

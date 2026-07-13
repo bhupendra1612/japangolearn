@@ -1,0 +1,43 @@
+{
+  "name": "japangolearn",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "typecheck": "turbo typecheck",
+    "lint": "turbo lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "clean": "turbo clean && git clean -xdf node_modules .turbo",
+    "dev:web": "pnpm --filter @japangolearn/web dev",
+    "dev:admin": "pnpm --filter @japangolearn/admin dev",
+    "dev:mobile": "pnpm --filter @japangolearn/mobile dev",
+    "build:web": "pnpm --filter @japangolearn/web build",
+    "build:admin": "pnpm --filter @japangolearn/admin build",
+    "check:mobile": "pnpm --filter @japangolearn/mobile typecheck",
+    "check:expo": "pnpm --filter @japangolearn/mobile exec expo install --check",
+    "release:web:preview": "vercel deploy --cwd apps/web",
+    "release:web:production": "vercel deploy --cwd apps/web --prod",
+    "release:admin:preview": "vercel deploy --cwd apps/admin",
+    "release:admin:production": "vercel deploy --cwd apps/admin --prod",
+    "release:mobile:preview": "pnpm --filter @japangolearn/mobile exec eas update --channel preview",
+    "release:mobile:production": "pnpm --filter @japangolearn/mobile exec eas update --channel production",
+    "db:types": "node scripts/generate-supabase-types.js",
+    "seed:kanji": "node supabase/seed/kanji/seed-kanji.js"
+  },
+  "devDependencies": {
+    "prettier": "3.6.2",
+    "supabase": "2.109.0",
+    "turbo": "2.5.6",
+    "typescript": "5.9.2",
+    "vercel": "^54.18.6"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.49.1"
+  }
+}

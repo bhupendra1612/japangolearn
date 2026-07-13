@@ -1,0 +1,56 @@
+{
+  "expo": {
+    "name": "EasyJapanese",
+    "slug": "japaneseapp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "japaneseapp",
+    "userInterfaceStyle": "automatic",
+    "experiments": {
+      "reactCompiler": true
+    },
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F0B1E"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.easyjapanese.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "com.easyjapanese.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-sqlite",
+      "@sentry/react-native/expo",
+      "expo-asset"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a06a0371-e33d-4186-aeb4-49e288ad335b"
+      }
+    },
+    "owner": "robinsingh24",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/a06a0371-e33d-4186-aeb4-49e288ad335b"
+    }
+  }
+}

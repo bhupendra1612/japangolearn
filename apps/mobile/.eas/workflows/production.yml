@@ -1,0 +1,34 @@
+name: Mobile Production
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - main
+    paths:
+      - apps/mobile/**
+      - packages/**
+      - pnpm-lock.yaml
+      - package.json
+
+defaults:
+  tools:
+    node: 24
+    pnpm: 11.7.0
+
+jobs:
+  android_production:
+    name: Android production build
+    type: build
+    environment: production
+    params:
+      platform: android
+      profile: production
+
+  ios_production:
+    name: iOS production build
+    type: build
+    environment: production
+    params:
+      platform: ios
+      profile: production

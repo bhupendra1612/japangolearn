@@ -1,0 +1,25 @@
+name: Mobile Preview
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - apps/mobile/**
+      - packages/**
+      - pnpm-lock.yaml
+      - package.json
+
+defaults:
+  tools:
+    node: 24
+    pnpm: 11.7.0
+
+jobs:
+  android_preview:
+    name: Android preview build
+    type: build
+    environment: preview
+    params:
+      platform: android
+      profile: preview

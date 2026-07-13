@@ -1,0 +1,10 @@
+node_modules
+.next
+.turbo
+.expo
+dist
+out
+coverage
+web-build
+pnpm-lock.yaml
+supabase/migrations/*.sql

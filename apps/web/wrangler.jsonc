@@ -4,6 +4,16 @@
   "main": ".open-next/worker.js",
   "workers_dev": true,
   "preview_urls": true,
+  "routes": [
+    {
+      "pattern": "japangolearn.com",
+      "custom_domain": true,
+    },
+    {
+      "pattern": "www.japangolearn.com",
+      "custom_domain": true,
+    },
+  ],
   "compatibility_date": "2026-07-14",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": {

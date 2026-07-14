@@ -5,6 +5,7 @@ const nextConfig = {
   reactStrictMode: true,
   compress: true,
   transpilePackages: ["@japangolearn/content", "@japangolearn/database"],
+  serverExternalPackages: ["@sentry/nextjs"],
   images: {
     // Keep the first Workers deployment independent of Cloudflare Images billing.
     unoptimized: true,

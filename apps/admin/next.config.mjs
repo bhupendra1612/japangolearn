@@ -4,6 +4,7 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ["@japangolearn/content", "@japangolearn/database"],
+  serverExternalPackages: ["@sentry/nextjs"],
 };
 
 export default withSentryConfig(nextConfig, {

@@ -33,6 +33,7 @@ export default function SignupPage() {
       email,
       password,
       options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
         data: {
           display_name: name,
           current_jlpt_level: jlptLevel,

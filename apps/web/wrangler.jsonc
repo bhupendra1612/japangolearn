@@ -2,22 +2,14 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "japangolearn-web",
   "main": ".open-next/worker.js",
+  "workers_dev": true,
+  "preview_urls": true,
   "compatibility_date": "2026-07-14",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS",
   },
-  "routes": [
-    {
-      "pattern": "japangolearn.com",
-      "custom_domain": true,
-    },
-    {
-      "pattern": "www.japangolearn.com",
-      "custom_domain": true,
-    },
-  ],
   "observability": {
     "enabled": true,
   },

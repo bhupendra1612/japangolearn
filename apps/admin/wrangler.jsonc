@@ -2,18 +2,14 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "japangolearn-admin",
   "main": ".open-next/worker.js",
+  "workers_dev": true,
+  "preview_urls": true,
   "compatibility_date": "2026-07-14",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS",
   },
-  "routes": [
-    {
-      "pattern": "admin.japangolearn.com",
-      "custom_domain": true,
-    },
-  ],
   "observability": {
     "enabled": true,
   },

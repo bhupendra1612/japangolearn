@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Noto_Sans_JP } from "next/font/google";
 import { Suspense } from "react";
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Providers } from "@/components/providers";
 import "./globals.css";
 
@@ -282,8 +280,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Suspense>
           <Providers>{children}</Providers>
         </Suspense>
-        <Analytics />
-        <SpeedInsights />
       </body>
     </html>
   );

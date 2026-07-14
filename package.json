@@ -19,12 +19,14 @@
     "dev:mobile": "pnpm --filter @japangolearn/mobile dev",
     "build:web": "pnpm --filter @japangolearn/web build",
     "build:admin": "pnpm --filter @japangolearn/admin build",
+    "build:web:cloudflare": "pnpm --filter @japangolearn/web build:cloudflare",
+    "build:admin:cloudflare": "pnpm --filter @japangolearn/admin build:cloudflare",
     "check:mobile": "pnpm --filter @japangolearn/mobile typecheck",
     "check:expo": "pnpm --filter @japangolearn/mobile exec expo install --check",
-    "release:web:preview": "vercel deploy --cwd apps/web",
-    "release:web:production": "vercel deploy --cwd apps/web --prod",
-    "release:admin:preview": "vercel deploy --cwd apps/admin",
-    "release:admin:production": "vercel deploy --cwd apps/admin --prod",
+    "release:web:preview": "pnpm --filter @japangolearn/web preview:cloudflare",
+    "release:web:production": "pnpm --filter @japangolearn/web deploy:cloudflare",
+    "release:admin:preview": "pnpm --filter @japangolearn/admin preview:cloudflare",
+    "release:admin:production": "pnpm --filter @japangolearn/admin deploy:cloudflare",
     "release:mobile:preview": "pnpm --filter @japangolearn/mobile exec eas update --channel preview",
     "release:mobile:production": "pnpm --filter @japangolearn/mobile exec eas update --channel production",
     "db:types": "node scripts/generate-supabase-types.js",
@@ -34,8 +36,7 @@
     "prettier": "3.6.2",
     "supabase": "2.109.0",
     "turbo": "2.5.6",
-    "typescript": "5.9.2",
-    "vercel": "^54.18.6"
+    "typescript": "5.9.2"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.49.1"

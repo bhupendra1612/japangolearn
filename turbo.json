@@ -19,10 +19,7 @@
     "SENTRY_PROJECT",
     "SENTRY_WEB_PROJECT",
     "SENTRY_ADMIN_PROJECT",
-    "NODE_ENV",
-    "VERCEL",
-    "VERCEL_ENV",
-    "VERCEL_URL"
+    "NODE_ENV"
   ],
   "tasks": {
     "build": {

@@ -6,6 +6,8 @@ const nextConfig = {
   compress: true,
   transpilePackages: ["@japangolearn/content", "@japangolearn/database"],
   images: {
+    // Keep the first Workers deployment independent of Cloudflare Images billing.
+    unoptimized: true,
     formats: ["image/avif", "image/webp"],
     remotePatterns: [
       {

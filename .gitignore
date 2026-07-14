@@ -7,6 +7,11 @@ node_modules
 out
 dist
 .turbo
+.open-next
+.wrangler
+cloudflare-env.d.ts
+.dev.vars
+.dev.vars.*
 .expo
 web-build
 expo-env.d.ts
@@ -42,7 +47,6 @@ apps/mobile/ios
 .metro-health-check*
 
 # tooling
-.vercel
 .idea
 .vscode
 

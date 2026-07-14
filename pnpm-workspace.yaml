@@ -4,10 +4,14 @@ packages:
 
 allowBuilds:
   "@sentry/cli": true
+  esbuild: true
   sharp: true
   unrs-resolver: true
+  workerd: true
 
 onlyBuiltDependencies:
   - "@sentry/cli"
+  - esbuild
   - sharp
   - unrs-resolver
+  - workerd

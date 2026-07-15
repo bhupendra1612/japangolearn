@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "@/constants/theme";
 import { Sidebar } from "@/components/Sidebar";
+import { useAuth } from "@/lib/auth";
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -15,6 +16,7 @@ function TabIcon({ name, color }: { name: IoniconsName; color: string }) {
 export default function TabLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const insets = useSafeAreaInsets();
+  const { session } = useAuth();
 
   // Edge swipe to open sidebar
   const panResponder = useRef(
@@ -118,34 +120,36 @@ export default function TabLayout() {
             headerTitle: "",
           }}
         />
-        <Tabs.Screen
-          name="practice"
-          options={{
-            title: "Practice",
-            tabBarIcon: ({ color }) => <TabIcon name="albums" color={color} />,
-            headerTransparent: true,
-            headerTitle: "",
-          }}
-        />
-        <Tabs.Screen
-          name="profile"
-          options={{
-            title: "Profile",
-            tabBarIcon: ({ color }) => <TabIcon name="person-circle" color={color} />,
-            headerTransparent: true,
-            headerTitle: "",
-            headerLeft: renderHeaderLeft,
-          }}
-        />
-        <Tabs.Screen
-          name="achievements"
-          options={{
-            title: "Trophies",
-            tabBarIcon: ({ color }) => <TabIcon name="trophy" color={color} />,
-            headerTransparent: true,
-            headerTitle: "",
-          }}
-        />
+        <Tabs.Protected guard={!!session}>
+          <Tabs.Screen
+            name="practice"
+            options={{
+              title: "Practice",
+              tabBarIcon: ({ color }) => <TabIcon name="albums" color={color} />,
+              headerTransparent: true,
+              headerTitle: "",
+            }}
+          />
+          <Tabs.Screen
+            name="profile"
+            options={{
+              title: "Profile",
+              tabBarIcon: ({ color }) => <TabIcon name="person-circle" color={color} />,
+              headerTransparent: true,
+              headerTitle: "",
+              headerLeft: renderHeaderLeft,
+            }}
+          />
+          <Tabs.Screen
+            name="achievements"
+            options={{
+              title: "Trophies",
+              tabBarIcon: ({ color }) => <TabIcon name="trophy" color={color} />,
+              headerTransparent: true,
+              headerTitle: "",
+            }}
+          />
+        </Tabs.Protected>
         <Tabs.Screen
           name="kanji"
           options={{

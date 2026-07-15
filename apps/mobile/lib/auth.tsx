@@ -15,7 +15,11 @@ type AuthContextType = {
   loading: boolean;
   isGuest: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, displayName: string) => Promise<{ error: any }>;
+  signUp: (
+    email: string,
+    password: string,
+    displayName: string
+  ) => Promise<{ error: any; hasSession: boolean }>;
   signOut: () => Promise<void>;
   continueAsGuest: () => Promise<void>;
   exitGuestMode: () => void;
@@ -32,7 +36,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isGuest: false,
   signIn: async () => ({ error: null }),
-  signUp: async () => ({ error: null }),
+  signUp: async () => ({ error: null, hasSession: false }),
   signOut: async () => {},
   continueAsGuest: async () => {},
   exitGuestMode: () => {},
@@ -108,12 +112,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, displayName: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { display_name: displayName } },
     });
-    return { error };
+    return { error, hasSession: !!data.session };
   };
 
   const signOut = async () => {

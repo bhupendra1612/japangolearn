@@ -124,7 +124,7 @@ export function AddToListModal({
     onClose();
   };
 
-  if (!visible) return null;
+  if (!visible || !session?.user) return null;
 
   return (
     <View style={s.overlay}>

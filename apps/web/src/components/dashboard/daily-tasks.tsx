@@ -61,7 +61,7 @@ const TASKS = [
     bgColor: "bg-cyan-50 dark:bg-cyan-900/20",
     href: "/dashboard/tasks",
   },
-];
+] as const;
 
 const DIFFICULTY_COLOR = {
   Easy: "text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20",
@@ -73,22 +73,15 @@ export function DailyTasks({ initialCompleted = [] }: { initialCompleted?: strin
   const [completed, setCompleted] = useState<Set<string>>(new Set(initialCompleted));
   const [loading, setLoading] = useState<string | null>(null);
 
-  const toggleDone = async (task: (typeof TASKS)[0]) => {
+  const toggleDone = async (task: (typeof TASKS)[number]) => {
     if (completed.has(task.id) || loading) return; // Only allow completing once per day for now
 
     setLoading(task.id);
     try {
-      // Import dynamically or normally. Since this is a client component, we should import the server action at the top.
-      const { awardXp, updateDailyTaskProgress } = await import("@/app/actions/gamification");
-
-      const res = await awardXp({
-        type: task.id,
-        title: `Completed ${task.title}`,
-        xpAmount: task.xp,
-      });
+      const { completeDailyTask } = await import("@/app/actions/gamification");
+      const res = await completeDailyTask(task.id);
 
       if (res.success) {
-        await updateDailyTaskProgress({ taskId: task.id, xpAmount: task.xp });
         setCompleted((prev) => {
           const next = new Set(prev);
           next.add(task.id);

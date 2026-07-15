@@ -11,7 +11,6 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -20,8 +19,8 @@ import { useAuth } from "@/lib/auth";
 import { router } from "expo-router";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getXpLevelProgress } from "@japangolearn/content";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const AVATAR_SIZE = 100;
 
 const JLPT_LEVELS = [
@@ -36,8 +35,7 @@ type Section = "view" | "edit-profile" | "change-password";
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { user, profile, signOut, refreshProfile, updateProfile, updatePassword, uploadAvatar } =
-    useAuth();
+  const { user, profile, signOut, updateProfile, updatePassword, uploadAvatar } = useAuth();
 
   // UI state
   const [activeSection, setActiveSection] = useState<Section>("view");
@@ -64,11 +62,7 @@ export default function ProfileScreen() {
   const initial = name[0]?.toUpperCase() || "?";
   const avatarUrl = profile?.avatar_url;
 
-  // XP level calculation
-  const currentLvl = Math.floor(xp / 500) + 1;
-  const xpInLevel = xp % 500;
-  const xpNeeded = 500;
-  const xpProgress = xpNeeded > 0 ? Math.min(xpInLevel / xpNeeded, 1) : 0;
+  const xpLevel = getXpLevelProgress(xp);
 
   // Member since
   const memberSince = user?.created_at
@@ -235,7 +229,7 @@ export default function ProfileScreen() {
         )}
       </View>
       <View style={s.levelBadge}>
-        <Text style={s.levelBadgeText}>Lv.{currentLvl}</Text>
+        <Text style={s.levelBadgeText}>Lv.{xpLevel.level}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -301,15 +295,15 @@ export default function ProfileScreen() {
             colors={[Colors.primary[500], Colors.accent[500]]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
-            style={[s.xpBarFill, { width: `${Math.round(xpProgress * 100)}%` as any }]}
+            style={[s.xpBarFill, { width: `${Math.round(xpLevel.progress * 100)}%` as any }]}
           />
         </View>
         <View style={s.xpLabelRow}>
-          <Text style={s.xpLabel}>Level {currentLvl}</Text>
+          <Text style={s.xpLabel}>Level {xpLevel.level}</Text>
           <Text style={s.xpLabel}>
-            {xpInLevel} / {xpNeeded} XP
+            {xpLevel.current} / {xpLevel.needed} XP
           </Text>
-          <Text style={s.xpLabel}>Level {currentLvl + 1}</Text>
+          <Text style={s.xpLabel}>Level {xpLevel.level + 1}</Text>
         </View>
       </View>
 
@@ -333,7 +327,7 @@ export default function ProfileScreen() {
           <View style={[s.statIconBg, { backgroundColor: Colors.gold[400] + "18" }]}>
             <Ionicons name="trophy" size={22} color={Colors.gold[400]} />
           </View>
-          <Text style={[s.statValue, { color: Colors.gold[400] }]}>Lv.{currentLvl}</Text>
+          <Text style={[s.statValue, { color: Colors.gold[400] }]}>Lv.{xpLevel.level}</Text>
           <Text style={s.statLabel}>Player</Text>
         </View>
       </View>
@@ -384,14 +378,14 @@ export default function ProfileScreen() {
           {
             icon: "notifications-outline" as const,
             label: "Notifications",
-            detail: "On",
+            detail: "Not available yet",
             color: Colors.gold[400],
             route: null,
           },
           {
             icon: "language-outline" as const,
             label: "App Language",
-            detail: "English",
+            detail: "English UI only",
             color: Colors.accent[400],
             route: null,
           },
@@ -406,7 +400,9 @@ export default function ProfileScreen() {
           <TouchableOpacity
             key={item.label}
             style={[s.actionItem, i === arr.length - 1 && { borderBottomWidth: 0 }]}
-            activeOpacity={0.7}
+            activeOpacity={item.route ? 0.7 : 1}
+            disabled={!item.route}
+            accessibilityState={{ disabled: !item.route }}
             onPress={() => {
               if (item.route) router.push(item.route as any);
             }}
@@ -416,7 +412,9 @@ export default function ProfileScreen() {
             </View>
             <Text style={s.actionLabelFull}>{item.label}</Text>
             <Text style={s.actionDetail}>{item.detail}</Text>
-            <Ionicons name="chevron-forward" size={16} color={Colors.dark.textMuted} />
+            {item.route && (
+              <Ionicons name="chevron-forward" size={16} color={Colors.dark.textMuted} />
+            )}
           </TouchableOpacity>
         ))}
       </View>
@@ -429,7 +427,7 @@ export default function ProfileScreen() {
           { label: "Display Name", value: name },
           { label: "JLPT Level", value: jlptLevel },
           { label: "Total XP", value: `${xp.toLocaleString()} XP` },
-          { label: "Player Level", value: `Level ${currentLvl}` },
+          { label: "Player Level", value: `Level ${xpLevel.level}` },
           { label: "Role", value: profile?.role || "user" },
           ...(memberSince ? [{ label: "Member Since", value: memberSince }] : []),
         ].map((item, i, arr) => (

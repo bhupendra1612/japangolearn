@@ -8,27 +8,18 @@ import { LinearGradient } from "expo-linear-gradient";
 
 type UserAchievement = {
   id: string;
-  earned_at: string;
-  achievement: {
-    id: string;
-    title: string;
-    description: string;
-    icon_url: string;
-    xp_reward: number;
-    category: string;
-  };
+  achievement_id: string;
+  unlocked_at: string | null;
 };
 
 // All available achievements (we fetch this to show unearned ones too)
 type AchievementDef = {
   id: string;
-  title: string;
-  description: string;
-  icon_url: string;
-  xp_reward: number;
+  name: string;
+  description: string | null;
+  icon: string;
+  xp_reward: number | null;
   category: string;
-  requirement_type: string;
-  requirement_value: number;
 };
 
 export default function AchievementsScreen() {
@@ -46,43 +37,29 @@ export default function AchievementsScreen() {
       } = await supabase.auth.getSession();
       if (!session) return;
 
-      // Fetch user stats
-      const { data: profile } = await supabase
-        .from("user_profiles")
-        .select("total_xp")
-        .eq("id", session.user.id)
-        .single();
+      const [profileResult, definitionsResult, earnedResult] = await Promise.all([
+        supabase.from("profiles").select("xp").eq("id", session.user.id).single(),
+        supabase
+          .from("achievements")
+          .select("id, name, description, icon, xp_reward, category")
+          .order("xp_reward", { ascending: true }),
+        supabase
+          .from("user_achievements")
+          .select("id, achievement_id, unlocked_at")
+          .eq("user_id", session.user.id),
+      ]);
 
-      if (profile) setTotalXp(profile.total_xp);
+      if (profileResult.error) throw profileResult.error;
+      if (definitionsResult.error) throw definitionsResult.error;
+      if (earnedResult.error) throw earnedResult.error;
 
-      // Fetch all definitions
-      const { data: defs } = await supabase
-        .from("achievements")
-        .select("*")
-        .order("requirement_value", { ascending: true });
-
-      if (defs) setAllAchievements(defs);
-
-      // Fetch earned
-      const { data: earnedData } = await supabase
-        .from("user_achievements")
-        .select(
-          `
-          id,
-          earned_at,
-          achievement:achievement_id (
-            id, title, description, icon_url, xp_reward, category
-          )
-        `
+      setTotalXp(profileResult.data.xp ?? 0);
+      setAllAchievements(definitionsResult.data ?? []);
+      setEarned(
+        (earnedResult.data ?? []).filter(
+          (achievement): achievement is UserAchievement => achievement.achievement_id !== null
         )
-        .eq("user_id", session.user.id);
-
-      if (earnedData) {
-        // Supabase returns an array for joins sometimes if not strictly one-to-one,
-        // but it's a many-to-one here, so achievement is an object (or array of 1).
-        // Let's assume it's an object.
-        setEarned(earnedData as any);
-      }
+      );
     } catch (e) {
       console.error(e);
     } finally {
@@ -112,10 +89,10 @@ export default function AchievementsScreen() {
       crown: "👑",
       rocket: "🚀",
     };
-    return map[iconName] || "💎";
+    return map[iconName] || iconName || "💎";
   };
 
-  const earnedIds = new Set(earned.map((e) => e.achievement?.id));
+  const earnedIds = new Set(earned.map((achievement) => achievement.achievement_id));
 
   const renderHeader = () => (
     <View style={s.heroContainer}>
@@ -134,24 +111,26 @@ export default function AchievementsScreen() {
 
   const renderItem = ({ item }: { item: AchievementDef }) => {
     const isEarned = earnedIds.has(item.id);
-    const earnedObj = earned.find((e) => e.achievement?.id === item.id);
-    const dateStr = earnedObj?.earned_at
-      ? new Date(earnedObj.earned_at).toLocaleDateString()
+    const earnedObj = earned.find((achievement) => achievement.achievement_id === item.id);
+    const dateStr = earnedObj?.unlocked_at
+      ? new Date(earnedObj.unlocked_at).toLocaleDateString()
       : "Locked";
 
     return (
       <View style={[s.card, !isEarned && s.cardLocked]}>
         <View style={[s.iconBox, !isEarned && s.iconBoxLocked]}>
           <Text style={[s.iconEmoji, !isEarned && s.iconEmojiLocked]}>
-            {getEmojiIcon(item.icon_url)}
+            {getEmojiIcon(item.icon)}
           </Text>
         </View>
         <View style={s.cardContent}>
-          <Text style={[s.title, !isEarned && s.titleLocked]}>{item.title}</Text>
-          <Text style={s.desc}>{item.description}</Text>
+          <Text style={[s.title, !isEarned && s.titleLocked]}>{item.name}</Text>
+          <Text style={s.desc}>
+            {item.description ?? "Complete the challenge to unlock this badge."}
+          </Text>
           <View style={s.metaRow}>
             <View style={s.xpBadge}>
-              <Text style={s.xpText}>+{item.xp_reward} XP</Text>
+              <Text style={s.xpText}>+{item.xp_reward ?? 0} XP</Text>
             </View>
             <Text style={s.dateText}>{isEarned ? `Earned ${dateStr}` : "Not yet earned"}</Text>
           </View>

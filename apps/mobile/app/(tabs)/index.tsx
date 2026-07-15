@@ -16,6 +16,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
+import { AuthPromptModal } from "@/components/AuthPromptModal";
+import { getXpLevelProgress } from "@japangolearn/content";
 
 // ─── Constants ───
 
@@ -59,10 +61,6 @@ function getGreeting(): { jp: string; en: string } {
   return { jp: "こんばんは", en: "Good evening" };
 }
 
-function getLevel(xp: number): number {
-  return Math.floor(xp / 100) + 1;
-}
-
 function getTimeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
@@ -80,8 +78,9 @@ function getTimeAgo(dateStr: string): string {
 export default function DashboardHome() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, profile } = useAuth();
+  const { user, profile, session } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
+  const [showPracticePrompt, setShowPracticePrompt] = useState(false);
   const [dailyGoal, setDailyGoal] = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
   const [achievementCount, setAchievementCount] = useState(0);
@@ -144,8 +143,7 @@ export default function DashboardHome() {
   const displayName = profile?.display_name || user?.email?.split("@")[0] || "Learner";
   const xp = profile?.xp ?? 0;
   const streak = profile?.streak_days ?? 0;
-  const level = getLevel(xp);
-  const levelProgress = (xp % 100) / 100;
+  const xpLevel = getXpLevelProgress(xp);
   const jlptLevel = profile?.current_jlpt_level ?? "N5";
   const dailyProgress = dailyGoal ? Math.min(dailyGoal.xp_earned / dailyGoal.xp_target, 1) : 0;
   const dailyXpEarned = dailyGoal?.xp_earned ?? 0;
@@ -177,282 +175,304 @@ export default function DashboardHome() {
   ];
 
   return (
-    <Animated.ScrollView
-      style={[s.container, { opacity: fadeAnim }]}
-      contentContainerStyle={[s.content, { paddingTop: insets.top + Spacing.sm }]}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={Colors.primary[400]}
-        />
-      }
-      showsVerticalScrollIndicator={false}
-    >
-      {/* ═══ Hero Banner ═══ */}
-      <View style={s.heroBanner}>
-        <LinearGradient
-          colors={[Colors.primary[700], "#1E0A4E", Colors.primary[900]]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={s.heroGradient}
-        >
-          {/* Decorative kanji */}
-          <Text style={s.heroDecoL}>学</Text>
-          <Text style={s.heroDecoR}>道</Text>
-
-          {/* Avatar + Greeting */}
-          <View style={s.heroTop}>
-            <View style={s.heroGreetingCol}>
-              <Text style={s.greeting}>{greeting.jp} 👋</Text>
-              <Text style={s.heroName}>{displayName}</Text>
-              <Text style={s.heroSubtitle}>Continue your Japanese journey</Text>
-            </View>
-            {profile?.avatar_url ? (
-              <View style={s.avatarWrap}>
-                <Image source={{ uri: profile.avatar_url }} style={s.avatar} />
-                <View style={s.lvBadge}>
-                  <Text style={s.lvBadgeText}>Lv.{level}</Text>
-                </View>
-              </View>
-            ) : (
-              <View style={s.avatarWrap}>
-                <View style={s.avatarPlaceholder}>
-                  <Text style={s.avatarInitial}>{displayName.charAt(0).toUpperCase()}</Text>
-                </View>
-                <View style={s.lvBadge}>
-                  <Text style={s.lvBadgeText}>Lv.{level}</Text>
-                </View>
-              </View>
-            )}
-          </View>
-
-          {/* Daily Progress */}
-          <View style={s.dailySection}>
-            <View style={s.dailyHeader}>
-              <Text style={s.dailyTitle}>Daily Goal</Text>
-              <Text style={s.dailyValue}>
-                {dailyXpEarned} / {dailyXpTarget} XP
-              </Text>
-            </View>
-            <View style={s.dailyTrack}>
-              <LinearGradient
-                colors={[Colors.primary[400], Colors.accent[400]]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[s.dailyFill, { width: `${Math.round(dailyProgress * 100)}%` as any }]}
-              />
-            </View>
-            {dailyProgress >= 1 && <Text style={s.dailyComplete}>Daily goal complete! 🎉</Text>}
-          </View>
-        </LinearGradient>
-      </View>
-
-      {/* ═══ Stats Grid ═══ */}
-      <View style={s.statsGrid}>
-        {[
-          { icon: "⭐", label: "Total XP", value: xp.toLocaleString(), color: Colors.gold[500] },
-          { icon: "🔥", label: "Streak", value: `${streak}d`, color: "#F97316" },
-          { icon: "🎯", label: "JLPT", value: jlptLevel, color: Colors.primary[400] },
-          { icon: "🏆", label: "Badges", value: `${achievementCount}`, color: "#10B981" },
-        ].map((stat) => (
-          <View key={stat.label} style={s.statCard}>
-            <View style={[s.statIconBg, { backgroundColor: stat.color + "18" }]}>
-              <Text style={s.statIcon}>{stat.icon}</Text>
-            </View>
-            <Text style={[s.statValue, { color: stat.color }]}>{stat.value}</Text>
-            <Text style={s.statLabel}>{stat.label}</Text>
-          </View>
-        ))}
-      </View>
-
-      {/* ═══ Level Progress ═══ */}
-      <View style={s.card}>
-        <View style={s.cardHeader}>
-          <View style={[s.cardIconBg, { backgroundColor: Colors.gold[500] + "18" }]}>
-            <Text style={s.cardIconEmoji}>📊</Text>
-          </View>
-          <Text style={s.cardTitle}>Level Progress</Text>
-          <View style={s.levelPill}>
-            <Text style={s.levelPillText}>Lv.{level}</Text>
-          </View>
-        </View>
-        <View style={s.levelTrack}>
-          <LinearGradient
-            colors={[Colors.gold[400], Colors.gold[600]]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={[s.levelFill, { width: `${Math.round(levelProgress * 100)}%` as any }]}
+    <>
+      <Animated.ScrollView
+        style={[s.container, { opacity: fadeAnim }]}
+        contentContainerStyle={[s.content, { paddingTop: insets.top + Spacing.sm }]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.primary[400]}
           />
-        </View>
-        <View style={s.levelLabels}>
-          <Text style={s.levelLabelLeft}>{xp % 100} / 100 XP to next level</Text>
-          <Text style={s.levelLabelRight}>{Math.round(levelProgress * 100)}%</Text>
-        </View>
-      </View>
-
-      {/* ═══ Week Streak ═══ */}
-      <View style={s.card}>
-        <View style={s.cardHeader}>
-          <View style={[s.cardIconBg, { backgroundColor: "#F9731618" }]}>
-            <Text style={s.cardIconEmoji}>🔥</Text>
-          </View>
-          <Text style={s.cardTitle}>This Week</Text>
-          <Text style={s.cardBadgeText}>{streak} day streak</Text>
-        </View>
-        <View style={s.weekRow}>
-          {weekDays.map((day) => {
-            const active = day.count > 0;
-            const intensity = day.count >= 5 ? 1 : day.count >= 2 ? 0.7 : day.count >= 1 ? 0.45 : 0;
-            return (
-              <View key={day.date} style={s.weekCol}>
-                <Text style={s.weekDayName}>{day.dayName}</Text>
-                <View
-                  style={[
-                    s.weekDot,
-                    active && {
-                      backgroundColor: `rgba(16,185,129,${intensity})`,
-                      borderColor: "#10B981",
-                    },
-                    day.isToday && s.weekDotToday,
-                  ]}
-                >
-                  <Text style={[s.weekDotNum, active && { color: "#fff" }]}>{day.dayNum}</Text>
-                </View>
-                {active && <Text style={s.weekCount}>{day.count}</Text>}
-              </View>
-            );
-          })}
-        </View>
-      </View>
-
-      {/* ═══ My Vocab Practice ═══ */}
-      <TouchableOpacity
-        style={s.practiceCard}
-        onPress={() => router.push("/(tabs)/practice")}
-        activeOpacity={0.8}
+        }
+        showsVerticalScrollIndicator={false}
       >
-        <LinearGradient
-          colors={[Colors.primary[800], Colors.primary[900]]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={s.practiceGradient}
-        >
-          <View style={s.practiceLeft}>
-            <View style={s.practiceIconBox}>
-              <Text style={s.practiceIcon}>🎯</Text>
-            </View>
-            <View>
-              <Text style={s.practiceTitle}>My Vocab Practice</Text>
-              <Text style={s.practiceSub}>Review your custom lists</Text>
-            </View>
-          </View>
-          <Ionicons name="chevron-forward" size={24} color={Colors.primary[300]} />
-        </LinearGradient>
-      </TouchableOpacity>
+        {/* ═══ Hero Banner ═══ */}
+        <View style={s.heroBanner}>
+          <LinearGradient
+            colors={[Colors.primary[700], "#1E0A4E", Colors.primary[900]]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={s.heroGradient}
+          >
+            {/* Decorative kanji */}
+            <Text style={s.heroDecoL}>学</Text>
+            <Text style={s.heroDecoR}>道</Text>
 
-      {/* ═══ Kanji of the Day ═══ */}
-      <View style={s.card}>
-        <View style={s.cardHeader}>
-          <View style={[s.cardIconBg, { backgroundColor: Colors.sakura[500] + "18" }]}>
-            <Text style={s.cardIconEmoji}>🎌</Text>
-          </View>
-          <Text style={s.cardTitle}>Kanji of the Day</Text>
-          <Text style={s.cardBadgeText}>{todayKanji.detail}</Text>
-        </View>
-        <View style={s.kanjiRow}>
-          <View style={s.kanjiBox}>
-            <Text style={s.kanjiChar}>{todayKanji.kanji}</Text>
-          </View>
-          <View style={s.kanjiInfo}>
-            <Text style={s.kanjiReading}>{todayKanji.reading}</Text>
-            <Text style={s.kanjiMeaning}>{todayKanji.meaning}</Text>
-            <View style={s.kanjiBadge}>
-              <Text style={s.kanjiBadgeText}>JLPT N5</Text>
+            {/* Avatar + Greeting */}
+            <View style={s.heroTop}>
+              <View style={s.heroGreetingCol}>
+                <Text style={s.greeting}>{greeting.jp} 👋</Text>
+                <Text style={s.heroName}>{displayName}</Text>
+                <Text style={s.heroSubtitle}>Continue your Japanese journey</Text>
+              </View>
+              {profile?.avatar_url ? (
+                <View style={s.avatarWrap}>
+                  <Image source={{ uri: profile.avatar_url }} style={s.avatar} />
+                  <View style={s.lvBadge}>
+                    <Text style={s.lvBadgeText}>Lv.{xpLevel.level}</Text>
+                  </View>
+                </View>
+              ) : (
+                <View style={s.avatarWrap}>
+                  <View style={s.avatarPlaceholder}>
+                    <Text style={s.avatarInitial}>{displayName.charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <View style={s.lvBadge}>
+                    <Text style={s.lvBadgeText}>Lv.{xpLevel.level}</Text>
+                  </View>
+                </View>
+              )}
             </View>
-          </View>
-        </View>
-      </View>
 
-      {/* ═══ Quick Actions ═══ */}
-      <View style={s.card}>
-        <View style={s.cardHeader}>
-          <View style={[s.cardIconBg, { backgroundColor: Colors.accent[500] + "18" }]}>
-            <Text style={s.cardIconEmoji}>⚡</Text>
-          </View>
-          <Text style={s.cardTitle}>Quick Actions</Text>
+            {/* Daily Progress */}
+            <View style={s.dailySection}>
+              <View style={s.dailyHeader}>
+                <Text style={s.dailyTitle}>Daily Goal</Text>
+                <Text style={s.dailyValue}>
+                  {dailyXpEarned} / {dailyXpTarget} XP
+                </Text>
+              </View>
+              <View style={s.dailyTrack}>
+                <LinearGradient
+                  colors={[Colors.primary[400], Colors.accent[400]]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[s.dailyFill, { width: `${Math.round(dailyProgress * 100)}%` as any }]}
+                />
+              </View>
+              {dailyProgress >= 1 && <Text style={s.dailyComplete}>Daily goal complete! 🎉</Text>}
+            </View>
+          </LinearGradient>
         </View>
-        <View style={s.actionsRow}>
-          {quickActions.map((action) => (
-            <TouchableOpacity
-              key={action.label}
-              style={s.actionItem}
-              onPress={() => router.push(`/(tabs)/${action.tab}` as any)}
-              activeOpacity={0.7}
-            >
-              <LinearGradient colors={[action.color, action.color + "CC"]} style={s.actionIconBox}>
-                <Text style={s.actionEmoji}>{action.emoji}</Text>
-              </LinearGradient>
-              <Text style={s.actionLabel}>{action.label}</Text>
-            </TouchableOpacity>
+
+        {/* ═══ Stats Grid ═══ */}
+        <View style={s.statsGrid}>
+          {[
+            { icon: "⭐", label: "Total XP", value: xp.toLocaleString(), color: Colors.gold[500] },
+            { icon: "🔥", label: "Streak", value: `${streak}d`, color: "#F97316" },
+            { icon: "🎯", label: "JLPT", value: jlptLevel, color: Colors.primary[400] },
+            { icon: "🏆", label: "Badges", value: `${achievementCount}`, color: "#10B981" },
+          ].map((stat) => (
+            <View key={stat.label} style={s.statCard}>
+              <View style={[s.statIconBg, { backgroundColor: stat.color + "18" }]}>
+                <Text style={s.statIcon}>{stat.icon}</Text>
+              </View>
+              <Text style={[s.statValue, { color: stat.color }]}>{stat.value}</Text>
+              <Text style={s.statLabel}>{stat.label}</Text>
+            </View>
           ))}
         </View>
-      </View>
 
-      {/* ═══ Recent Activity ═══ */}
-      <View style={s.card}>
-        <View style={s.cardHeader}>
-          <View style={[s.cardIconBg, { backgroundColor: Colors.primary[500] + "18" }]}>
-            <Text style={s.cardIconEmoji}>📋</Text>
+        {/* ═══ Level Progress ═══ */}
+        <View style={s.card}>
+          <View style={s.cardHeader}>
+            <View style={[s.cardIconBg, { backgroundColor: Colors.gold[500] + "18" }]}>
+              <Text style={s.cardIconEmoji}>📊</Text>
+            </View>
+            <Text style={s.cardTitle}>Level Progress</Text>
+            <View style={s.levelPill}>
+              <Text style={s.levelPillText}>Lv.{xpLevel.level}</Text>
+            </View>
           </View>
-          <Text style={s.cardTitle}>Recent Activity</Text>
+          <View style={s.levelTrack}>
+            <LinearGradient
+              colors={[Colors.gold[400], Colors.gold[600]]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[s.levelFill, { width: `${Math.round(xpLevel.progress * 100)}%` as any }]}
+            />
+          </View>
+          <View style={s.levelLabels}>
+            <Text style={s.levelLabelLeft}>
+              {xpLevel.current} / {xpLevel.needed} XP to next level
+            </Text>
+            <Text style={s.levelLabelRight}>{Math.round(xpLevel.progress * 100)}%</Text>
+          </View>
         </View>
-        {activities.length === 0 ? (
-          <View style={s.emptyActivity}>
-            <Text style={s.emptyEmoji}>🌱</Text>
-            <Text style={s.emptyText}>Start learning to see activity here!</Text>
-            <Text style={s.emptySubtext}>Complete vocabulary, grammar, or writing exercises</Text>
+
+        {/* ═══ Week Streak ═══ */}
+        <View style={s.card}>
+          <View style={s.cardHeader}>
+            <View style={[s.cardIconBg, { backgroundColor: "#F9731618" }]}>
+              <Text style={s.cardIconEmoji}>🔥</Text>
+            </View>
+            <Text style={s.cardTitle}>This Week</Text>
+            <Text style={s.cardBadgeText}>{streak} day streak</Text>
           </View>
-        ) : (
-          activities.slice(0, 6).map((act, i) => {
-            const meta = ACTIVITY_META[act.type] || { icon: "📌", color: "#6B7280" };
-            const isLast = i === Math.min(activities.length - 1, 5);
-            return (
-              <View key={act.id || i} style={[s.actItem, isLast && { borderBottomWidth: 0 }]}>
-                <View style={[s.actIconBg, { backgroundColor: meta.color + "18" }]}>
-                  <Text style={s.actIcon}>{meta.icon}</Text>
-                </View>
-                <View style={s.actContent}>
-                  <Text style={s.actTitle} numberOfLines={1}>
-                    {act.title}
-                  </Text>
-                  <Text style={s.actTime}>{getTimeAgo(act.created_at)}</Text>
-                </View>
-                {act.xp_earned > 0 && (
-                  <View style={s.xpBadge}>
-                    <Text style={s.xpText}>+{act.xp_earned}</Text>
+          <View style={s.weekRow}>
+            {weekDays.map((day) => {
+              const active = day.count > 0;
+              const intensity =
+                day.count >= 5 ? 1 : day.count >= 2 ? 0.7 : day.count >= 1 ? 0.45 : 0;
+              return (
+                <View key={day.date} style={s.weekCol}>
+                  <Text style={s.weekDayName}>{day.dayName}</Text>
+                  <View
+                    style={[
+                      s.weekDot,
+                      active && {
+                        backgroundColor: `rgba(16,185,129,${intensity})`,
+                        borderColor: "#10B981",
+                      },
+                      day.isToday && s.weekDotToday,
+                    ]}
+                  >
+                    <Text style={[s.weekDotNum, active && { color: "#fff" }]}>{day.dayNum}</Text>
                   </View>
-                )}
-              </View>
-            );
-          })
-        )}
-      </View>
+                  {active && <Text style={s.weekCount}>{day.count}</Text>}
+                </View>
+              );
+            })}
+          </View>
+        </View>
 
-      {/* ═══ Motivational Quote ═══ */}
-      <View style={s.quoteCard}>
-        <LinearGradient
-          colors={[Colors.primary[800] + "60", Colors.dark.card]}
-          style={s.quoteGradient}
+        {/* ═══ My Vocab Practice ═══ */}
+        <TouchableOpacity
+          style={s.practiceCard}
+          onPress={() => {
+            if (session) {
+              router.push("/(tabs)/practice");
+            } else {
+              setShowPracticePrompt(true);
+            }
+          }}
+          activeOpacity={0.8}
         >
-          <Text style={s.quoteDecor}>🌸</Text>
-          <Text style={s.quoteJp}>{quote.jp}</Text>
-          <Text style={s.quoteEn}>{quote.en}</Text>
-        </LinearGradient>
-      </View>
+          <LinearGradient
+            colors={[Colors.primary[800], Colors.primary[900]]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={s.practiceGradient}
+          >
+            <View style={s.practiceLeft}>
+              <View style={s.practiceIconBox}>
+                <Text style={s.practiceIcon}>🎯</Text>
+              </View>
+              <View>
+                <Text style={s.practiceTitle}>My Vocab Practice</Text>
+                <Text style={s.practiceSub}>Review your custom lists</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={24} color={Colors.primary[300]} />
+          </LinearGradient>
+        </TouchableOpacity>
 
-      <View style={{ height: 20 }} />
-    </Animated.ScrollView>
+        {/* ═══ Kanji of the Day ═══ */}
+        <View style={s.card}>
+          <View style={s.cardHeader}>
+            <View style={[s.cardIconBg, { backgroundColor: Colors.sakura[500] + "18" }]}>
+              <Text style={s.cardIconEmoji}>🎌</Text>
+            </View>
+            <Text style={s.cardTitle}>Kanji of the Day</Text>
+            <Text style={s.cardBadgeText}>{todayKanji.detail}</Text>
+          </View>
+          <View style={s.kanjiRow}>
+            <View style={s.kanjiBox}>
+              <Text style={s.kanjiChar}>{todayKanji.kanji}</Text>
+            </View>
+            <View style={s.kanjiInfo}>
+              <Text style={s.kanjiReading}>{todayKanji.reading}</Text>
+              <Text style={s.kanjiMeaning}>{todayKanji.meaning}</Text>
+              <View style={s.kanjiBadge}>
+                <Text style={s.kanjiBadgeText}>JLPT N5</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* ═══ Quick Actions ═══ */}
+        <View style={s.card}>
+          <View style={s.cardHeader}>
+            <View style={[s.cardIconBg, { backgroundColor: Colors.accent[500] + "18" }]}>
+              <Text style={s.cardIconEmoji}>⚡</Text>
+            </View>
+            <Text style={s.cardTitle}>Quick Actions</Text>
+          </View>
+          <View style={s.actionsRow}>
+            {quickActions.map((action) => (
+              <TouchableOpacity
+                key={action.label}
+                style={s.actionItem}
+                onPress={() => router.push(`/(tabs)/${action.tab}` as any)}
+                activeOpacity={0.7}
+              >
+                <LinearGradient
+                  colors={[action.color, action.color + "CC"]}
+                  style={s.actionIconBox}
+                >
+                  <Text style={s.actionEmoji}>{action.emoji}</Text>
+                </LinearGradient>
+                <Text style={s.actionLabel}>{action.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* ═══ Recent Activity ═══ */}
+        <View style={s.card}>
+          <View style={s.cardHeader}>
+            <View style={[s.cardIconBg, { backgroundColor: Colors.primary[500] + "18" }]}>
+              <Text style={s.cardIconEmoji}>📋</Text>
+            </View>
+            <Text style={s.cardTitle}>Recent Activity</Text>
+          </View>
+          {activities.length === 0 ? (
+            <View style={s.emptyActivity}>
+              <Text style={s.emptyEmoji}>🌱</Text>
+              <Text style={s.emptyText}>Start learning to see activity here!</Text>
+              <Text style={s.emptySubtext}>Complete vocabulary, grammar, or writing exercises</Text>
+            </View>
+          ) : (
+            activities.slice(0, 6).map((act, i) => {
+              const meta = ACTIVITY_META[act.type] || { icon: "📌", color: "#6B7280" };
+              const isLast = i === Math.min(activities.length - 1, 5);
+              return (
+                <View key={act.id || i} style={[s.actItem, isLast && { borderBottomWidth: 0 }]}>
+                  <View style={[s.actIconBg, { backgroundColor: meta.color + "18" }]}>
+                    <Text style={s.actIcon}>{meta.icon}</Text>
+                  </View>
+                  <View style={s.actContent}>
+                    <Text style={s.actTitle} numberOfLines={1}>
+                      {act.title}
+                    </Text>
+                    <Text style={s.actTime}>{getTimeAgo(act.created_at)}</Text>
+                  </View>
+                  {act.xp_earned > 0 && (
+                    <View style={s.xpBadge}>
+                      <Text style={s.xpText}>+{act.xp_earned}</Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })
+          )}
+        </View>
+
+        {/* ═══ Motivational Quote ═══ */}
+        <View style={s.quoteCard}>
+          <LinearGradient
+            colors={[Colors.primary[800] + "60", Colors.dark.card]}
+            style={s.quoteGradient}
+          >
+            <Text style={s.quoteDecor}>🌸</Text>
+            <Text style={s.quoteJp}>{quote.jp}</Text>
+            <Text style={s.quoteEn}>{quote.en}</Text>
+          </LinearGradient>
+        </View>
+
+        <View style={{ height: 20 }} />
+      </Animated.ScrollView>
+
+      <AuthPromptModal
+        visible={showPracticePrompt}
+        feature="custom practice lists"
+        redirectTo="/(tabs)/practice"
+        description="Sign in to create lists, review flashcards, take quizzes, and save mastery progress."
+        onClose={() => setShowPracticePrompt(false)}
+      />
+    </>
   );
 }
 

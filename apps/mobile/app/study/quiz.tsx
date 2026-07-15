@@ -16,6 +16,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Speech from "expo-speech";
 import { supabase } from "@/lib/supabase";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
+import { createXpAttemptKey } from "@japangolearn/content";
 
 type QuizItem = {
   id: string;
@@ -37,6 +38,7 @@ export default function QuizScreen() {
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [score, setScore] = useState(0);
+  const [quizAttemptKey, setQuizAttemptKey] = useState(() => createXpAttemptKey());
 
   useEffect(() => {
     if (listId) loadQuiz();
@@ -44,6 +46,7 @@ export default function QuizScreen() {
 
   const loadQuiz = async () => {
     setLoading(true);
+    setQuizAttemptKey(createXpAttemptKey());
     const { data: listItems } = await supabase
       .from("practice_list_items")
       .select("*")
@@ -90,7 +93,7 @@ export default function QuizScreen() {
         }
       });
 
-      const shuffled = mergedCards.sort(() => Math.random() - 0.5);
+      const shuffled = mergedCards.sort(() => Math.random() - 0.5).slice(0, 100);
       setQuestions(shuffled);
       generateOptions(shuffled, 0);
     }
@@ -146,9 +149,6 @@ export default function QuizScreen() {
       addToNeedsPractice(currentQ);
     }
 
-    // Increment streak
-    supabase.rpc("increment_streak").then();
-
     // Move to next after delay
     setTimeout(() => {
       setSelectedOption(null);
@@ -159,14 +159,13 @@ export default function QuizScreen() {
       } else {
         // finished
         const finalScore = score + (correct ? 1 : 0);
-        const xpEarned = finalScore * 10;
-        if (xpEarned > 0) {
+        if (finalScore > 0) {
           supabase
             .rpc("award_xp", {
-              p_type: "practice",
-              p_title: "Custom List Practice",
-              p_description: "Completed list practice quiz",
-              p_amount: xpEarned,
+              p_activity_type: "practice_quiz",
+              p_correct_answers: finalScore,
+              p_total_questions: questions.length,
+              p_attempt_key: quizAttemptKey,
             })
             .then();
         }

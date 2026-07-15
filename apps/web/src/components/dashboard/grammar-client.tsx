@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
+import { createXpAttemptKey } from "@japangolearn/content";
 
 interface GrammarPattern {
   id: number;
@@ -92,6 +93,7 @@ export function GrammarClient({ patterns }: { patterns: GrammarPattern[] }) {
   const [quizScore, setQuizScore] = useState({ correct: 0, total: 0 });
   const [quizIndex, setQuizIndex] = useState(0);
   const [quizPool, setQuizPool] = useState<GrammarPattern[]>([]);
+  const [quizAttemptKey, setQuizAttemptKey] = useState(() => createXpAttemptKey());
 
   const categories = ["All", ...Array.from(new Set(patterns.map((p) => p.category)))];
 
@@ -128,6 +130,7 @@ export function GrammarClient({ patterns }: { patterns: GrammarPattern[] }) {
     setQuizScore({ correct: 0, total: 0 });
     setQuizIndex(0);
     setQuizAnswer(null);
+    setQuizAttemptKey(createXpAttemptKey());
     nextQuizQuestion(0, shuffled);
     setMode("quiz");
   };
@@ -164,10 +167,13 @@ export function GrammarClient({ patterns }: { patterns: GrammarPattern[] }) {
         setQuizPattern(null);
         if (newCorrect > 0) {
           try {
-            const { awardXp, updateDailyTaskProgress } = await import("@/app/actions/gamification");
-            const xp = newCorrect * 5; // 5 XP per correct answer
-            await awardXp({ type: "grammar", title: "Grammar Quiz Completed", xpAmount: xp });
-            await updateDailyTaskProgress({ taskId: "grammar", xpAmount: xp });
+            const { awardQuizXp } = await import("@/app/actions/gamification");
+            await awardQuizXp({
+              activityType: "grammar_quiz",
+              correctAnswers: newCorrect,
+              totalQuestions: quizPool.length,
+              attemptKey: quizAttemptKey,
+            });
           } catch (err) {
             console.error("Failed to award XP", err);
           }

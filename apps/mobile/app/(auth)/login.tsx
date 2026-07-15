@@ -8,18 +8,17 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
-  Dimensions,
   ActivityIndicator,
 } from "react-native";
-import { Link, router } from "expo-router";
+import { Link, router, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
+import { getSafeRedirectTo } from "@/lib/auth-navigation";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
-
-const { width } = Dimensions.get("window");
 
 export default function LoginScreen() {
   const { signIn } = useAuth();
+  const params = useLocalSearchParams<{ redirectTo?: string | string[] }>();
+  const redirectTo = getSafeRedirectTo(params.redirectTo);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -41,15 +40,12 @@ export default function LoginScreen() {
     }
     setLoading(true);
     setError("");
-    console.log("[Login] Attempting sign in with:", email);
     const { error: err } = await signIn(email, password);
     setLoading(false);
     if (err) {
-      console.error("[Login] Error:", JSON.stringify(err));
       setError(err.message || JSON.stringify(err));
     } else {
-      console.log("[Login] Success!");
-      router.replace("/(tabs)");
+      router.replace(redirectTo as never);
     }
   };
 
@@ -121,7 +117,7 @@ export default function LoginScreen() {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>Don't have an account? </Text>
-          <Link href="/(auth)/signup" asChild>
+          <Link href={{ pathname: "/(auth)/signup", params: { redirectTo } } as never} asChild>
             <TouchableOpacity>
               <Text style={styles.footerLink}>Sign Up</Text>
             </TouchableOpacity>

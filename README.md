@@ -22,4 +22,10 @@ This repo is prepared to use the existing Supabase project:
 - dashboard: `https://supabase.com/dashboard/project/teylstfbjtutssnfmhhu`
 - public URL: `https://teylstfbjtutssnfmhhu.supabase.co`
 
-Copy `.env.example` to `.env.local` for web/admin development and to `apps/mobile/.env` for mobile development, then fill in the public key locally.
+Copy `.env.example` to `.env.local` for web/admin development. For mobile development, pull the configured EAS development environment into the ignored app-local file:
+
+```bash
+pnpm --filter @japangolearn/mobile exec eas env:pull development --path .env.local --non-interactive
+```
+
+Mobile preview and production updates use their matching EAS environments through the root release scripts.

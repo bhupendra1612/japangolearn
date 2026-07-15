@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { Volume2, Eye, EyeOff, ArrowRight, RotateCcw, CheckCircle2, XCircle } from "lucide-react";
 import { StrokeWriter, isKanaSupported } from "./stroke-writer";
+import { createXpAttemptKey } from "@japangolearn/content";
 
 interface Kana {
   id: number;
@@ -120,6 +121,7 @@ export function WritingClient({ kanaList }: { kanaList: Kana[] }) {
   const [quizAnswer, setQuizAnswer] = useState<string | null>(null);
   const [quizScore, setQuizScore] = useState({ correct: 0, total: 0 });
   const [quizIndex, setQuizIndex] = useState(0);
+  const [quizAttemptKey, setQuizAttemptKey] = useState(() => createXpAttemptKey());
 
   // Group kana by group_name
   const groups = kanaList.reduce<Record<string, Kana[]>>((acc, k) => {
@@ -154,6 +156,7 @@ export function WritingClient({ kanaList }: { kanaList: Kana[] }) {
     setQuizScore({ correct: 0, total: 0 });
     setQuizIndex(0);
     setQuizAnswer(null);
+    setQuizAttemptKey(createXpAttemptKey());
     nextQuizQuestion(0);
     setMode("quiz");
   };
@@ -191,10 +194,13 @@ export function WritingClient({ kanaList }: { kanaList: Kana[] }) {
         setQuizKana(null);
         if (newCorrect > 0) {
           try {
-            const { awardXp, updateDailyTaskProgress } = await import("@/app/actions/gamification");
-            const xp = newCorrect * 5; // 5 XP per correct answer
-            await awardXp({ type: "kanji", title: "Kana Writing Quiz Completed", xpAmount: xp });
-            await updateDailyTaskProgress({ taskId: "writing", xpAmount: xp });
+            const { awardQuizXp } = await import("@/app/actions/gamification");
+            await awardQuizXp({
+              activityType: "writing_quiz",
+              correctAnswers: newCorrect,
+              totalQuestions: kanaList.length,
+              attemptKey: quizAttemptKey,
+            });
           } catch (err) {
             console.error("Failed to award XP", err);
           }

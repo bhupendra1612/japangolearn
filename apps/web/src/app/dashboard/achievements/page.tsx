@@ -4,27 +4,17 @@ import Link from "next/link";
 import { ChevronRight, Trophy, Star, Flame, Lock } from "lucide-react";
 import { StreakCalendar } from "@/components/dashboard/streak-calendar";
 import { ProgressRing } from "@/components/dashboard/progress-ring";
+import { getXpLevelProgress } from "@japangolearn/content";
 
 export const dynamic = "force-dynamic";
-
-// XP levels: level N requires N*100 XP
-function getXpLevel(xp: number): { level: number; current: number; needed: number } {
-  let level = 1;
-  let remaining = xp;
-  while (remaining >= level * 100) {
-    remaining -= level * 100;
-    level++;
-  }
-  return { level, current: remaining, needed: level * 100 };
-}
 
 interface Achievement {
   id: string;
   name: string;
-  description: string;
+  description: string | null;
   icon: string;
   category: string;
-  xp_reward: number;
+  xp_reward: number | null;
 }
 
 export default async function AchievementsPage() {
@@ -53,7 +43,7 @@ export default async function AchievementsPage() {
 
   const xp = profile?.xp ?? 0;
   const streak = profile?.streak_days ?? 0;
-  const xpLevel = getXpLevel(xp);
+  const xpLevel = getXpLevelProgress(xp);
 
   const unlockedIds = new Set(userAchievements?.map((ua) => ua.achievement_id) ?? []);
   const unlockedCount = unlockedIds.size;
@@ -215,12 +205,12 @@ export default async function AchievementsPage() {
                             )}
                           </div>
                           <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                            {ach.description}
+                            {ach.description ?? "Complete the challenge to unlock this badge."}
                           </p>
                           <div className="flex items-center gap-1">
                             <Star className="w-3 h-3 text-yellow-500" />
                             <span className="text-xs font-semibold text-yellow-600 dark:text-yellow-400">
-                              +{ach.xp_reward} XP
+                              +{ach.xp_reward ?? 0} XP
                             </span>
                           </div>
                         </div>

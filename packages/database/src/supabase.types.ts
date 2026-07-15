@@ -16,21 +16,6 @@ export type Database = {
         avatar_url: string | null;
         current_jlpt_level: string;
         xp: number;
-        total_xp: number;
-        streak_days: number;
-        onboarding_completed: boolean;
-        role: string;
-        created_at: string | null;
-        updated_at: string | null;
-        last_active_at: string | null;
-      }>;
-      user_profiles: TableDefinition<{
-        id: string;
-        display_name: string | null;
-        avatar_url: string | null;
-        current_jlpt_level: string;
-        xp: number;
-        total_xp: number;
         streak_days: number;
         onboarding_completed: boolean;
         role: string;
@@ -109,31 +94,26 @@ export type Database = {
           title: string;
           description: string;
           xp_earned: number;
+          metadata: Json | null;
+          award_key: string | null;
           created_at: string;
         },
         Record<string, unknown>
       >;
       achievements: TableDefinition<{
         id: string;
-        key: string | null;
         name: string;
-        title: string;
-        description: string;
+        description: string | null;
         icon: string;
-        icon_url: string;
-        xp_reward: number;
+        xp_reward: number | null;
         category: string;
-        requirement_type: string;
-        requirement_value: number;
         condition: Json | null;
-        created_at: string | null;
       }>;
       user_achievements: TableDefinition<{
         id: string;
-        user_id: string;
-        achievement_id: string;
-        earned_at: string;
-        unlocked_at: string;
+        user_id: string | null;
+        achievement_id: string | null;
+        unlocked_at: string | null;
       }>;
       vocabulary: TableDefinition<{
         id: number;
@@ -272,13 +252,16 @@ export type Database = {
       };
       award_xp: {
         Args: {
-          p_type: string;
-          p_title: string;
-          p_description: string;
-          p_amount: number;
+          p_activity_type: string;
+          p_correct_answers: number;
+          p_total_questions: number;
+          p_attempt_key: string;
         };
         Returns: {
-          unlocked_id: string;
+          xp_awarded: number;
+          total_xp: number;
+          was_duplicate: boolean;
+          unlocked_ids: string[];
         }[];
       };
     };

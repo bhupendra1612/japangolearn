@@ -18,8 +18,11 @@ import * as Speech from "expo-speech";
 import { supabase } from "@/lib/supabase";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { AddToListModal } from "@/components/AddToListModal";
+import { AuthPromptModal } from "@/components/AuthPromptModal";
 import StrokeWriter from "@/components/StrokeWriter";
+import { useAuth } from "@/lib/auth";
 import type { VocabularyWord } from "@japangolearn/database";
+import { createXpAttemptKey } from "@japangolearn/content";
 
 // ─── Types ───
 type Word = VocabularyWord;
@@ -104,6 +107,7 @@ function getIcon(topic: string, wordIcon: string | null): string {
 // ─── Main Component ───
 export default function VocabularyScreen() {
   const insets = useSafeAreaInsets();
+  const { session } = useAuth();
   const [words, setWords] = useState<Word[]>([]);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<ViewMode>("browse");
@@ -120,6 +124,8 @@ export default function VocabularyScreen() {
 
   // Custom List State
   const [showAddListModal, setShowAddListModal] = useState(false);
+  const [showListAuthPrompt, setShowListAuthPrompt] = useState(false);
+  const [showProgressAuthPrompt, setShowProgressAuthPrompt] = useState(false);
 
   // Quiz state
   const [quizPool, setQuizPool] = useState<Word[]>([]);
@@ -128,6 +134,7 @@ export default function VocabularyScreen() {
   const [quizAnswer, setQuizAnswer] = useState<string | null>(null);
   const [quizScore, setQuizScore] = useState({ correct: 0, total: 0 });
   const [quizDone, setQuizDone] = useState(false);
+  const [quizAttemptKey, setQuizAttemptKey] = useState(() => createXpAttemptKey());
 
   // Animations
   const cardAnim = useRef(new Animated.Value(0)).current;
@@ -220,6 +227,14 @@ export default function VocabularyScreen() {
     });
   }, []);
 
+  const openAddToList = () => {
+    if (session) {
+      setShowAddListModal(true);
+    } else {
+      setShowListAuthPrompt(true);
+    }
+  };
+
   const openDetail = useCallback(
     (word: Word, idx: number) => {
       setSelectedWord(word);
@@ -266,6 +281,7 @@ export default function VocabularyScreen() {
     setQuizScore({ correct: 0, total: 0 });
     setQuizAnswer(null);
     setQuizDone(false);
+    setQuizAttemptKey(createXpAttemptKey());
     setupQuizQuestion(shuffled, 0);
     setMode("quiz");
     fadeAnim.setValue(0);
@@ -304,14 +320,13 @@ export default function VocabularyScreen() {
         setQuizIndex(next);
         if (next >= quizPool.length) {
           const finalCorrect = quizScore.correct + (correct ? 1 : 0);
-          const xpEarned = finalCorrect * 10;
-          if (xpEarned > 0) {
+          if (session && finalCorrect > 0) {
             supabase
               .rpc("award_xp", {
-                p_type: "vocabulary",
-                p_title: "Vocabulary Quiz",
-                p_description: "Completed quick vocabulary quiz",
-                p_amount: xpEarned,
+                p_activity_type: "vocabulary_quiz",
+                p_correct_answers: finalCorrect,
+                p_total_questions: quizPool.length,
+                p_attempt_key: quizAttemptKey,
               })
               .then();
           }
@@ -321,7 +336,7 @@ export default function VocabularyScreen() {
         }
       }, 1200);
     },
-    [quizAnswer, quizPool, quizIndex, speakWord]
+    [quizAnswer, quizPool, quizIndex, quizAttemptKey, session, speakWord]
   );
 
   // ═══════════════════ BROWSE MODE ═══════════════════
@@ -631,7 +646,7 @@ export default function VocabularyScreen() {
 
             <TouchableOpacity
               style={s.detailActionBtnSecondary}
-              onPress={() => setShowAddListModal(true)}
+              onPress={openAddToList}
               activeOpacity={0.7}
             >
               <Ionicons name="add" size={20} color={Colors.primary[300]} />
@@ -787,6 +802,17 @@ export default function VocabularyScreen() {
               </View>
             </View>
 
+            {!session && (
+              <TouchableOpacity
+                style={s.quizSavePrompt}
+                onPress={() => setShowProgressAuthPrompt(true)}
+                activeOpacity={0.75}
+              >
+                <Ionicons name="lock-closed-outline" size={17} color={Colors.primary[300]} />
+                <Text style={s.quizSavePromptText}>Sign in to save XP and progress</Text>
+              </TouchableOpacity>
+            )}
+
             <View style={s.quizResultActions}>
               <TouchableOpacity style={s.retryBtn} onPress={startQuiz} activeOpacity={0.7}>
                 <Ionicons name="refresh" size={18} color="#fff" />
@@ -916,6 +942,21 @@ export default function VocabularyScreen() {
           itemTitle={selectedWord.kanji || selectedWord.hiragana}
         />
       )}
+
+      <AuthPromptModal
+        visible={showListAuthPrompt}
+        feature="practice lists"
+        redirectTo="/(tabs)/vocabulary"
+        description="Sign in to add vocabulary to custom lists and sync your practice progress."
+        onClose={() => setShowListAuthPrompt(false)}
+      />
+      <AuthPromptModal
+        visible={showProgressAuthPrompt}
+        feature="saved quiz progress"
+        redirectTo="/(tabs)/vocabulary"
+        description="Sign in to earn XP and keep your quiz progress synced across devices."
+        onClose={() => setShowProgressAuthPrompt(false)}
+      />
     </View>
   );
 }
@@ -1506,6 +1547,23 @@ const s = StyleSheet.create({
   scoreItemText: {
     fontSize: FontSize.sm,
     color: Colors.dark.textSecondary,
+    fontWeight: FontWeight.semibold,
+  },
+  quizSavePrompt: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.primary[700],
+    borderRadius: BorderRadius.lg,
+    backgroundColor: Colors.primary[900] + "40",
+  },
+  quizSavePromptText: {
+    color: Colors.primary[200],
+    fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
   },
   quizResultActions: { flexDirection: "row", gap: Spacing.md, width: "100%" },

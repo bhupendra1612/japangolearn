@@ -10,16 +10,20 @@ import {
   Animated,
   ActivityIndicator,
 } from "react-native";
-import { Link, router } from "expo-router";
+import { Link, router, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/lib/auth";
+import { getSafeRedirectTo } from "@/lib/auth-navigation";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 
 export default function SignupScreen() {
   const { signUp } = useAuth();
+  const params = useLocalSearchParams<{ redirectTo?: string | string[] }>();
+  const redirectTo = getSafeRedirectTo(params.redirectTo);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -42,12 +46,15 @@ export default function SignupScreen() {
     }
     setLoading(true);
     setError("");
-    const { error: err } = await signUp(email, password, name);
+    setMessage("");
+    const { error: err, hasSession } = await signUp(email, password, name);
     setLoading(false);
     if (err) {
       setError(err.message);
+    } else if (!hasSession) {
+      setMessage("Check your email to confirm your account, then sign in to continue.");
     } else {
-      router.replace("/(tabs)");
+      router.replace(redirectTo as never);
     }
   };
 
@@ -71,6 +78,11 @@ export default function SignupScreen() {
           {error ? (
             <View style={styles.errorBox}>
               <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+          {message ? (
+            <View style={styles.messageBox}>
+              <Text style={styles.messageText}>{message}</Text>
             </View>
           ) : null}
 
@@ -127,7 +139,7 @@ export default function SignupScreen() {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>Already have an account? </Text>
-          <Link href="/(auth)/login" asChild>
+          <Link href={{ pathname: "/(auth)/login", params: { redirectTo } } as never} asChild>
             <TouchableOpacity>
               <Text style={styles.footerLink}>Sign In</Text>
             </TouchableOpacity>
@@ -175,6 +187,14 @@ const styles = StyleSheet.create({
     borderColor: "rgba(239,68,68,0.3)",
   },
   errorText: { color: "#EF4444", fontSize: FontSize.sm, textAlign: "center" },
+  messageBox: {
+    backgroundColor: "rgba(16,185,129,0.12)",
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: "rgba(16,185,129,0.3)",
+  },
+  messageText: { color: "#6EE7B7", fontSize: FontSize.sm, textAlign: "center" },
   inputGroup: { gap: Spacing.sm },
   label: { fontSize: FontSize.sm, fontWeight: FontWeight.medium, color: Colors.dark.textSecondary },
   input: {

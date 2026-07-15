@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { Search, Globe, ChevronDown, Volume2, CheckCircle2, XCircle, Brain } from "lucide-react";
+import { createXpAttemptKey } from "@japangolearn/content";
 
 interface VocabWord {
   id: number;
@@ -93,6 +94,7 @@ export function VocabularyClient({ words }: { words: VocabWord[] }) {
   const [quizScore, setQuizScore] = useState({ correct: 0, total: 0 });
   const [quizIndex, setQuizIndex] = useState(0);
   const [quizPool, setQuizPool] = useState<VocabWord[]>([]);
+  const [quizAttemptKey, setQuizAttemptKey] = useState(() => createXpAttemptKey());
 
   const topics = useMemo(() => {
     const set = new Set(words.map((w) => w.topic));
@@ -158,6 +160,7 @@ export function VocabularyClient({ words }: { words: VocabWord[] }) {
     setQuizScore({ correct: 0, total: 0 });
     setQuizIndex(0);
     setQuizAnswer(null);
+    setQuizAttemptKey(createXpAttemptKey());
     nextQuizQuestion(0, shuffled);
     setMode("quiz");
   };
@@ -196,10 +199,13 @@ export function VocabularyClient({ words }: { words: VocabWord[] }) {
         setQuizWord(null);
         if (newCorrect > 0) {
           try {
-            const { awardXp, updateDailyTaskProgress } = await import("@/app/actions/gamification");
-            const xp = newCorrect * 5; // 5 XP per correct answer
-            await awardXp({ type: "vocabulary", title: "Vocabulary Quiz Completed", xpAmount: xp });
-            await updateDailyTaskProgress({ taskId: "vocabulary", xpAmount: xp });
+            const { awardQuizXp } = await import("@/app/actions/gamification");
+            await awardQuizXp({
+              activityType: "vocabulary_quiz",
+              correctAnswers: newCorrect,
+              totalQuestions: quizPool.length,
+              attemptKey: quizAttemptKey,
+            });
           } catch (err) {
             console.error("Failed to award XP", err);
           }

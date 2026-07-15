@@ -27,8 +27,8 @@
     "release:web:production": "pnpm --filter @japangolearn/web deploy:cloudflare",
     "release:admin:preview": "pnpm --filter @japangolearn/admin preview:cloudflare",
     "release:admin:production": "pnpm --filter @japangolearn/admin deploy:cloudflare",
-    "release:mobile:preview": "pnpm --filter @japangolearn/mobile exec eas update --channel preview",
-    "release:mobile:production": "pnpm --filter @japangolearn/mobile exec eas update --channel production",
+    "release:mobile:preview": "pnpm --filter @japangolearn/mobile exec eas update --channel preview --environment preview",
+    "release:mobile:production": "pnpm --filter @japangolearn/mobile exec eas update --channel production --environment production",
     "db:types": "node scripts/generate-supabase-types.js",
     "seed:kanji": "node supabase/seed/kanji/seed-kanji.js"
   },

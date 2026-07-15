@@ -12,7 +12,7 @@ import {
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "@/lib/auth";
-import { Colors, FontSize, FontWeight, Spacing, BorderRadius } from "@/constants/theme";
+import { Colors, BorderRadius } from "@/constants/theme";
 
 const { width, height } = Dimensions.get("window");
 
@@ -22,7 +22,7 @@ const SLIDES = [
     emoji: "🇯🇵",
     title: "Learn Japanese\nthe Smart Way",
     subtitle:
-      "Master hiragana, katakana, vocabulary and grammar with our AI-powered learning system",
+      "Master hiragana, katakana, vocabulary, grammar, and writing with guided lessons and quizzes.",
     gradient: ["#6C3DD4", "#4318A8"],
     accent: "#A78BFA",
   },
@@ -37,10 +37,10 @@ const SLIDES = [
   },
   {
     id: "3",
-    emoji: "🤖",
-    title: "Practice with\nAI Sensei",
+    emoji: "🎯",
+    title: "Build a Daily\nStudy Habit",
     subtitle:
-      "Have real conversations in Japanese. Our AI corrects your mistakes and explains grammar in Hindi.",
+      "Practice with quizzes, custom lists, speech playback, XP, streaks, and progress tracking.",
     gradient: ["#B45309", "#92400E"],
     accent: "#FCD34D",
   },

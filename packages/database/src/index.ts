@@ -174,21 +174,23 @@ export type ActivityLog = {
   type?: string;
   description?: string | null;
   xp_earned?: number;
+  metadata?: Record<string, unknown> | null;
+  award_key?: string | null;
   created_at: string;
 };
 
 export type Achievement = {
   id: string;
-  key?: string;
-  title: string;
+  name: string;
   description?: string | null;
-  icon?: string | null;
-  xp_reward?: number;
+  icon: string;
+  xp_reward?: number | null;
+  category: string;
 };
 
 export type UserAchievement = {
   id: string;
-  user_id: string;
-  achievement_id?: string;
-  earned_at?: string;
+  user_id: string | null;
+  achievement_id: string | null;
+  unlocked_at?: string | null;
 };

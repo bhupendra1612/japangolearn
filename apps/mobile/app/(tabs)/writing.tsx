@@ -18,7 +18,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "@/lib/supabase";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { AddToListModal } from "@/components/AddToListModal";
+import { AuthPromptModal } from "@/components/AuthPromptModal";
 import StrokeWriter from "@/components/StrokeWriter";
+import { useAuth } from "@/lib/auth";
 import type { Kana } from "@japangolearn/database";
 
 // ─── Types ───
@@ -89,6 +91,7 @@ function formatGroup(group: string): string {
 // ─── Main Component ───
 export default function WritingScreen() {
   const insets = useSafeAreaInsets();
+  const { session } = useAuth();
   const [kanaList, setKanaList] = useState<Kana[]>([]);
   const [kanaType, setKanaType] = useState<"hiragana" | "katakana">("hiragana");
   const [mode, setMode] = useState<ViewMode>("grid");
@@ -98,6 +101,7 @@ export default function WritingScreen() {
 
   // Custom List State
   const [showAddListModal, setShowAddListModal] = useState(false);
+  const [showListAuthPrompt, setShowListAuthPrompt] = useState(false);
   const [showHindi, setShowHindi] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -173,6 +177,14 @@ export default function WritingScreen() {
       onError: () => setIsSpeaking(false),
     });
   }, []);
+
+  const openAddToList = () => {
+    if (session) {
+      setShowAddListModal(true);
+    } else {
+      setShowListAuthPrompt(true);
+    }
+  };
 
   const openDetail = useCallback(
     (kana: Kana, idx: number) => {
@@ -477,7 +489,7 @@ export default function WritingScreen() {
 
             <TouchableOpacity
               style={s.detailActionBtnSecondary}
-              onPress={() => setShowAddListModal(true)}
+              onPress={openAddToList}
               activeOpacity={0.7}
             >
               <Ionicons name="add" size={20} color={Colors.primary[300]} />
@@ -767,6 +779,14 @@ export default function WritingScreen() {
           itemTitle={selectedKana.character}
         />
       )}
+
+      <AuthPromptModal
+        visible={showListAuthPrompt}
+        feature="practice lists"
+        redirectTo="/(tabs)/writing"
+        description="Sign in to add kana to custom lists and sync your writing practice progress."
+        onClose={() => setShowListAuthPrompt(false)}
+      />
     </View>
   );
 }

@@ -1,13 +1,5 @@
 import React from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Linking,
-  Platform,
-} from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -81,7 +73,7 @@ export default function AboutScreen() {
             </View>
             <View style={s.serviceItem}>
               <Ionicons name="checkmark-circle" size={16} color={Colors.primary[400]} />
-              <Text style={s.serviceText}>AI-based Analysis Systems</Text>
+              <Text style={s.serviceText}>Learning Platforms & Educational Apps</Text>
             </View>
           </View>
         </View>

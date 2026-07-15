@@ -20,22 +20,9 @@ import {
 } from "lucide-react";
 import { ProgressRing } from "@/components/dashboard/progress-ring";
 import { AvatarUpload, ProfileEditForm } from "@/components/dashboard/profile-edit-form";
+import { getXpLevelProgress } from "@japangolearn/content";
 
 export const dynamic = "force-dynamic";
-
-function getXpLevel(xp: number): {
-  level: number;
-  current: number;
-  needed: number;
-} {
-  let level = 1;
-  let remaining = xp;
-  while (remaining >= level * 100) {
-    remaining -= level * 100;
-    level++;
-  }
-  return { level, current: remaining, needed: level * 100 };
-}
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -104,7 +91,7 @@ export default async function ProfilePage() {
         minute: "2-digit",
       })
     : "Never";
-  const xpLevel = getXpLevel(xp);
+  const xpLevel = getXpLevelProgress(xp);
   const badges = achievementCount ?? 0;
   const activities = activityCount ?? 0;
 

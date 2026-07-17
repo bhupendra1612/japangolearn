@@ -10,7 +10,7 @@ async function login(page: import("@playwright/test").Page) {
   const users = readUsers();
   await page.goto("/login");
   await page.getByLabel("Email").fill(users.regular.email);
-  await page.getByLabel("Password").fill(users.regular.password);
+  await page.getByLabel("Password", { exact: true }).fill(users.regular.password);
   await page.getByRole("button", { name: "Log In" }).click();
   await expect(page).toHaveURL(/\/dashboard/);
 }
@@ -20,7 +20,7 @@ test("signup creates a learner account", async ({ page }) => {
   await page.goto("/signup");
   await page.getByLabel("Full Name").fill("Signup Test");
   await page.getByLabel("Email").fill(`signup-${suffix}@example.test`);
-  await page.getByLabel("Password").fill("Signup-password-123!");
+  await page.getByLabel("Password", { exact: true }).fill("Signup-password-123!");
   await page.getByRole("button", { name: /create|sign up/i }).click();
   await expect(page.getByRole("heading", { name: /check your email/i })).toBeVisible();
 });
@@ -51,14 +51,14 @@ test("admin authorization rejects learners and accepts admins", async ({ browser
   const learner = await browser.newPage();
   await learner.goto("http://127.0.0.1:3001/login");
   await learner.getByLabel("Email").fill(users.regular.email);
-  await learner.getByLabel("Password").fill(users.regular.password);
+  await learner.getByLabel("Password", { exact: true }).fill(users.regular.password);
   await learner.getByRole("button", { name: "Sign in" }).click();
   await expect(learner).toHaveURL(/\/forbidden/);
 
   const administrator = await browser.newPage();
   await administrator.goto("http://127.0.0.1:3001/login");
   await administrator.getByLabel("Email").fill(users.admin.email);
-  await administrator.getByLabel("Password").fill(users.admin.password);
+  await administrator.getByLabel("Password", { exact: true }).fill(users.admin.password);
   await administrator.getByRole("button", { name: "Sign in" }).click();
   await expect(administrator).toHaveURL("http://127.0.0.1:3001/");
   await expect(administrator.getByRole("heading", { name: "Admin Console" })).toBeVisible();

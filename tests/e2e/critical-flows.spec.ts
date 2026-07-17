@@ -61,5 +61,5 @@ test("admin authorization rejects learners and accepts admins", async ({ browser
   await administrator.getByLabel("Password").fill(users.admin.password);
   await administrator.getByRole("button", { name: "Sign in" }).click();
   await expect(administrator).toHaveURL("http://127.0.0.1:3001/");
-  await expect(administrator.getByText("Admin")).toBeVisible();
+  await expect(administrator.getByRole("heading", { name: "Admin Console" })).toBeVisible();
 });

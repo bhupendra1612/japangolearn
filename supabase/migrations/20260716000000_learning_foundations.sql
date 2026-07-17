@@ -760,3 +760,10 @@ revoke all on function public.track_analytics_event(text, jsonb, text)
   from public, anon, authenticated;
 grant execute on function public.track_analytics_event(text, jsonb, text)
   to authenticated, service_role;
+
+-- RLS bypass does not replace PostgreSQL object privileges. Server-side clients
+-- using the service role need explicit access for administrative and test setup
+-- operations, while anon/authenticated remain restricted by the grants above.
+grant usage on schema public to service_role;
+grant all privileges on all tables in schema public to service_role;
+grant all privileges on all sequences in schema public to service_role;

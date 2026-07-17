@@ -9,17 +9,20 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-build-placeholder
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 11.7.0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -58,15 +61,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 11.7.0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -82,6 +85,18 @@ jobs:
 
       - name: Verify generated database types
         run: pnpm db:types:check:local
+
+      - name: Generate drifted database types for diagnosis
+        if: failure()
+        run: pnpm db:types:local
+
+      - name: Upload drifted database types
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-database-types
+          path: packages/database/src/supabase.types.ts
+          if-no-files-found: error
 
       - name: Audit database security
         run: pnpm db:security:audit

@@ -92,7 +92,7 @@ jobs:
 
       - name: Upload drifted database types
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: generated-database-types
           path: packages/database/src/supabase.types.ts

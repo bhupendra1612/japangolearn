@@ -24,13 +24,30 @@ const args = [
 ];
 
 function generate() {
-  const output = execPnpmSync(args, {
-    cwd: ROOT,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  let output;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      output = execPnpmSync(args, {
+        cwd: ROOT,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      break;
+    } catch (error) {
+      const details = `${error.stderr ?? ""}\n${error.stdout ?? ""}\n${error.message ?? ""}`;
+      const transientContainerFailure =
+        /too\s*many\s*requests|rate exceeded|tls handshake timeout|connection reset/i.test(details);
+      if (!transientContainerFailure || attempt === 3) throw error;
 
-  if (!output.includes("export type Database")) {
+      const delayMs = attempt * 2_000;
+      console.warn(
+        `Supabase type generation hit a transient container error; retrying in ${delayMs}ms.`
+      );
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
+    }
+  }
+
+  if (!output?.includes("export type Database")) {
     throw new Error("Supabase CLI returned output that does not look like TypeScript types.");
   }
 

@@ -30,15 +30,31 @@
     "release:mobile:preview": "pnpm --filter @japangolearn/mobile exec eas update --channel preview --environment preview",
     "release:mobile:production": "pnpm --filter @japangolearn/mobile exec eas update --channel production --environment production",
     "db:types": "node scripts/generate-supabase-types.js",
+    "db:types:local": "node scripts/generate-supabase-types.js --local",
+    "db:types:check": "node scripts/generate-supabase-types.js --check",
+    "db:types:check:local": "node scripts/generate-supabase-types.js --local --check",
+    "db:security:audit": "node scripts/audit-database-security.js",
+    "db:backup:verify": "node scripts/verify-database-backup.js",
+    "test:unit": "pnpm --filter @japangolearn/core test",
+    "test:typecheck": "tsc -p tsconfig.tests.json --noEmit",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "playwright test",
+    "test:a11y": "playwright test --grep @a11y",
     "seed:kanji": "node supabase/seed/kanji/seed-kanji.js"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
+    "@japangolearn/database": "workspace:*",
+    "@playwright/test": "1.61.1",
+    "@types/node": "22.15.32",
+    "postgres": "3.4.9",
     "prettier": "3.6.2",
     "supabase": "2.109.0",
     "turbo": "2.5.6",
-    "typescript": "5.9.2"
+    "typescript": "5.9.2",
+    "vitest": "4.1.10"
   },
   "dependencies": {
-    "@supabase/supabase-js": "2.49.1"
+    "@supabase/supabase-js": "2.110.7"
   }
 }

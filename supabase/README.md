@@ -8,33 +8,11 @@ This monorepo uses the existing Supabase project:
 - public URL: `https://teylstfbjtutssnfmhhu.supabase.co`
 - dashboard: `https://supabase.com/dashboard/project/teylstfbjtutssnfmhhu`
 
-## Current Schema Snapshot
+## Schema source of truth
 
-Checked through Supabase MCP on 2026-07-02.
-
-Important public tables:
-
-- `profiles` - 5 rows
-- `kana` - 202 rows
-- `kanji` - 100 rows
-- `practice_lists` - 4 rows
-- `practice_list_items` - 21 rows
-- `daily_goals` - 1 row
-- `activity_log` - 1 row
-- `user_streaks` - 1 row
-- `vocabulary` - 0 rows
-- `grammar_patterns` - 0 rows
-- `achievements` - 0 rows
-- `blog_posts` - 0 rows
-- `contact_submissions` - 0 rows
-
-All listed public tables reported `rls_enabled: true`.
-
-`kanji` already contains rich learning content columns including meanings,
-Hindi pronunciation, readings, related/confusable kanji, tags, vocabulary JSON,
-and example sentence JSON.
-
-No Edge Functions are currently deployed.
+`supabase/migrations` contains a complete additive baseline plus the learning
+attempt, event, XP ledger, mastery, and daily quest model. New environments should
+be created through the migration stack rather than dashboard-only schema changes.
 
 ## Monorepo Layout
 
@@ -48,6 +26,10 @@ No Edge Functions are currently deployed.
 
 ```bash
 pnpm db:types
+pnpm db:types:local
+pnpm db:types:check:local
+pnpm db:security:audit
+pnpm db:backup:verify
 pnpm seed:kanji
 ```
 
@@ -58,9 +40,7 @@ project `teylstfbjtutssnfmhhu`. It requires `supabase login` or
 `pnpm seed:kanji` reads env values from root/app `.env.local` files and upserts
 `supabase/seed/kanji/n5-remaining.json` into the `kanji` table.
 
-## Current Limitation
-
-On 2026-07-02, live type generation could not complete in Codex because the
-Supabase CLI and MCP session were not authenticated. The committed
-`supabase.types.ts` file is a repo-local bridge matching the current app schema
-usage and should be replaced by `pnpm db:types` after Supabase CLI login.
+CI resets a local Supabase database, verifies the generated type shape, audits RLS,
+functions, grants, and storage policies, runs RPC integration tests, and restores a
+backup into an isolated database. The production type check runs on `main` when the
+`SUPABASE_ACCESS_TOKEN` repository secret is configured.

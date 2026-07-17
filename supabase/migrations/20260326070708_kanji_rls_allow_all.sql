@@ -1,0 +1,2 @@
+-- Historical production migration marker. The baseline intentionally replaces
+-- the original permissive policy with explicit public-read and admin-write rules.

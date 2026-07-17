@@ -8,6 +8,9 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "dependencies": {
+    "@japangolearn/core": "workspace:*"
+  },
   "devDependencies": {
     "typescript": "5.9.2"
   },

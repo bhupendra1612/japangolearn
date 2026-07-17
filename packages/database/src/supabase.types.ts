@@ -34,6 +34,8 @@ export type Database = {
         total_kanji: number;
         total_vocabulary: number;
         total_grammar: number;
+        color: string | null;
+        icon_url: string | null;
         created_at: string | null;
       }>;
       user_level_progress: TableDefinition<{
@@ -243,6 +245,73 @@ export type Database = {
         created_at: string | null;
         updated_at: string | null;
       }>;
+      learning_attempts: TableDefinition<{
+        id: string;
+        user_id: string;
+        activity_type: "vocabulary_quiz" | "grammar_quiz" | "writing_quiz" | "practice_quiz";
+        status: "started" | "completed" | "abandoned";
+        correct_answers: number;
+        total_questions: number;
+        score_percent: number;
+        duration_seconds: number | null;
+        attempt_key: string;
+        started_at: string;
+        completed_at: string | null;
+        metadata: Json;
+        created_at: string;
+      }>;
+      learning_attempt_answers: TableDefinition<{
+        id: string;
+        attempt_id: string;
+        item_type: "vocabulary" | "kana" | "kanji" | "grammar";
+        item_id: string;
+        prompt: string | null;
+        answer: string | null;
+        correct_answer: string | null;
+        is_correct: boolean;
+        response_ms: number | null;
+        metadata: Json;
+        created_at: string;
+      }>;
+      activity_events: TableDefinition<{
+        id: string;
+        user_id: string | null;
+        attempt_id: string | null;
+        event_name: string;
+        source: "web" | "mobile" | "admin" | "server" | "migration";
+        properties: Json;
+        occurred_at: string;
+      }>;
+      xp_ledger: TableDefinition<{
+        id: string;
+        user_id: string;
+        attempt_id: string | null;
+        amount: number;
+        reason: string;
+        award_key: string;
+        created_at: string;
+      }>;
+      mastery_records: TableDefinition<{
+        id: string;
+        user_id: string;
+        item_type: "vocabulary" | "kana" | "kanji" | "grammar";
+        item_id: string;
+        mastery_score: number;
+        correct_count: number;
+        incorrect_count: number;
+        last_reviewed_at: string | null;
+        next_review_at: string | null;
+        created_at: string;
+        updated_at: string;
+      }>;
+      daily_quest_completions: TableDefinition<{
+        id: string;
+        user_id: string;
+        quest_key: "vocabulary" | "grammar" | "kanji";
+        quest_date: string;
+        attempt_id: string;
+        completed_at: string;
+      }>;
     };
     Views: Record<string, never>;
     Functions: {
@@ -258,11 +327,20 @@ export type Database = {
           p_attempt_key: string;
         };
         Returns: {
+          attempt_id: string;
           xp_awarded: number;
           total_xp: number;
           was_duplicate: boolean;
           unlocked_ids: string[];
         }[];
+      };
+      track_analytics_event: {
+        Args: {
+          p_event_name: string;
+          p_properties: Json;
+          p_source: string;
+        };
+        Returns: string;
       };
     };
     Enums: Record<string, never>;

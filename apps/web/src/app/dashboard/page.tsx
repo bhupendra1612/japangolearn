@@ -16,10 +16,11 @@ export default async function DashboardPage() {
 
   if (!user) redirect("/login");
 
-  // Parallel fetches for performance
+  const today = new Date().toISOString().split("T")[0];
   const [
     { data: profile },
     { data: todayGoal },
+    { data: questCompletions },
     { data: activities },
     { data: heatmapRaw },
     { count: achievementCount },
@@ -34,8 +35,14 @@ export default async function DashboardPage() {
       .from("daily_goals")
       .select("xp_earned, xp_target, tasks_completed, tasks_total")
       .eq("user_id", user.id)
-      .eq("date", new Date().toISOString().split("T")[0])
+      .eq("date", today)
       .maybeSingle(),
+
+    supabase
+      .from("daily_quest_completions")
+      .select("quest_key")
+      .eq("user_id", user.id)
+      .eq("quest_date", today),
 
     supabase
       .from("activity_log")
@@ -146,15 +153,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Today's Quests */}
-        <DailyTasks
-          initialCompleted={Array.from(
-            new Set(
-              (activities ?? [])
-                .filter((a) => a.created_at.startsWith(new Date().toISOString().split("T")[0]))
-                .map((a) => a.type)
-            )
-          )}
-        />
+        <DailyTasks initialCompleted={(questCompletions ?? []).map((quest) => quest.quest_key)} />
 
         {/* Heatmap + Activity — side by side on large screens */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

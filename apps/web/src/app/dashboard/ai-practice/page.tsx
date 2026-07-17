@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronRight, Sparkles, Mic, MessageSquare, Volume2, BookOpen, Star } from "lucide-react";
+import { featureFlags } from "@/lib/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,9 @@ export default async function AiPracticePage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+  if (!featureFlags.aiPractice || !featureFlags.premium) {
+    redirect("/dashboard?feature=ai-practice-unavailable");
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">

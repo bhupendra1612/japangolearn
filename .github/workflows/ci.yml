@@ -36,6 +36,12 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: Typecheck test suites
+        run: pnpm test:typecheck
+
       - name: Build web
         run: pnpm build:web
 
@@ -47,3 +53,57 @@ jobs:
 
       - name: Expo dependency check
         run: pnpm check:expo
+
+  database-and-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Start local Supabase
+        run: pnpm exec supabase start
+
+      - name: Reset and seed database
+        run: pnpm exec supabase db reset
+
+      - name: Verify generated database types
+        run: pnpm db:types:check:local
+
+      - name: Audit database security
+        run: pnpm db:security:audit
+
+      - name: Verify backup and restore
+        run: pnpm db:backup:verify
+
+      - name: Database integration tests
+        run: pnpm test:integration
+
+      - name: Install Playwright
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: End-to-end and accessibility tests
+        run: pnpm test:e2e
+
+      - name: Check production type drift
+        if: github.ref == 'refs/heads/main'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: pnpm db:types:check
+
+      - name: Stop local Supabase
+        if: always()
+        run: pnpm exec supabase stop

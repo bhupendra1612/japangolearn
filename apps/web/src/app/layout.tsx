@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Noto_Sans_JP } from "next/font/google";
 import { Suspense } from "react";
 import { Providers } from "@/components/providers";
+import "@japangolearn/ui/styles.css";
 import "./globals.css";
 
 const inter = Inter({

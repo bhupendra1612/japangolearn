@@ -1,0 +1,110 @@
+:root {
+  --jgl-primary: #7c3aed;
+  --jgl-primary-hover: #6d28d9;
+  --jgl-surface: #ffffff;
+  --jgl-text: #161a22;
+  --jgl-muted: #667085;
+  --jgl-border: #d9dee7;
+  --jgl-radius: 0.875rem;
+  --jgl-focus: 0 0 0 3px rgba(124, 58, 237, 0.28);
+}
+
+.jgl-card {
+  border: 1px solid var(--jgl-border);
+  border-radius: var(--jgl-radius);
+  background: var(--jgl-surface);
+  color: var(--jgl-text);
+}
+
+.jgl-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  border-radius: 999px;
+  padding: 0.125rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.jgl-badge--neutral {
+  background: #eef1f5;
+  color: #475467;
+}
+
+.jgl-badge--success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.jgl-badge--warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.jgl-badge--danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.jgl-badge--info {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.jgl-button {
+  min-height: 2.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  padding: 0.625rem 1rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.jgl-button:focus-visible {
+  outline: none;
+  box-shadow: var(--jgl-focus);
+}
+
+.jgl-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.jgl-button--primary {
+  background: var(--jgl-primary);
+  color: #ffffff;
+}
+
+.jgl-button--primary:hover:not(:disabled) {
+  background: var(--jgl-primary-hover);
+}
+
+.jgl-button--secondary {
+  border-color: var(--jgl-border);
+  background: #ffffff;
+  color: #344054;
+}
+
+.jgl-button--danger {
+  background: #b42318;
+  color: #ffffff;
+}
+
+.jgl-button--ghost {
+  background: transparent;
+  color: inherit;
+}
+
+.jgl-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.jgl-empty-state p {
+  margin: 0;
+  color: var(--jgl-muted);
+}

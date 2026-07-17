@@ -24,42 +24,40 @@ export default async function AnalyticsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Parallel fetches
-  const [{ data: profile }, { data: weeklyActivities }, { data: allActivities }] =
-    await Promise.all([
-      supabase.from("profiles").select("streak_days").eq("id", user.id).single(),
+  const ninetyDaysAgo = new Date(Date.now() - 91 * 24 * 60 * 60 * 1000).toISOString();
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const [{ data: profile }, { data: weeklyXpEntries }, { data: allAttempts }] = await Promise.all([
+    supabase.from("profiles").select("streak_days").eq("id", user.id).single(),
 
-      // Last 7 days activity
-      supabase
-        .from("activity_log")
-        .select("type, xp_earned, created_at")
-        .eq("user_id", user.id)
-        .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-        .order("created_at", { ascending: false }),
+    supabase
+      .from("xp_ledger")
+      .select("amount, created_at")
+      .eq("user_id", user.id)
+      .gte("created_at", sevenDaysAgo)
+      .order("created_at", { ascending: false }),
 
-      // Last 90 days for heatmap (13 weeks)
-      supabase
-        .from("activity_log")
-        .select("type, xp_earned, created_at")
-        .eq("user_id", user.id)
-        .gte("created_at", new Date(Date.now() - 91 * 24 * 60 * 60 * 1000).toISOString()),
-    ]);
+    supabase
+      .from("learning_attempts")
+      .select("activity_type, correct_answers, total_questions, duration_seconds, completed_at")
+      .eq("user_id", user.id)
+      .eq("status", "completed")
+      .gte("completed_at", ninetyDaysAgo),
+  ]);
 
   const streak = profile?.streak_days ?? 0;
 
   // Build weekly XP chart data
   const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const weeklyXp: number[] = new Array(7).fill(0);
-  weeklyActivities?.forEach((a) => {
-    const d = new Date(a.created_at);
+  weeklyXpEntries?.forEach((entry) => {
+    const d = new Date(entry.created_at);
     let dayIdx = d.getDay() - 1; // Mon=0
     if (dayIdx < 0) dayIdx = 6; // Sun=6
-    weeklyXp[dayIdx] += a.xp_earned;
+    weeklyXp[dayIdx] += entry.amount;
   });
   const weeklyChartData = dayLabels.map((label, i) => ({ label, value: weeklyXp[i] }));
   const weeklyTotal = weeklyXp.reduce((s, v) => s + v, 0);
 
-  // Skill breakdown from all activities
   const skillCounts: Record<string, number> = {
     vocabulary: 0,
     kanji: 0,
@@ -67,8 +65,14 @@ export default async function AnalyticsPage() {
     listening: 0,
     lesson: 0,
   };
-  allActivities?.forEach((a) => {
-    if (skillCounts[a.type] !== undefined) skillCounts[a.type] += 1;
+  allAttempts?.forEach((attempt) => {
+    const skill = {
+      vocabulary_quiz: "vocabulary",
+      grammar_quiz: "grammar",
+      writing_quiz: "kanji",
+      practice_quiz: "lesson",
+    }[attempt.activity_type];
+    if (skill && skillCounts[skill] !== undefined) skillCounts[skill] += 1;
   });
   const skillRadarData = [
     { label: "Vocab", value: skillCounts.vocabulary, max: 50 },
@@ -83,21 +87,30 @@ export default async function AnalyticsPage() {
   const strongest = sorted[0];
   const weakest = sorted[sorted.length - 1];
 
-  // Study time estimate (10 min per activity)
-  const totalStudyMin = (allActivities?.length ?? 0) * 10;
+  const totalStudyMin = Math.round(
+    (allAttempts ?? []).reduce((total, attempt) => total + (attempt.duration_seconds ?? 0), 0) / 60
+  );
   const studyHours = Math.floor(totalStudyMin / 60);
   const studyMins = totalStudyMin % 60;
 
-  // Heatmap data
   const heatmapMap: Record<string, number> = {};
-  allActivities?.forEach((a) => {
-    const date = a.created_at.split("T")[0];
+  allAttempts?.forEach((attempt) => {
+    if (!attempt.completed_at) return;
+    const date = attempt.completed_at.split("T")[0];
     heatmapMap[date] = (heatmapMap[date] ?? 0) + 1;
   });
   const heatmapData = Object.entries(heatmapMap).map(([date, count]) => ({ date, count }));
 
   // Accuracy (placeholder — future: track correct/incorrect)
-  const accuracy = allActivities && allActivities.length > 0 ? 85 : 0;
+  const totalAnswers = (allAttempts ?? []).reduce(
+    (total, attempt) => total + attempt.total_questions,
+    0
+  );
+  const correctAnswers = (allAttempts ?? []).reduce(
+    (total, attempt) => total + attempt.correct_answers,
+    0
+  );
+  const accuracy = totalAnswers > 0 ? Math.round((correctAnswers / totalAnswers) * 100) : 0;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">

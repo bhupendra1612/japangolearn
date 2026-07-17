@@ -1,0 +1,2 @@
+-- Historical production migration marker. Its schema is represented by the
+-- consolidated 20260301000000_database_baseline migration for clean resets.

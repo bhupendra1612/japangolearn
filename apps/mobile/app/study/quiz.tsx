@@ -159,16 +159,14 @@ export default function QuizScreen() {
       } else {
         // finished
         const finalScore = score + (correct ? 1 : 0);
-        if (finalScore > 0) {
-          supabase
-            .rpc("award_xp", {
-              p_activity_type: "practice_quiz",
-              p_correct_answers: finalScore,
-              p_total_questions: questions.length,
-              p_attempt_key: quizAttemptKey,
-            })
-            .then();
-        }
+        supabase
+          .rpc("award_xp", {
+            p_activity_type: "practice_quiz",
+            p_correct_answers: finalScore,
+            p_total_questions: questions.length,
+            p_attempt_key: quizAttemptKey,
+          })
+          .then();
         setCurrentIndex((prev) => prev + 1);
       }
     }, 1500);

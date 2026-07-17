@@ -143,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updateProfile = async (data: ProfileUpdateData) => {
     if (!session?.user) return { error: { message: "Not authenticated" } };
-    const updates: Record<string, any> = {};
+    const updates: Partial<ProfileUpdateData> = {};
     if (data.display_name !== undefined) {
       const trimmed = data.display_name.trim();
       if (trimmed.length < 2) return { error: { message: "Name must be at least 2 characters" } };

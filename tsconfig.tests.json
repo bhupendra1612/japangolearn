@@ -1,0 +1,12 @@
+{
+  "extends": "./packages/config/tsconfig/base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "incremental": false,
+    "paths": {
+      "@japangolearn/database": ["packages/database/src/index.ts"]
+    },
+    "types": ["node"]
+  },
+  "include": ["playwright.config.ts", "vitest.integration.config.ts", "tests/**/*.ts"]
+}

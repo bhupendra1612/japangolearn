@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/lib/auth";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
+import { featureFlags } from "@/lib/feature-flags";
 
 const { width } = Dimensions.get("window");
 const SIDEBAR_WIDTH = width * 0.75;
@@ -56,7 +57,9 @@ const NAV_ITEMS = [
     route: "/(tabs)/achievements",
     free: false,
   },
-];
+].filter(
+  (item) => item.route !== "/(tabs)/ai" || (featureFlags.aiPractice && featureFlags.premium)
+);
 
 const SETTING_ITEMS = [
   { icon: "person-circle-outline" as const, label: "Profile", route: "/(tabs)/profile" },

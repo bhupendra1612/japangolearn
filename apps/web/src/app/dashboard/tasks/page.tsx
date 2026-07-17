@@ -15,40 +15,50 @@ export default async function TasksPage() {
 
   const today = new Date().toISOString().split("T")[0];
 
-  // Parallel fetches
-  const [{ data: profile }, { data: todayGoal }, { data: todayActivities }, { data: weekGoals }] =
-    await Promise.all([
-      supabase.from("profiles").select("xp, streak_days").eq("id", user.id).single(),
+  const [
+    { data: profile },
+    { data: todayGoal },
+    { data: todayActivities },
+    { data: questCompletions },
+    { data: weekGoals },
+  ] = await Promise.all([
+    supabase.from("profiles").select("xp, streak_days").eq("id", user.id).single(),
 
-      supabase
-        .from("daily_goals")
-        .select("xp_earned, xp_target, tasks_completed, tasks_total")
-        .eq("user_id", user.id)
-        .eq("date", today)
-        .maybeSingle(),
+    supabase
+      .from("daily_goals")
+      .select("xp_earned, xp_target, tasks_completed, tasks_total")
+      .eq("user_id", user.id)
+      .eq("date", today)
+      .maybeSingle(),
 
-      supabase
-        .from("activity_log")
-        .select("id, type, title, xp_earned, created_at")
-        .eq("user_id", user.id)
-        .gte("created_at", `${today}T00:00:00`)
-        .order("created_at", { ascending: false }),
+    supabase
+      .from("activity_log")
+      .select("id, type, title, xp_earned, created_at")
+      .eq("user_id", user.id)
+      .gte("created_at", `${today}T00:00:00`)
+      .order("created_at", { ascending: false }),
 
-      // Last 7 days of daily goals for the weekly streak row
-      supabase
-        .from("daily_goals")
-        .select("date, xp_earned, xp_target, tasks_completed, tasks_total")
-        .eq("user_id", user.id)
-        .gte("date", new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0])
-        .order("date", { ascending: true }),
-    ]);
+    supabase
+      .from("daily_quest_completions")
+      .select("quest_key")
+      .eq("user_id", user.id)
+      .eq("quest_date", today),
+
+    // Last 7 days of daily goals for the weekly streak row
+    supabase
+      .from("daily_goals")
+      .select("date, xp_earned, xp_target, tasks_completed, tasks_total")
+      .eq("user_id", user.id)
+      .gte("date", new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0])
+      .order("date", { ascending: true }),
+  ]);
 
   const xp = profile?.xp ?? 0;
   const streak = profile?.streak_days ?? 0;
   const dailyXp = todayGoal?.xp_earned ?? 0;
   const dailyTarget = todayGoal?.xp_target ?? 100;
   const tasksCompleted = todayGoal?.tasks_completed ?? 0;
-  const tasksTotal = todayGoal?.tasks_total ?? 4;
+  const tasksTotal = todayGoal?.tasks_total ?? 3;
   const pct = Math.min(100, Math.round((dailyXp / dailyTarget) * 100));
 
   // Build week streak dots
@@ -61,8 +71,7 @@ export default async function TasksPage() {
     return { dateStr, dayLabel, goal, isToday };
   });
 
-  // Determine completed tasks from today's activity log
-  const completedTypes = Array.from(new Set((todayActivities ?? []).map((a) => a.type)));
+  const completedTypes = (questCompletions ?? []).map((quest) => quest.quest_key);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">

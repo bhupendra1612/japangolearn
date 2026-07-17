@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { Search, Globe, ChevronDown, Volume2, CheckCircle2, XCircle, Brain } from "lucide-react";
 import { createXpAttemptKey } from "@japangolearn/content";
+import { trackWebEvent } from "@/lib/analytics";
 
 interface VocabWord {
   id: number;
@@ -161,6 +162,10 @@ export function VocabularyClient({ words }: { words: VocabWord[] }) {
     setQuizIndex(0);
     setQuizAnswer(null);
     setQuizAttemptKey(createXpAttemptKey());
+    void trackWebEvent("learning.quiz_started", {
+      activity_type: "vocabulary_quiz",
+      question_count: shuffled.length,
+    });
     nextQuizQuestion(0, shuffled);
     setMode("quiz");
   };
@@ -197,18 +202,23 @@ export function VocabularyClient({ words }: { words: VocabWord[] }) {
       setQuizIndex(next);
       if (next >= quizPool.length) {
         setQuizWord(null);
-        if (newCorrect > 0) {
-          try {
-            const { awardQuizXp } = await import("@/app/actions/gamification");
-            await awardQuizXp({
-              activityType: "vocabulary_quiz",
-              correctAnswers: newCorrect,
-              totalQuestions: quizPool.length,
-              attemptKey: quizAttemptKey,
+        try {
+          const { awardQuizXp } = await import("@/app/actions/gamification");
+          const result = await awardQuizXp({
+            activityType: "vocabulary_quiz",
+            correctAnswers: newCorrect,
+            totalQuestions: quizPool.length,
+            attemptKey: quizAttemptKey,
+          });
+          if (result.ok) {
+            void trackWebEvent("learning.attempt_completed", {
+              activity_type: "vocabulary_quiz",
+              correct_answers: newCorrect,
+              total_questions: quizPool.length,
             });
-          } catch (err) {
-            console.error("Failed to award XP", err);
           }
+        } catch (err) {
+          console.error("Failed to record learning attempt", err);
         }
       } else {
         nextQuizQuestion(next, quizPool);
@@ -305,6 +315,7 @@ export function VocabularyClient({ words }: { words: VocabWord[] }) {
               return (
                 <button
                   key={opt}
+                  data-testid="vocabulary-quiz-option"
                   onClick={() => handleQuizAnswer(opt)}
                   disabled={!!quizAnswer}
                   className={`flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl text-sm font-bold transition-all ${btnClass}`}
@@ -358,6 +369,7 @@ export function VocabularyClient({ words }: { words: VocabWord[] }) {
         </button>
         <button
           onClick={startQuiz}
+          data-testid="start-vocabulary-quiz"
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl gradient-bg-primary text-white text-sm font-medium shadow-md hover:shadow-lg transition-all shrink-0"
         >
           <Brain className="w-4 h-4" /> Quiz Me

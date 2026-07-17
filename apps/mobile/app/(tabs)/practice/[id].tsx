@@ -29,6 +29,12 @@ type ListItem = {
   subContent?: string; // romaji or meaning
 };
 
+const PRACTICE_ITEM_TYPES: readonly PracticeItemType[] = ["vocabulary", "kana", "kanji", "grammar"];
+
+function isPracticeItemType(value: string): value is PracticeItemType {
+  return PRACTICE_ITEM_TYPES.includes(value as PracticeItemType);
+}
+
 export default function PracticeListScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
@@ -70,43 +76,86 @@ export default function PracticeListScreen() {
 
     if (listItems && listItems.length > 0) {
       // 3. Fetch details for items (vocab and kana)
-      const vocabIds = listItems.filter((i) => i.item_type === "vocabulary").map((i) => i.item_id);
-      const kanaIds = listItems.filter((i) => i.item_type === "kana").map((i) => i.item_id);
+      const typedItems = listItems.filter(
+        (item): item is typeof item & { item_type: PracticeItemType } =>
+          isPracticeItemType(item.item_type)
+      );
+      const vocabIds = typedItems
+        .filter((item) => item.item_type === "vocabulary")
+        .map((item) => item.item_id);
+      const kanaIds = typedItems
+        .filter((item) => item.item_type === "kana")
+        .map((item) => item.item_id);
+      const kanjiIds = typedItems
+        .filter((item) => item.item_type === "kanji")
+        .map((item) => item.item_id);
+      const grammarIds = typedItems
+        .filter((item) => item.item_type === "grammar")
+        .map((item) => item.item_id);
 
-      let vocabMap = new Map();
-      let kanaMap = new Map();
+      const details = new Map<string, { content: string; subContent: string }>();
 
       if (vocabIds.length > 0) {
         const { data: vocabData } = await supabase
           .from("vocabulary")
           .select("*")
           .in("id", vocabIds);
-        vocabData?.forEach((v) => vocabMap.set(v.id, v));
+        vocabData?.forEach((item) =>
+          details.set(`vocabulary:${item.id}`, {
+            content: item.kanji || item.hiragana,
+            subContent: item.english,
+          })
+        );
       }
 
       if (kanaIds.length > 0) {
         const { data: kanaData } = await supabase.from("kana").select("*").in("id", kanaIds);
-        kanaData?.forEach((k) => kanaMap.set(k.id, k));
+        kanaData?.forEach((item) =>
+          details.set(`kana:${item.id}`, {
+            content: item.character,
+            subContent: item.romaji,
+          })
+        );
+      }
+
+      if (kanjiIds.length > 0) {
+        const { data: kanjiData } = await supabase
+          .from("kanji")
+          .select("id, character, meaning_en")
+          .in("id", kanjiIds);
+        kanjiData?.forEach((item) =>
+          details.set(`kanji:${item.id}`, {
+            content: item.character,
+            subContent: item.meaning_en.join(", "),
+          })
+        );
+      }
+
+      if (grammarIds.length > 0) {
+        const { data: grammarData } = await supabase
+          .from("grammar_patterns")
+          .select("id, pattern, meaning")
+          .in("id", grammarIds);
+        grammarData?.forEach((item) =>
+          details.set(`grammar:${item.id}`, {
+            content: item.pattern,
+            subContent: item.meaning,
+          })
+        );
       }
 
       // 4. Merge data
-      const mergedItems = listItems.map((item) => {
-        let content = "";
-        let subContent = "";
-        if (item.item_type === "vocabulary") {
-          const v = vocabMap.get(item.item_id);
-          if (v) {
-            content = v.kanji || v.hiragana;
-            subContent = v.english;
-          }
-        } else {
-          const k = kanaMap.get(item.item_id);
-          if (k) {
-            content = k.character;
-            subContent = k.romaji;
-          }
-        }
-        return { ...item, content, subContent };
+      const mergedItems: ListItem[] = typedItems.map((item) => {
+        const detail = details.get(`${item.item_type}:${item.item_id}`);
+        return {
+          id: item.id,
+          item_type: item.item_type,
+          item_id: item.item_id,
+          mastery_score: item.mastery_score,
+          last_reviewed: item.last_reviewed,
+          content: detail?.content ?? "",
+          subContent: detail?.subContent ?? "",
+        };
       });
 
       setItems(mergedItems);

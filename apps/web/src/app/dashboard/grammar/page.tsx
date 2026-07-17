@@ -3,8 +3,29 @@ import { redirect } from "next/navigation";
 import { ChevronRight, BookText } from "lucide-react";
 import Link from "next/link";
 import { GrammarClient } from "@/components/dashboard/grammar-client";
+import type { Json } from "@japangolearn/database";
 
 export const dynamic = "force-dynamic";
+
+function normalizeExamples(value: Json) {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item) => {
+    if (!item || Array.isArray(item) || typeof item !== "object") return [];
+
+    const jp =
+      typeof item.jp === "string"
+        ? item.jp
+        : typeof item.japanese === "string"
+          ? item.japanese
+          : "";
+    const en =
+      typeof item.en === "string" ? item.en : typeof item.english === "string" ? item.english : "";
+    const romaji = typeof item.romaji === "string" ? item.romaji : "";
+
+    return jp && en ? [{ jp, romaji, en }] : [];
+  });
+}
 
 export default async function GrammarPage() {
   const supabase = await createClient();
@@ -18,6 +39,10 @@ export default async function GrammarPage() {
     .select("*")
     .eq("jlpt_level", "N5")
     .order("order_index");
+  const normalizedPatterns = (patterns ?? []).map((pattern) => ({
+    ...pattern,
+    examples: normalizeExamples(pattern.examples),
+  }));
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -53,7 +78,7 @@ export default async function GrammarPage() {
         </div>
       </div>
 
-      <GrammarClient patterns={patterns ?? []} />
+      <GrammarClient patterns={normalizedPatterns} />
 
       {/* Bottom motivational */}
       <div className="mt-10 text-center">

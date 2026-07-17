@@ -36,7 +36,7 @@ export * from "./repositories";
 
 export type JlptLevel = "N5" | "N4" | "N3" | "N2" | "N1";
 
-export type UserRole = "student" | "admin" | string;
+export type UserRole = "user" | "admin" | string;
 
 export type Profile = {
   id: string;
@@ -147,7 +147,7 @@ export type PracticeList = {
   item_count?: number;
 };
 
-export type PracticeItemType = "vocabulary" | "kana";
+export type PracticeItemType = "vocabulary" | "kana" | "kanji" | "grammar";
 
 export type PracticeListItem = {
   id: string;

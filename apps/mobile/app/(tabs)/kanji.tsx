@@ -42,6 +42,10 @@ type Example = {
 
 type Kanji = KanjiRow;
 
+function jsonArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 const TAG_COLORS: Record<string, string> = {
   nature: "#10B981",
   basic: "#7C3AED",
@@ -487,8 +491,15 @@ export default function KanjiScreen() {
     setLoading(true);
     const { data, error } = await supabase.from("kanji").select("*").order("order_index");
     if (!error && data) {
-      setKanji(data as Kanji[]);
-      setFiltered(data as Kanji[]);
+      const normalized: Kanji[] = data.map((row) => ({
+        ...row,
+        kunyomi: jsonArray<KunReading>(row.kunyomi),
+        onyomi: jsonArray<OnReading>(row.onyomi),
+        vocabulary: jsonArray<VocabItem>(row.vocabulary),
+        example_sentences: jsonArray<Example>(row.example_sentences),
+      }));
+      setKanji(normalized);
+      setFiltered(normalized);
     }
     setLoading(false);
   };

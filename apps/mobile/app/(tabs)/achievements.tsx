@@ -56,9 +56,13 @@ export default function AchievementsScreen() {
       setTotalXp(profileResult.data.xp ?? 0);
       setAllAchievements(definitionsResult.data ?? []);
       setEarned(
-        (earnedResult.data ?? []).filter(
-          (achievement): achievement is UserAchievement => achievement.achievement_id !== null
-        )
+        (earnedResult.data ?? [])
+          .filter((achievement) => achievement.achievement_id !== null)
+          .map((achievement) => ({
+            id: achievement.id,
+            achievement_id: achievement.achievement_id,
+            unlocked_at: achievement.unlocked_at,
+          }))
       );
     } catch (e) {
       console.error(e);

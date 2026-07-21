@@ -199,15 +199,48 @@ alter table public.user_kana_progress
   add column if not exists last_reviewed timestamptz,
   add column if not exists created_at timestamptz,
   add column if not exists updated_at timestamptz;
+
+do $migration$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'user_kana_progress'
+      and column_name = 'mastery'
+  ) then
+    execute $sql$
+      update public.user_kana_progress
+      set mastery_score = coalesce(
+        mastery_score,
+        greatest(0, least(100, coalesce(mastery, 0)))
+      )
+    $sql$;
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'user_kana_progress'
+      and column_name = 'last_practiced_at'
+  ) then
+    execute $sql$
+      update public.user_kana_progress
+      set
+        last_reviewed = coalesce(last_reviewed, last_practiced_at),
+        created_at = coalesce(created_at, last_practiced_at),
+        updated_at = coalesce(updated_at, last_practiced_at)
+    $sql$;
+  end if;
+end;
+$migration$;
+
 update public.user_kana_progress
 set
-  mastery_score = coalesce(
-    mastery_score,
-    greatest(0, least(100, coalesce(mastery, 0)))
-  ),
-  last_reviewed = coalesce(last_reviewed, last_practiced_at),
-  created_at = coalesce(created_at, last_practiced_at, now()),
-  updated_at = coalesce(updated_at, last_practiced_at, now());
+  mastery_score = coalesce(mastery_score, 0),
+  created_at = coalesce(created_at, now()),
+  updated_at = coalesce(updated_at, now());
 alter table public.user_kana_progress
   alter column user_id set not null,
   alter column kana_id set not null,
@@ -223,15 +256,48 @@ alter table public.user_kanji_progress
   add column if not exists last_reviewed timestamptz,
   add column if not exists created_at timestamptz,
   add column if not exists updated_at timestamptz;
+
+do $migration$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'user_kanji_progress'
+      and column_name = 'mastery'
+  ) then
+    execute $sql$
+      update public.user_kanji_progress
+      set mastery_score = coalesce(
+        mastery_score,
+        greatest(0, least(100, coalesce(mastery, 0)))
+      )
+    $sql$;
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'user_kanji_progress'
+      and column_name = 'last_practiced_at'
+  ) then
+    execute $sql$
+      update public.user_kanji_progress
+      set
+        last_reviewed = coalesce(last_reviewed, last_practiced_at),
+        created_at = coalesce(created_at, last_practiced_at),
+        updated_at = coalesce(updated_at, last_practiced_at)
+    $sql$;
+  end if;
+end;
+$migration$;
+
 update public.user_kanji_progress
 set
-  mastery_score = coalesce(
-    mastery_score,
-    greatest(0, least(100, coalesce(mastery, 0)))
-  ),
-  last_reviewed = coalesce(last_reviewed, last_practiced_at),
-  created_at = coalesce(created_at, last_practiced_at, now()),
-  updated_at = coalesce(updated_at, last_practiced_at, now());
+  mastery_score = coalesce(mastery_score, 0),
+  created_at = coalesce(created_at, now()),
+  updated_at = coalesce(updated_at, now());
 alter table public.user_kanji_progress
   alter column user_id set not null,
   alter column kanji_id set not null,

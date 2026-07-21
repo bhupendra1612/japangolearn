@@ -310,10 +310,28 @@ alter table public.user_kanji_progress
 
 alter table public.user_level_progress
   add column if not exists unlocked_at timestamptz;
+
+do $migration$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'user_level_progress'
+      and column_name = 'started_at'
+  ) then
+    execute $sql$
+      update public.user_level_progress
+      set unlocked_at = coalesce(unlocked_at, started_at)
+    $sql$;
+  end if;
+end;
+$migration$;
+
 update public.user_level_progress
 set
   progress_percent = coalesce(progress_percent, 0),
-  unlocked_at = coalesce(unlocked_at, started_at, now());
+  unlocked_at = coalesce(unlocked_at, now());
 alter table public.user_level_progress
   alter column user_id set not null,
   alter column jlpt_level set not null,

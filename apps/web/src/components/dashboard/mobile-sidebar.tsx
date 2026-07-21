@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { X, LayoutDashboard, Route, BarChart3, Trophy, Bot, User } from "lucide-react";
+import { featureFlags } from "@/lib/feature-flags";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
@@ -12,7 +13,10 @@ const navItems = [
   { label: "Achievements", icon: Trophy, href: "/dashboard/achievements" },
   { label: "AI Practice", icon: Bot, href: "/dashboard/ai-practice", premium: true },
   { label: "Profile", icon: User, href: "/dashboard/profile" },
-];
+].filter(
+  (item) =>
+    item.href !== "/dashboard/ai-practice" || (featureFlags.aiPractice && featureFlags.premium)
+);
 
 interface MobileSidebarProps {
   open: boolean;

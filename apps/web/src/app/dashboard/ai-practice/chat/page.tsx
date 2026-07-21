@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { AiChatClient } from "@/components/dashboard/ai-chat-client";
+import { featureFlags } from "@/lib/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,9 @@ export default async function ChatPage(props: { searchParams: Promise<{ topic?: 
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+  if (!featureFlags.aiPractice || !featureFlags.premium) {
+    redirect("/dashboard?feature=ai-practice-unavailable");
+  }
 
   const { data: profile } = await supabase
     .from("profiles")

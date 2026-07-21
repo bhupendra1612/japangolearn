@@ -165,18 +165,16 @@ export function GrammarClient({ patterns }: { patterns: GrammarPattern[] }) {
       setQuizIndex(next);
       if (next >= quizPool.length) {
         setQuizPattern(null);
-        if (newCorrect > 0) {
-          try {
-            const { awardQuizXp } = await import("@/app/actions/gamification");
-            await awardQuizXp({
-              activityType: "grammar_quiz",
-              correctAnswers: newCorrect,
-              totalQuestions: quizPool.length,
-              attemptKey: quizAttemptKey,
-            });
-          } catch (err) {
-            console.error("Failed to award XP", err);
-          }
+        try {
+          const { awardQuizXp } = await import("@/app/actions/gamification");
+          await awardQuizXp({
+            activityType: "grammar_quiz",
+            correctAnswers: newCorrect,
+            totalQuestions: quizPool.length,
+            attemptKey: quizAttemptKey,
+          });
+        } catch (err) {
+          console.error("Failed to record learning attempt", err);
         }
       } else {
         nextQuizQuestion(next, quizPool);

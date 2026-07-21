@@ -15,10 +15,12 @@
   },
   "dependencies": {
     "@japangolearn/content": "workspace:*",
+    "@japangolearn/core": "workspace:*",
     "@japangolearn/database": "workspace:*",
+    "@japangolearn/ui": "workspace:*",
     "@sentry/nextjs": "^10.63.0",
-    "@supabase/ssr": "0.6.1",
-    "@supabase/supabase-js": "2.49.1",
+    "@supabase/ssr": "0.12.3",
+    "@supabase/supabase-js": "2.110.7",
     "next": "15.5.20",
     "react": "19.1.0",
     "react-dom": "19.1.0"

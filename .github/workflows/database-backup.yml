@@ -1,0 +1,50 @@
+name: Encrypted database backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 1 * * *"
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Create compressed backup
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          test -n "$SUPABASE_DB_URL"
+          pg_dump "$SUPABASE_DB_URL" \
+            --format=custom \
+            --compress=9 \
+            --no-owner \
+            --no-acl \
+            --file=japangolearn.dump
+          pg_restore --list japangolearn.dump > japangolearn.restore-list.txt
+          test -s japangolearn.restore-list.txt
+          sha256sum japangolearn.dump > japangolearn.dump.sha256
+
+      - name: Encrypt backup
+        env:
+          BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.BACKUP_ENCRYPTION_PASSPHRASE }}
+        run: |
+          test -n "$BACKUP_ENCRYPTION_PASSPHRASE"
+          gpg --batch --yes --symmetric --cipher-algo AES256 \
+            --passphrase "$BACKUP_ENCRYPTION_PASSPHRASE" \
+            --output japangolearn.dump.gpg \
+            japangolearn.dump
+          rm japangolearn.dump
+
+      - name: Store encrypted backup
+        uses: actions/upload-artifact@v7
+        with:
+          name: database-backup-${{ github.run_id }}
+          path: |
+            japangolearn.dump.gpg
+            japangolearn.dump.sha256
+            japangolearn.restore-list.txt
+          retention-days: 30
+          if-no-files-found: error

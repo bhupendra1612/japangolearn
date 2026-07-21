@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ADMIN_SECTIONS } from "@/lib/admin-sections";
 import type { AdminProfile } from "@/lib/auth";
+import { Badge } from "@japangolearn/ui";
 
 export function AdminShell({
   profile,
@@ -39,7 +40,7 @@ export function AdminShell({
             <h1>Admin Console</h1>
           </div>
           <div className="topbar-actions">
-            <span className="admin-badge">{displayName}</span>
+            <Badge tone="info">{displayName}</Badge>
             <form action="/auth/signout" method="post">
               <button className="secondary-button" type="submit">
                 Sign out

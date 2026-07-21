@@ -192,18 +192,16 @@ export function WritingClient({ kanaList }: { kanaList: Kana[] }) {
       } else {
         // Quiz complete — stay on results
         setQuizKana(null);
-        if (newCorrect > 0) {
-          try {
-            const { awardQuizXp } = await import("@/app/actions/gamification");
-            await awardQuizXp({
-              activityType: "writing_quiz",
-              correctAnswers: newCorrect,
-              totalQuestions: kanaList.length,
-              attemptKey: quizAttemptKey,
-            });
-          } catch (err) {
-            console.error("Failed to award XP", err);
-          }
+        try {
+          const { awardQuizXp } = await import("@/app/actions/gamification");
+          await awardQuizXp({
+            activityType: "writing_quiz",
+            correctAnswers: newCorrect,
+            totalQuestions: kanaList.length,
+            attemptKey: quizAttemptKey,
+          });
+        } catch (err) {
+          console.error("Failed to record learning attempt", err);
         }
       }
     }, 1500);

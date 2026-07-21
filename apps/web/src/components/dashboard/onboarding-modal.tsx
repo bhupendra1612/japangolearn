@@ -36,13 +36,13 @@ export function OnboardingModal() {
         formData.set("display_name", name.trim() || "Learner");
         formData.set("current_jlpt_level", level);
         const result = await completeOnboarding(formData);
-        if (result.success) {
+        if (result.ok) {
           setDismissed(true);
           // Reload to refresh server data
           window.location.reload();
         } else {
           // If server action fails, still dismiss and save to localStorage
-          console.error("Onboarding action failed:", result.error);
+          console.error("Onboarding action failed:", result.error.message);
           try {
             localStorage.setItem("ej_onboarding_skipped", "true");
           } catch {}

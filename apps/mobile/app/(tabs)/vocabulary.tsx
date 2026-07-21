@@ -320,7 +320,7 @@ export default function VocabularyScreen() {
         setQuizIndex(next);
         if (next >= quizPool.length) {
           const finalCorrect = quizScore.correct + (correct ? 1 : 0);
-          if (session && finalCorrect > 0) {
+          if (session) {
             supabase
               .rpc("award_xp", {
                 p_activity_type: "vocabulary_quiz",

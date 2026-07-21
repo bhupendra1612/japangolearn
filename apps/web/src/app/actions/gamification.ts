@@ -1,14 +1,10 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { err, errorFromUnknown, ok, type QuizActivityType, type Result } from "@japangolearn/core";
+import type { Database } from "@japangolearn/database";
 
-type QuizActivityType = "vocabulary_quiz" | "grammar_quiz" | "writing_quiz" | "practice_quiz";
-
-type DailyTaskId = "vocabulary" | "kanji" | "grammar" | "listening";
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Unexpected server error";
-}
+type XpAward = Database["public"]["Functions"]["award_xp"]["Returns"][number];
 
 async function requestXpAward({
   activityType,
@@ -20,14 +16,14 @@ async function requestXpAward({
   correctAnswers: number;
   totalQuestions: number;
   attemptKey: string;
-}) {
+}): Promise<Result<XpAward>> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { success: false, error: "Unauthorized" };
+    return err({ code: "UNAUTHORIZED", message: "Unauthorized" });
   }
 
   const { data, error } = await supabase.rpc("award_xp", {
@@ -38,10 +34,21 @@ async function requestXpAward({
   });
 
   if (error) {
-    return { success: false, error: error.message };
+    return err({
+      code: error.code === "42501" ? "UNAUTHORIZED" : "DATABASE_ERROR",
+      message: error.message,
+    });
   }
 
-  return { success: true, award: data?.[0] ?? null };
+  const award = data?.[0];
+  if (!award) {
+    return err({
+      code: "DATABASE_ERROR",
+      message: "The XP award did not return a result.",
+    });
+  }
+
+  return ok(award);
 }
 
 export async function awardQuizXp({
@@ -64,20 +71,6 @@ export async function awardQuizXp({
     });
   } catch (error: unknown) {
     console.error("Error awarding quiz XP:", error);
-    return { success: false, error: getErrorMessage(error) };
-  }
-}
-
-export async function completeDailyTask(taskId: DailyTaskId) {
-  try {
-    return await requestXpAward({
-      activityType: `daily_${taskId}`,
-      correctAnswers: 0,
-      totalQuestions: 0,
-      attemptKey: "daily-task",
-    });
-  } catch (error: unknown) {
-    console.error("Error completing daily task:", error);
-    return { success: false, error: getErrorMessage(error) };
+    return err(errorFromUnknown(error));
   }
 }

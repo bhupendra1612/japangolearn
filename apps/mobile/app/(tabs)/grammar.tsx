@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
+import type { Json } from "@japangolearn/database";
 
 if (Platform.OS === "android") {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -30,6 +31,26 @@ type Pattern = {
   jlpt_level: string;
 };
 
+function normalizeExamples(value: Json): Example[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item) => {
+    if (!item || Array.isArray(item) || typeof item !== "object") return [];
+
+    const japanese =
+      typeof item.japanese === "string"
+        ? item.japanese
+        : typeof item.jp === "string"
+          ? item.jp
+          : "";
+    const english =
+      typeof item.english === "string" ? item.english : typeof item.en === "string" ? item.en : "";
+    const romaji = typeof item.romaji === "string" ? item.romaji : "";
+
+    return japanese && english ? [{ japanese, romaji, english }] : [];
+  });
+}
+
 export default function GrammarScreen() {
   const insets = useSafeAreaInsets();
   const [patterns, setPatterns] = useState<Pattern[]>([]);
@@ -46,7 +67,11 @@ export default function GrammarScreen() {
       .select("*")
       .eq("jlpt_level", "N5")
       .order("order_index");
-    if (data) setPatterns(data);
+    if (data) {
+      setPatterns(
+        data.map((pattern) => ({ ...pattern, examples: normalizeExamples(pattern.examples) }))
+      );
+    }
     setLoading(false);
   };
 

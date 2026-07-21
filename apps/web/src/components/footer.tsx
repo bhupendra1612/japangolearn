@@ -63,10 +63,10 @@ export function Footer() {
         </div>
 
         <div className="mt-10 pt-8 border-t border-gray-200 dark:border-gray-800 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="text-sm text-gray-400 dark:text-gray-500">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
             © {new Date().getFullYear()} JapanGoLearn. All rights reserved.
           </p>
-          <p className="text-xs text-gray-400 dark:text-gray-600 font-jp">日本語を楽しく学ぼう！</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 font-jp">日本語を楽しく学ぼう！</p>
         </div>
       </div>
     </footer>

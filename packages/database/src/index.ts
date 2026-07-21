@@ -21,15 +21,22 @@ export const DATABASE_TABLES = [
   "user_streaks",
   "kanji",
   "user_kanji_progress",
+  "learning_attempts",
+  "learning_attempt_answers",
+  "activity_events",
+  "xp_ledger",
+  "mastery_records",
+  "daily_quest_completions",
 ] as const;
 
 export type DatabaseTable = (typeof DATABASE_TABLES)[number];
 
 export type { Database, Json } from "./supabase.types";
+export * from "./repositories";
 
 export type JlptLevel = "N5" | "N4" | "N3" | "N2" | "N1";
 
-export type UserRole = "student" | "admin" | string;
+export type UserRole = "user" | "admin" | string;
 
 export type Profile = {
   id: string;
@@ -140,7 +147,7 @@ export type PracticeList = {
   item_count?: number;
 };
 
-export type PracticeItemType = "vocabulary" | "kana";
+export type PracticeItemType = "vocabulary" | "kana" | "kanji" | "grammar";
 
 export type PracticeListItem = {
   id: string;

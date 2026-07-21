@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { BRAND } from "@japangolearn/content";
+import "@japangolearn/ui/styles.css";
 import "./globals.css";
 
 export const metadata: Metadata = {

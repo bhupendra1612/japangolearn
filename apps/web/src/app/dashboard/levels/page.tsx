@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { LevelCard, type LevelData } from "@/components/dashboard/level-card";
 import { ChevronRight, Map } from "lucide-react";
 import Link from "next/link";
+import { featureFlags } from "@/lib/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -67,7 +68,11 @@ export default async function LevelsPage() {
       .eq("user_id", user.id),
   ]);
 
-  const currentLevel = profile?.current_jlpt_level ?? "N5";
+  const configuredLevelOrder = ["N5", "N4", "N3", "N2", "N1"];
+  const levelOrder = featureFlags.unfinishedLevels ? configuredLevelOrder : ["N5"];
+  const currentLevel = levelOrder.includes(profile?.current_jlpt_level ?? "")
+    ? (profile?.current_jlpt_level ?? "N5")
+    : "N5";
 
   // Build progress map
   const progressMap: Record<string, { progress: number; completed: boolean }> = {};
@@ -79,7 +84,6 @@ export default async function LevelsPage() {
   });
 
   // Determine level ordering: find current level index
-  const levelOrder = ["N5", "N4", "N3", "N2", "N1"];
   const currentIdx = levelOrder.indexOf(currentLevel);
 
   // Build level cards data
@@ -154,7 +158,7 @@ export default async function LevelsPage() {
           <div className="text-center">
             <p className="text-2xl font-bold">
               {completedCount}
-              <span className="text-sm text-gray-400 font-normal">/5</span>
+              <span className="text-sm text-gray-400 font-normal">/{levels.length}</span>
             </p>
             <p className="text-xs text-gray-400">Levels</p>
           </div>

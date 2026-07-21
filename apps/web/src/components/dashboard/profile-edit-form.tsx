@@ -44,12 +44,12 @@ export function AvatarUpload({ currentUrl, initials }: AvatarUploadProps) {
           const formData = new FormData();
           formData.set("avatar", file);
           const result = await uploadAvatar(formData);
-          if (result.success) {
+          if (result.ok) {
             setStatus("success");
-            if (result.avatarUrl) setPreview(result.avatarUrl);
+            if (result.value.avatarUrl) setPreview(result.value.avatarUrl);
             setTimeout(() => setStatus("idle"), 3000);
           } else {
-            setErrorMsg(result.error || "Upload failed");
+            setErrorMsg(result.error.message || "Upload failed");
             setStatus("error");
           }
         } catch {
@@ -182,12 +182,12 @@ export function ProfileEditForm({ displayName, jlptLevel }: ProfileEditFormProps
         formData.set("display_name", name.trim());
         formData.set("current_jlpt_level", level);
         const result = await updateProfile(formData);
-        if (result.success) {
+        if (result.ok) {
           setSuccess(true);
           setEditing(false);
           setTimeout(() => setSuccess(false), 3000);
         } else {
-          setError(result.error || "Failed to update profile");
+          setError(result.error.message || "Failed to update profile");
         }
       } catch {
         setError("Something went wrong");

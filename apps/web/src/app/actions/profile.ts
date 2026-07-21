@@ -2,10 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Unexpected server error";
-}
+import { err, errorFromUnknown, ok } from "@japangolearn/core";
 
 export async function updateProfile(formData: FormData) {
   const supabase = await createClient();
@@ -14,7 +11,7 @@ export async function updateProfile(formData: FormData) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { success: false, error: "Unauthorized" };
+    return err({ code: "UNAUTHORIZED", message: "Unauthorized" });
   }
 
   const displayName = formData.get("display_name") as string;
@@ -22,12 +19,15 @@ export async function updateProfile(formData: FormData) {
 
   // Validate
   if (!displayName || displayName.trim().length < 2) {
-    return { success: false, error: "Display name must be at least 2 characters" };
+    return err({
+      code: "VALIDATION_ERROR",
+      message: "Display name must be at least 2 characters",
+    });
   }
 
   const validLevels = ["N5", "N4", "N3", "N2", "N1"];
   if (!validLevels.includes(jlptLevel)) {
-    return { success: false, error: "Invalid JLPT level" };
+    return err({ code: "VALIDATION_ERROR", message: "Invalid JLPT level" });
   }
 
   try {
@@ -44,10 +44,10 @@ export async function updateProfile(formData: FormData) {
     revalidatePath("/dashboard/profile");
     revalidatePath("/dashboard");
 
-    return { success: true };
-  } catch (err: unknown) {
-    console.error("Error updating profile:", err);
-    return { success: false, error: getErrorMessage(err) };
+    return ok(null);
+  } catch (error: unknown) {
+    console.error("Error updating profile:", error);
+    return err(errorFromUnknown(error, "DATABASE_ERROR"));
   }
 }
 
@@ -58,27 +58,30 @@ export async function uploadAvatar(formData: FormData) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { success: false, error: "Unauthorized" };
+    return err({ code: "UNAUTHORIZED", message: "Unauthorized" });
   }
 
   const file = formData.get("avatar") as File;
   if (!file || file.size === 0) {
-    return { success: false, error: "No file selected" };
+    return err({ code: "VALIDATION_ERROR", message: "No file selected" });
   }
 
   // Validate file type
   const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
   if (!allowedTypes.includes(file.type)) {
-    return { success: false, error: "Only JPEG, PNG, WebP, and GIF images are allowed" };
+    return err({
+      code: "VALIDATION_ERROR",
+      message: "Only JPEG, PNG, WebP, and GIF images are allowed",
+    });
   }
 
   // Validate file size (2MB max)
   if (file.size > 2 * 1024 * 1024) {
-    return { success: false, error: "Image must be smaller than 2MB" };
+    return err({ code: "VALIDATION_ERROR", message: "Image must be smaller than 2MB" });
   }
 
   const ext = file.name.split(".").pop() || "jpg";
-  const filePath = `avatars/${user.id}/avatar.${ext}`;
+  const filePath = `${user.id}/avatar.${ext}`;
 
   try {
     // Upload to Supabase Storage
@@ -104,10 +107,10 @@ export async function uploadAvatar(formData: FormData) {
     revalidatePath("/dashboard/profile");
     revalidatePath("/dashboard");
 
-    return { success: true, avatarUrl };
-  } catch (err: unknown) {
-    console.error("Error uploading avatar:", err);
-    return { success: false, error: getErrorMessage(err) };
+    return ok({ avatarUrl });
+  } catch (error: unknown) {
+    console.error("Error uploading avatar:", error);
+    return err(errorFromUnknown(error, "DATABASE_ERROR"));
   }
 }
 
@@ -118,7 +121,7 @@ export async function completeOnboarding(formData: FormData) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { success: false, error: "Unauthorized" };
+    return err({ code: "UNAUTHORIZED", message: "Unauthorized" });
   }
 
   const displayName = formData.get("display_name") as string;
@@ -138,9 +141,9 @@ export async function completeOnboarding(formData: FormData) {
 
     revalidatePath("/dashboard");
 
-    return { success: true };
-  } catch (err: unknown) {
-    console.error("Error completing onboarding:", err);
-    return { success: false, error: getErrorMessage(err) };
+    return ok(null);
+  } catch (error: unknown) {
+    console.error("Error completing onboarding:", error);
+    return err(errorFromUnknown(error, "DATABASE_ERROR"));
   }
 }

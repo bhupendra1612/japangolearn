@@ -4,15 +4,7 @@ import { useMemo } from "react";
 
 interface ActivityEntry {
   id: string;
-  type:
-    | "lesson"
-    | "kanji"
-    | "xp"
-    | "streak"
-    | "achievement"
-    | "vocabulary"
-    | "grammar"
-    | "listening";
+  type: string;
   title: string;
   description?: string;
   xp_earned: number;
@@ -23,7 +15,7 @@ interface RecentActivityProps {
   activities: ActivityEntry[];
 }
 
-const TYPE_CONFIG = {
+const TYPE_CONFIG: Record<string, { emoji: string; color: string }> = {
   lesson: {
     emoji: "📖",
     color: "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400",
@@ -114,7 +106,7 @@ export function RecentActivity({ activities }: RecentActivityProps) {
 
         <div className="space-y-1">
           {items.map((activity, index) => {
-            const config = TYPE_CONFIG[activity.type];
+            const config = TYPE_CONFIG[activity.type] ?? TYPE_CONFIG.lesson;
             return (
               <div
                 key={activity.id}

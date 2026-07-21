@@ -54,9 +54,18 @@ function generate() {
   return output;
 }
 
+function normalizeTypes(output) {
+  const metadataStart = output.indexOf("\n  // Allows to automatically instantiate createClient");
+  const publicSchemaStart = output.indexOf("\n  public:", metadataStart);
+
+  if (metadataStart === -1 || publicSchemaStart === -1) return output;
+
+  return output.slice(0, metadataStart) + output.slice(publicSchemaStart);
+}
+
 async function formatTypes(output) {
   const prettier = await import("prettier");
-  return prettier.format(output, { filepath: OUTPUT_FILE });
+  return prettier.format(normalizeTypes(output), { filepath: OUTPUT_FILE });
 }
 
 async function main() {

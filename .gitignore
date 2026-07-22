@@ -49,6 +49,7 @@ apps/mobile/ios
 # tooling
 .idea
 .vscode
+supabase/.temp/
 
 # OS/logs
 .DS_Store

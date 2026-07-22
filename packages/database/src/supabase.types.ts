@@ -14,10 +14,10 @@ export type Database = {
           xp_reward: number;
         };
         Insert: {
-          category: string;
+          category?: string;
           condition?: Json | null;
           description?: string | null;
-          icon: string;
+          icon?: string;
           id?: string;
           name: string;
           xp_reward?: number;
@@ -125,7 +125,7 @@ export type Database = {
       blog_posts: {
         Row: {
           author_id: string | null;
-          content: string | null;
+          content: string;
           cover_image_url: string | null;
           created_at: string;
           excerpt: string | null;
@@ -139,7 +139,7 @@ export type Database = {
         };
         Insert: {
           author_id?: string | null;
-          content?: string | null;
+          content: string;
           cover_image_url?: string | null;
           created_at?: string;
           excerpt?: string | null;
@@ -153,7 +153,7 @@ export type Database = {
         };
         Update: {
           author_id?: string | null;
-          content?: string | null;
+          content?: string;
           cover_image_url?: string | null;
           created_at?: string;
           excerpt?: string | null;
@@ -178,30 +178,30 @@ export type Database = {
       contact_submissions: {
         Row: {
           created_at: string;
-          email: string | null;
+          email: string;
           id: string;
-          message: string | null;
-          name: string | null;
+          message: string;
+          name: string;
           read: boolean;
           status: string;
           subject: string | null;
         };
         Insert: {
           created_at?: string;
-          email?: string | null;
+          email: string;
           id?: string;
-          message?: string | null;
-          name?: string | null;
+          message: string;
+          name: string;
           read?: boolean;
           status?: string;
           subject?: string | null;
         };
         Update: {
           created_at?: string;
-          email?: string | null;
+          email?: string;
           id?: string;
-          message?: string | null;
-          name?: string | null;
+          message?: string;
+          name?: string;
           read?: boolean;
           status?: string;
           subject?: string | null;
@@ -326,7 +326,7 @@ export type Database = {
           id?: number;
           jlpt_level?: string;
           meaning: string;
-          order_index: number;
+          order_index?: number;
           pattern?: string;
           structure: string;
           title: string;
@@ -422,7 +422,7 @@ export type Database = {
           is_dakuten?: boolean;
           romaji: string;
           romaji_hindi?: string;
-          sort_order: number;
+          sort_order?: number;
           stroke_count?: number;
           stroke_hint?: string;
           type: string;
@@ -489,7 +489,7 @@ export type Database = {
           meaning_hi?: string[];
           mnemonic?: string | null;
           onyomi?: Json;
-          order_index: number;
+          order_index?: number;
           radical?: string;
           related_kanji?: string[];
           romaji?: string;
@@ -840,29 +840,44 @@ export type Database = {
       };
       user_kana_progress: {
         Row: {
+          correct_count: number | null;
           created_at: string;
           id: string;
+          incorrect_count: number | null;
           kana_id: number;
+          last_practiced_at: string | null;
           last_reviewed: string | null;
+          mastery: number | null;
           mastery_score: number;
+          times_practiced: number | null;
           updated_at: string;
           user_id: string;
         };
         Insert: {
+          correct_count?: number | null;
           created_at?: string;
           id?: string;
+          incorrect_count?: number | null;
           kana_id: number;
+          last_practiced_at?: string | null;
           last_reviewed?: string | null;
+          mastery?: number | null;
           mastery_score?: number;
+          times_practiced?: number | null;
           updated_at?: string;
           user_id: string;
         };
         Update: {
+          correct_count?: number | null;
           created_at?: string;
           id?: string;
+          incorrect_count?: number | null;
           kana_id?: number;
+          last_practiced_at?: string | null;
           last_reviewed?: string | null;
+          mastery?: number | null;
           mastery_score?: number;
+          times_practiced?: number | null;
           updated_at?: string;
           user_id?: string;
         };
@@ -885,29 +900,44 @@ export type Database = {
       };
       user_kanji_progress: {
         Row: {
+          correct_count: number | null;
           created_at: string;
           id: string;
+          incorrect_count: number | null;
           kanji_id: number;
+          last_practiced_at: string | null;
           last_reviewed: string | null;
+          mastery: number | null;
           mastery_score: number;
+          times_practiced: number | null;
           updated_at: string;
           user_id: string;
         };
         Insert: {
+          correct_count?: number | null;
           created_at?: string;
           id?: string;
+          incorrect_count?: number | null;
           kanji_id: number;
+          last_practiced_at?: string | null;
           last_reviewed?: string | null;
+          mastery?: number | null;
           mastery_score?: number;
+          times_practiced?: number | null;
           updated_at?: string;
           user_id: string;
         };
         Update: {
+          correct_count?: number | null;
           created_at?: string;
           id?: string;
+          incorrect_count?: number | null;
           kanji_id?: number;
+          last_practiced_at?: string | null;
           last_reviewed?: string | null;
+          mastery?: number | null;
           mastery_score?: number;
+          times_practiced?: number | null;
           updated_at?: string;
           user_id?: string;
         };
@@ -934,6 +964,7 @@ export type Database = {
           id: string;
           jlpt_level: string;
           progress_percent: number;
+          started_at: string | null;
           unlocked_at: string;
           user_id: string;
         };
@@ -942,6 +973,7 @@ export type Database = {
           id?: string;
           jlpt_level: string;
           progress_percent?: number;
+          started_at?: string | null;
           unlocked_at?: string;
           user_id: string;
         };
@@ -950,10 +982,18 @@ export type Database = {
           id?: string;
           jlpt_level?: string;
           progress_percent?: number;
+          started_at?: string | null;
           unlocked_at?: string;
           user_id?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "user_level_progress_jlpt_level_fkey";
+            columns: ["jlpt_level"];
+            isOneToOne: false;
+            referencedRelation: "jlpt_levels";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "user_level_progress_user_id_fkey";
             columns: ["user_id"];
@@ -1016,7 +1056,7 @@ export type Database = {
           icon?: string | null;
           id?: number;
           jlpt_level?: string;
-          kanji?: string;
+          kanji: string;
           romaji: string;
           romaji_hindi?: string;
           topic: string;

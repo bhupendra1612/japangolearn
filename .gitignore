@@ -10,6 +10,7 @@ dist
 .open-next
 .wrangler
 cloudflare-env.d.ts
+!apps/api/cloudflare-env.d.ts
 .dev.vars
 .dev.vars.*
 .expo

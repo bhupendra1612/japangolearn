@@ -1,0 +1,29 @@
+{
+  "name": "@japangolearn/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "wrangler types cloudflare-env.d.ts --include-runtime=false --check && wrangler deploy --env=\"\" --dry-run --outdir dist",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env=\"\"",
+    "cf-typegen": "wrangler types cloudflare-env.d.ts --include-runtime=false",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@japangolearn/api-contracts": "workspace:*",
+    "@japangolearn/environment": "workspace:*",
+    "@japangolearn/providers": "workspace:*",
+    "zod": "4.2.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260722.1",
+    "typescript": "5.9.2",
+    "vitest": "4.1.10",
+    "wrangler": "4.110.0"
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "japangolearn-api",
+  "main": "src/index.ts",
+  "workers_dev": true,
+  "preview_urls": true,
+  "compatibility_date": "2026-07-22",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "head_sampling_rate": 1,
+    },
+  },
+  "secrets": {
+    "required": [
+      "SUPABASE_URL",
+      "SUPABASE_PUBLISHABLE_KEY",
+      "BUNNY_STREAM_LIBRARY_ID",
+      "BUNNY_STREAM_API_KEY",
+    ],
+  },
+  "vars": {
+    "APP_ENV": "production",
+    "ALLOWED_ORIGINS": "https://japangolearn.com,https://www.japangolearn.com,http://localhost:3000,http://127.0.0.1:3000",
+  },
+  "env": {
+    "staging": {
+      "workers_dev": true,
+      "preview_urls": true,
+      "vars": {
+        "APP_ENV": "staging",
+        "ALLOWED_ORIGINS": "http://localhost:3000",
+      },
+      "secrets": {
+        "required": [
+          "SUPABASE_URL",
+          "SUPABASE_PUBLISHABLE_KEY",
+          "BUNNY_STREAM_LIBRARY_ID",
+          "BUNNY_STREAM_API_KEY",
+        ],
+      },
+      "observability": {
+        "enabled": true,
+        "logs": {
+          "head_sampling_rate": 1,
+        },
+      },
+    },
+  },
+}

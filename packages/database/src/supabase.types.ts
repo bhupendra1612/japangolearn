@@ -1142,6 +1142,7 @@ export type Database = {
           xp_awarded: number;
         }[];
       };
+      delete_account: { Args: never; Returns: undefined };
       increment_streak: { Args: never; Returns: undefined };
       track_analytics_event: {
         Args: { p_event_name: string; p_properties?: Json; p_source?: string };

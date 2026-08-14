@@ -30,8 +30,10 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_MEDIA_VIDEO",
         "android.permission.SYSTEM_ALERT_WINDOW",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
-      ]
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.CAMERA"
+      ],
+      "permissions": ["android.permission.MODIFY_AUDIO_SETTINGS"]
     },
     "web": {
       "bundler": "metro",
@@ -47,7 +49,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "JapanGoLearn uses your photo library so you can choose a profile picture."
+          "photosPermission": "JapanGoLearn uses your photo library so you can choose a profile picture.",
+          "cameraPermission": false
         }
       ],
       [
@@ -58,10 +61,14 @@
       ]
     ],
     "extra": {
-      "router": {}
+      "router": {},
+      "eas": {
+        "projectId": "292004a3-77c6-4d6b-80f7-59cb1fab1d57"
+      }
     },
     "runtimeVersion": {
       "policy": "appVersion"
-    }
+    },
+    "owner": "robinsingh24"
   }
 }

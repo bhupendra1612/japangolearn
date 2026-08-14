@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ADMIN_SECTIONS } from "@/lib/admin-sections";
 import type { AdminProfile } from "@/lib/auth";
+import { teacherReviewEnabled } from "@/lib/marketplace";
 import { Badge } from "@japangolearn/ui";
 
 export function AdminShell({
@@ -26,6 +27,11 @@ export function AdminShell({
           <Link href="/" className="nav-link">
             Overview
           </Link>
+          {teacherReviewEnabled && (
+            <Link href="/teachers" className="nav-link">
+              Teacher approvals
+            </Link>
+          )}
           {ADMIN_SECTIONS.map((section) => (
             <Link key={section.key} href={`/${section.key}`} className="nav-link">
               {section.label}

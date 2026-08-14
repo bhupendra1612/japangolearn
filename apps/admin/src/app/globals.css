@@ -38,7 +38,8 @@ a {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
@@ -309,7 +310,8 @@ td {
 }
 
 .primary-button,
-.secondary-button {
+.secondary-button,
+.danger-button {
   border: 0;
   border-radius: 8px;
   cursor: pointer;
@@ -330,6 +332,12 @@ td {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
+}
+
+.danger-button {
+  border: 1px solid #fda29b;
+  background: #fff4f2;
+  color: var(--danger);
 }
 
 .auth-page {
@@ -354,7 +362,8 @@ label {
   font-weight: 700;
 }
 
-input {
+input,
+textarea {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -364,9 +373,92 @@ input {
   padding: 11px 12px;
 }
 
-input:focus {
+textarea {
+  resize: vertical;
+}
+
+input:focus,
+textarea:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+}
+
+.teacher-review-list {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.teacher-review-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px;
+}
+
+.teacher-review-heading,
+.teacher-review-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.teacher-review-heading h3 {
+  margin: 0 0 4px;
+}
+
+.status-pill {
+  border-radius: 999px;
+  background: var(--surface-muted);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.status-approved {
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.status-submitted,
+.status-under_review {
+  background: #eff8ff;
+  color: #175cd3;
+}
+
+.teacher-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.teacher-details div {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.teacher-details dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.teacher-details dd {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+}
+
+.teacher-review-form {
+  display: grid;
+  gap: 12px;
+}
+
+.teacher-review-actions {
+  justify-content: flex-start;
 }
 
 @media (max-width: 920px) {

@@ -9,11 +9,13 @@ import {
   Platform,
   Animated,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { Link, router, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/lib/auth";
 import { getSafeRedirectTo } from "@/lib/auth-navigation";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
+import { PRIVACY_URL, TERMS_URL } from "@/constants/links";
 
 export default function SignupScreen() {
   const { signUp } = useAuth();
@@ -28,12 +30,18 @@ export default function SignupScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
+  const openUrl = (url: string) => {
+    Linking.openURL(url).catch(() => {
+      // The same pages are reachable on the website; nothing to recover here.
+    });
+  };
+
   React.useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [fadeAnim, slideAnim]);
 
   const handleSignup = async () => {
     if (!name || !email || !password) {
@@ -135,6 +143,26 @@ export default function SignupScreen() {
               <Text style={styles.buttonText}>Create Account</Text>
             )}
           </TouchableOpacity>
+
+          <Text style={styles.consentText}>
+            By creating an account, you agree to our{" "}
+            <Text
+              style={styles.consentLink}
+              onPress={() => openUrl(TERMS_URL)}
+              accessibilityRole="link"
+            >
+              Terms &amp; Conditions
+            </Text>{" "}
+            and{" "}
+            <Text
+              style={styles.consentLink}
+              onPress={() => openUrl(PRIVACY_URL)}
+              accessibilityRole="link"
+            >
+              Privacy Policy
+            </Text>
+            .
+          </Text>
         </View>
 
         <View style={styles.footer}>
@@ -221,6 +249,18 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.7 },
   buttonText: { color: "#fff", fontSize: FontSize.lg, fontWeight: FontWeight.bold },
+  consentText: {
+    textAlign: "center",
+    fontSize: FontSize.xs,
+    lineHeight: 18,
+    color: Colors.dark.textMuted,
+    marginTop: Spacing.sm,
+  },
+  consentLink: {
+    color: Colors.accent[400],
+    fontWeight: FontWeight.semibold,
+    textDecorationLine: "underline",
+  },
   footer: { flexDirection: "row", justifyContent: "center", marginTop: Spacing["3xl"] },
   footerText: { color: Colors.dark.textSecondary, fontSize: FontSize.sm },
   footerLink: { color: Colors.accent[400], fontSize: FontSize.sm, fontWeight: FontWeight.semibold },

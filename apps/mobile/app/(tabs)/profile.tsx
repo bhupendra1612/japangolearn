@@ -35,12 +35,14 @@ type Section = "view" | "edit-profile" | "change-password";
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { user, profile, signOut, updateProfile, updatePassword, uploadAvatar } = useAuth();
+  const { user, profile, signOut, deleteAccount, updateProfile, updatePassword, uploadAvatar } =
+    useAuth();
 
   // UI state
   const [activeSection, setActiveSection] = useState<Section>("view");
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -196,6 +198,44 @@ export default function ProfileScreen() {
         },
       },
     ]);
+  };
+
+  // --- Delete account ---
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete Account",
+      "This permanently deletes your account, learning progress, and personal data. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Continue",
+          style: "destructive",
+          onPress: () => {
+            Alert.alert(
+              "Are you absolutely sure?",
+              "Your account and data will be permanently deleted right now.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete Forever",
+                  style: "destructive",
+                  onPress: async () => {
+                    setDeletingAccount(true);
+                    const { error } = await deleteAccount();
+                    setDeletingAccount(false);
+                    if (error) {
+                      showFeedback(error.message || "Failed to delete account", true);
+                    } else {
+                      router.replace("/(auth)/login");
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
   };
 
   // =================== RENDER ===================
@@ -445,6 +485,20 @@ export default function ProfileScreen() {
       <TouchableOpacity style={s.signOutBtn} onPress={handleSignOut} activeOpacity={0.7}>
         <Ionicons name="log-out-outline" size={20} color="#EF4444" />
         <Text style={s.signOutText}>Sign Out</Text>
+      </TouchableOpacity>
+
+      {/* Delete Account */}
+      <TouchableOpacity
+        style={s.deleteAccountBtn}
+        onPress={handleDeleteAccount}
+        activeOpacity={0.7}
+        disabled={deletingAccount}
+      >
+        {deletingAccount ? (
+          <ActivityIndicator color={Colors.dark.textMuted} size="small" />
+        ) : (
+          <Text style={s.deleteAccountText}>Delete Account</Text>
+        )}
       </TouchableOpacity>
 
       <Text style={s.footer}>{"一歩一歩、前へ進もう\nStep by step, move forward"}</Text>
@@ -1030,6 +1084,22 @@ const s = StyleSheet.create({
     color: "#EF4444",
     fontSize: FontSize.base,
     fontWeight: FontWeight.semibold,
+  },
+
+  // --- Delete Account ---
+  deleteAccountBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing.md,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.lg,
+    minHeight: 20,
+  },
+  deleteAccountText: {
+    color: Colors.dark.textMuted,
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.medium,
+    textDecorationLine: "underline",
   },
 
   // --- Footer ---

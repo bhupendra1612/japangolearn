@@ -10,7 +10,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings=0",
     "build": "tsc --noEmit",
     "update:preview": "eas update --channel preview --environment preview",
     "update:production": "eas update --channel production --environment production"
@@ -22,6 +22,7 @@
     "@japangolearn/content": "workspace:*",
     "@japangolearn/core": "workspace:*",
     "@japangolearn/database": "workspace:*",
+    "@japangolearn/environment": "workspace:*",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native/virtualized-lists": "^0.86.0",
     "@react-navigation/bottom-tabs": "^7.0.0",

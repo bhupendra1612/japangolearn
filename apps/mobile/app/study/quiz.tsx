@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,8 +7,8 @@ import {
   ActivityIndicator,
   ViewStyle,
   TextStyle,
+  StyleProp,
 } from "react-native";
-import { StyleProp } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -40,11 +40,23 @@ export default function QuizScreen() {
   const [score, setScore] = useState(0);
   const [quizAttemptKey, setQuizAttemptKey] = useState(() => createXpAttemptKey());
 
-  useEffect(() => {
-    if (listId) loadQuiz();
-  }, [listId]);
+  const generateOptions = useCallback((allQuestions: QuizItem[], correctIndex: number) => {
+    if (allQuestions.length === 0) return;
+    const correctAnswer = allQuestions[correctIndex].back;
+    const wrongAnswers = allQuestions
+      .filter((_, index) => index !== correctIndex)
+      .map((question) => question.back)
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 3);
 
-  const loadQuiz = async () => {
+    while (wrongAnswers.length < 3) {
+      wrongAnswers.push(`Option ${wrongAnswers.length + 1}`);
+    }
+
+    setOptions([correctAnswer, ...wrongAnswers].sort(() => Math.random() - 0.5));
+  }, []);
+
+  const loadQuiz = useCallback(async () => {
     setLoading(true);
     setQuizAttemptKey(createXpAttemptKey());
     const { data: listItems } = await supabase
@@ -98,27 +110,11 @@ export default function QuizScreen() {
       generateOptions(shuffled, 0);
     }
     setLoading(false);
-  };
+  }, [generateOptions, listId]);
 
-  const generateOptions = (allQs: QuizItem[], correctIdx: number) => {
-    if (!allQs || allQs.length === 0) return;
-    const correctAns = allQs[correctIdx].back;
-
-    // Get 3 random wrong answers
-    const wrongAnswers = allQs
-      .filter((_, idx) => idx !== correctIdx)
-      .map((q) => q.back)
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 3);
-
-    // If not enough wrong answers in the same list, add placeholders (edge case for small lists)
-    while (wrongAnswers.length < 3) {
-      wrongAnswers.push(`Option ${wrongAnswers.length + 1}`);
-    }
-
-    const newOptions = [correctAns, ...wrongAnswers].sort(() => Math.random() - 0.5);
-    setOptions(newOptions);
-  };
+  useEffect(() => {
+    if (listId) void loadQuiz();
+  }, [listId, loadQuiz]);
 
   const handleSelect = async (opt: string) => {
     if (selectedOption !== null) return; // Prevent multiple taps

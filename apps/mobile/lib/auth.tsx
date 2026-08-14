@@ -3,8 +3,9 @@ import { supabase } from "@/lib/supabase";
 import { Session, User } from "@supabase/supabase-js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { Profile, ProfileUpdate } from "@japangolearn/database";
+import { decode } from "base64-arraybuffer";
 
-const GUEST_KEY = "@easyjapanese_guest_mode";
+const GUEST_KEY = "@japangolearn_guest_mode";
 
 type ProfileUpdateData = Pick<ProfileUpdate, "display_name" | "current_jlpt_level">;
 
@@ -21,6 +22,7 @@ type AuthContextType = {
     displayName: string
   ) => Promise<{ error: any; hasSession: boolean }>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<{ error: any }>;
   continueAsGuest: () => Promise<void>;
   exitGuestMode: () => void;
   refreshProfile: () => Promise<void>;
@@ -38,6 +40,7 @@ const AuthContext = createContext<AuthContextType>({
   signIn: async () => ({ error: null }),
   signUp: async () => ({ error: null, hasSession: false }),
   signOut: async () => {},
+  deleteAccount: async () => ({ error: null }),
   continueAsGuest: async () => {},
   exitGuestMode: () => {},
   refreshProfile: async () => {},
@@ -127,6 +130,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.removeItem(GUEST_KEY);
   };
 
+  const deleteAccount = async () => {
+    if (!session?.user) return { error: { message: "Not authenticated" } };
+    const { error } = await supabase.rpc("delete_account");
+    if (!error) {
+      await supabase.auth.signOut();
+      setProfile(null);
+      setIsGuest(false);
+      await AsyncStorage.removeItem(GUEST_KEY);
+    }
+    return { error };
+  };
+
   const continueAsGuest = async () => {
     await AsyncStorage.setItem(GUEST_KEY, "true");
     setIsGuest(true);
@@ -183,8 +198,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: { message: "Image must be smaller than 2MB" } };
       }
 
-      const { decode } = require("base64-arraybuffer");
-
       const { error: uploadError } = await supabase.storage
         .from("avatars")
         .upload(fileName, decode(base64Data), {
@@ -223,6 +236,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signIn,
         signUp,
         signOut,
+        deleteAccount,
         continueAsGuest,
         exitGuestMode,
         refreshProfile,

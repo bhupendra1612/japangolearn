@@ -2,7 +2,6 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from "react"
 import {
   View,
   Text,
-  FlatList,
   StyleSheet,
   TouchableOpacity,
   Dimensions,
@@ -10,7 +9,6 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
-import Svg, { Text as SvgText, Line, Rect } from "react-native-svg";
 import * as Speech from "expo-speech";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -121,14 +119,7 @@ export default function WritingScreen() {
 
   const isHiragana = kanaType === "hiragana";
 
-  useEffect(() => {
-    fetchKana();
-    setSelectedKana(null);
-    setActiveGroup("All");
-    setMode("grid");
-  }, [kanaType]);
-
-  const fetchKana = async () => {
+  const fetchKana = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
       .from("kana")
@@ -137,7 +128,14 @@ export default function WritingScreen() {
       .order("sort_order");
     if (data) setKanaList(data);
     setLoading(false);
-  };
+  }, [kanaType]);
+
+  useEffect(() => {
+    void fetchKana();
+    setSelectedKana(null);
+    setActiveGroup("All");
+    setMode("grid");
+  }, [fetchKana]);
 
   // Filtered list
   const filtered = useMemo(() => {
@@ -224,6 +222,24 @@ export default function WritingScreen() {
   );
 
   // ─── Quiz Logic ───
+  const setupQuizQuestion = useCallback(
+    (pool: Kana[], idx: number) => {
+      if (idx >= pool.length) {
+        setQuizDone(true);
+        return;
+      }
+      const target = pool[idx];
+      const others = kanaList.filter((kana) => kana.id !== target.id);
+      const shuffled = others.sort(() => Math.random() - 0.5).slice(0, 3);
+      const options = [...shuffled.map((kana) => kana.romaji), target.romaji].sort(
+        () => Math.random() - 0.5
+      );
+      setQuizOptions(options);
+      setQuizAnswer(null);
+    },
+    [kanaList]
+  );
+
   const startQuiz = useCallback(() => {
     const pool = [...filtered]
       .sort(() => Math.random() - 0.5)
@@ -237,20 +253,7 @@ export default function WritingScreen() {
     setMode("quiz");
     fadeAnim.setValue(0);
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-  }, [filtered, fadeAnim]);
-
-  const setupQuizQuestion = (pool: Kana[], idx: number) => {
-    if (idx >= pool.length) {
-      setQuizDone(true);
-      return;
-    }
-    const target = pool[idx];
-    const others = kanaList.filter((k) => k.id !== target.id);
-    const shuffled = others.sort(() => Math.random() - 0.5).slice(0, 3);
-    const opts = [...shuffled.map((k) => k.romaji), target.romaji].sort(() => Math.random() - 0.5);
-    setQuizOptions(opts);
-    setQuizAnswer(null);
-  };
+  }, [filtered, fadeAnim, setupQuizQuestion]);
 
   const handleQuizAnswer = useCallback(
     (answer: string) => {
@@ -274,7 +277,7 @@ export default function WritingScreen() {
         }
       }, 1200);
     },
-    [quizAnswer, quizPool, quizIndex, speakKana]
+    [quizAnswer, quizPool, quizIndex, speakKana, setupQuizQuestion]
   );
 
   // ═══════════════════ GRID MODE ═══════════════════

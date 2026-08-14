@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "@/constants/theme";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/lib/auth";
+import { featureFlags } from "@/lib/feature-flags";
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -91,6 +92,19 @@ export default function TabLayout() {
             headerTransparent: true,
             headerTitle: "",
             headerLeft: renderHeaderLeft,
+          }}
+        />
+        <Tabs.Screen
+          name="courses"
+          options={{
+            title: "Courses",
+            tabBarIcon: ({ color }) => <TabIcon name="library" color={color} />,
+            headerTransparent: true,
+            headerTitle: "",
+            // Marketplace is deferred past v1. href: null keeps the route
+            // registered (so the screen file stays valid) but removes it from
+            // the tab bar; the screen itself redirects when the flag is off.
+            href: featureFlags.courseCatalog ? undefined : null,
           }}
         />
         <Tabs.Screen

@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   ScrollView,
   Animated,
-  Dimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -30,8 +29,6 @@ type Word = VocabularyWord;
 type ViewMode = "browse" | "detail" | "quiz";
 
 // ─── Constants ───
-const { width: SCREEN_W } = Dimensions.get("window");
-
 const CATEGORY_ICONS: Record<string, string> = {
   Verbs: "🏃",
   "i-Adjectives": "✨",
@@ -272,6 +269,24 @@ export default function VocabularyScreen() {
   );
 
   // ─── Quiz Logic ───
+  const setupQuizQuestion = useCallback(
+    (pool: Word[], idx: number) => {
+      if (idx >= pool.length) {
+        setQuizDone(true);
+        return;
+      }
+      const target = pool[idx];
+      const others = words.filter((word) => word.id !== target.id);
+      const randomOthers = others.sort(() => Math.random() - 0.5).slice(0, 3);
+      const options = [...randomOthers.map((word) => word.english), target.english].sort(
+        () => Math.random() - 0.5
+      );
+      setQuizOptions(options);
+      setQuizAnswer(null);
+    },
+    [words]
+  );
+
   const startQuiz = useCallback(() => {
     const pool = filtered.length >= 4 ? filtered : words;
     if (pool.length < 4) return;
@@ -286,22 +301,7 @@ export default function VocabularyScreen() {
     setMode("quiz");
     fadeAnim.setValue(0);
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-  }, [filtered, words, fadeAnim]);
-
-  const setupQuizQuestion = (pool: Word[], idx: number) => {
-    if (idx >= pool.length) {
-      setQuizDone(true);
-      return;
-    }
-    const target = pool[idx];
-    const others = words.filter((w) => w.id !== target.id);
-    const randomOthers = others.sort(() => Math.random() - 0.5).slice(0, 3);
-    const opts = [...randomOthers.map((w) => w.english), target.english].sort(
-      () => Math.random() - 0.5
-    );
-    setQuizOptions(opts);
-    setQuizAnswer(null);
-  };
+  }, [filtered, words, fadeAnim, setupQuizQuestion]);
 
   const handleQuizAnswer = useCallback(
     (answer: string) => {
@@ -321,14 +321,12 @@ export default function VocabularyScreen() {
         if (next >= quizPool.length) {
           const finalCorrect = quizScore.correct + (correct ? 1 : 0);
           if (session) {
-            supabase
-              .rpc("award_xp", {
-                p_activity_type: "vocabulary_quiz",
-                p_correct_answers: finalCorrect,
-                p_total_questions: quizPool.length,
-                p_attempt_key: quizAttemptKey,
-              })
-              .then();
+            void supabase.rpc("award_xp", {
+              p_activity_type: "vocabulary_quiz",
+              p_correct_answers: finalCorrect,
+              p_total_questions: quizPool.length,
+              p_attempt_key: quizAttemptKey,
+            });
           }
           setQuizDone(true);
         } else {
@@ -336,7 +334,16 @@ export default function VocabularyScreen() {
         }
       }, 1200);
     },
-    [quizAnswer, quizPool, quizIndex, quizAttemptKey, session, speakWord]
+    [
+      quizAnswer,
+      quizPool,
+      quizIndex,
+      quizAttemptKey,
+      quizScore.correct,
+      session,
+      speakWord,
+      setupQuizQuestion,
+    ]
   );
 
   // ═══════════════════ BROWSE MODE ═══════════════════

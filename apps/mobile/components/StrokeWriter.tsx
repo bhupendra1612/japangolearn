@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useCallback, useState, useEffect, useRef } from "react";
 import { View, StyleSheet, Animated, Easing, ActivityIndicator } from "react-native";
 import Svg, { Path, G } from "react-native-svg";
 import { Colors } from "@/constants/theme";
@@ -33,37 +33,34 @@ export default function StrokeWriter({
   const strokeProgress = useRef<Animated.Value[]>([]);
 
   useEffect(() => {
-    loadCharacterData();
+    let cancelled = false;
+
+    async function loadCharacterData() {
+      if (!character) return;
+      setLoading(true);
+      try {
+        const response = await fetch(
+          `https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0/${character}.json`
+        );
+        if (response.ok && !cancelled) {
+          const data: CharData = await response.json();
+          setCharData(data);
+          strokeProgress.current = data.strokes.map(() => new Animated.Value(0));
+        }
+      } catch {
+        console.log("Failed to load stroke data for", character);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadCharacterData();
+    return () => {
+      cancelled = true;
+    };
   }, [character]);
 
-  useEffect(() => {
-    if (charData && isDrawing) {
-      animateStrokes();
-    }
-  }, [charData, isDrawing]);
-
-  const loadCharacterData = async () => {
-    if (!character) return;
-    setLoading(true);
-    try {
-      // Fetch HanziWriter data directly from jsdelivr
-      const res = await fetch(
-        `https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0/${character}.json`
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setCharData(data);
-        // Initialize animation values
-        strokeProgress.current = data.strokes.map(() => new Animated.Value(0));
-      }
-    } catch (e) {
-      console.log("Failed to load stroke data for", character);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const animateStrokes = () => {
+  const animateStrokes = useCallback(() => {
     if (!charData) return;
 
     // Reset all
@@ -80,7 +77,13 @@ export default function StrokeWriter({
     });
 
     Animated.sequence(animations).start();
-  };
+  }, [charData]);
+
+  useEffect(() => {
+    if (charData && isDrawing) {
+      animateStrokes();
+    }
+  }, [animateStrokes, charData, isDrawing]);
 
   if (loading || !charData) {
     return (

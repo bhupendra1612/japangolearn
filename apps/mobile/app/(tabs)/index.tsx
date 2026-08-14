@@ -1,8 +1,7 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
   Animated,
   RefreshControl,
@@ -87,12 +86,7 @@ export default function DashboardHome() {
   const [weekActivity, setWeekActivity] = useState<Record<string, number>>({});
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!user) return;
     const today = new Date().toISOString().split("T")[0];
     const weekAgo = new Date();
@@ -131,7 +125,12 @@ export default function DashboardHome() {
       });
       setWeekActivity(map);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
+    void fetchData();
+  }, [fadeAnim, fetchData]);
 
   const onRefresh = async () => {
     setRefreshing(true);

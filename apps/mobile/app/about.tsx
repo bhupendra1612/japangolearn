@@ -5,16 +5,39 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
+import {
+  DELETE_ACCOUNT_URL,
+  PRIVACY_URL,
+  SITE_URL,
+  SUPPORT_EMAIL,
+  TERMS_URL,
+} from "@/constants/links";
+
+const LEGAL_LINKS = [
+  {
+    icon: "shield-checkmark-outline" as const,
+    label: "Privacy Policy",
+    url: PRIVACY_URL,
+  },
+  {
+    icon: "document-text-outline" as const,
+    label: "Terms & Conditions",
+    url: TERMS_URL,
+  },
+  {
+    icon: "trash-outline" as const,
+    label: "Delete Your Account",
+    url: DELETE_ACCOUNT_URL,
+  },
+];
 
 export default function AboutScreen() {
   const insets = useSafeAreaInsets();
 
-  const handleContact = () => {
-    Linking.openURL("tel:+917822989933");
-  };
-
-  const handleWhatsApp = () => {
-    Linking.openURL("whatsapp://send?phone=+917822989933");
+  const openUrl = (url: string) => {
+    Linking.openURL(url).catch(() => {
+      // Nothing to recover from here — the user can reach the same pages on the website.
+    });
   };
 
   return (
@@ -38,71 +61,87 @@ export default function AboutScreen() {
           <LinearGradient colors={[Colors.primary[600], Colors.primary[800]]} style={s.logoWrapper}>
             <Text style={s.logoEmoji}>🇯🇵</Text>
           </LinearGradient>
-          <Text style={s.appName}>EasyJapanese</Text>
+          <Text style={s.appName}>JapanGoLearn</Text>
           <Text style={s.versionText}>Version 1.0.0</Text>
         </View>
 
         <View style={s.card}>
-          <View style={s.badgeRow}>
-            <View style={s.badge}>
-              <Text style={s.badgeText}>Developed By</Text>
-            </View>
-          </View>
-          <Text style={s.companyName}>Trading Tech</Text>
-          <Text style={s.companyDesc}>
-            We are focused on building next-generation technology, automation tools, and modern
-            software platforms. From robust algorithmic trading systems to scalable apps, we bridge
-            the gap between complex ideas and seamless execution. 🚀
+          <Text style={s.sectionTitle}>About the App</Text>
+          <Text style={s.bodyText}>
+            JapanGoLearn helps you build real Japanese ability step by step — hiragana and katakana,
+            kanji with stroke practice, vocabulary, grammar patterns, and quizzes that adapt as you
+            improve. Track your progress with XP, daily streaks, and achievements from N5 upward.
           </Text>
         </View>
 
         <View style={s.card}>
-          <Text style={s.sectionTitle}>Our Services</Text>
-          <View style={s.serviceList}>
-            <View style={s.serviceItem}>
-              <Ionicons name="checkmark-circle" size={16} color={Colors.primary[400]} />
-              <Text style={s.serviceText}>Automated Trading Systems & Bots</Text>
-            </View>
-            <View style={s.serviceItem}>
-              <Ionicons name="checkmark-circle" size={16} color={Colors.primary[400]} />
-              <Text style={s.serviceText}>FinTech Software & SaaS Development</Text>
-            </View>
-            <View style={s.serviceItem}>
-              <Ionicons name="checkmark-circle" size={16} color={Colors.primary[400]} />
-              <Text style={s.serviceText}>Custom Web & Mobile Apps</Text>
-            </View>
-            <View style={s.serviceItem}>
-              <Ionicons name="checkmark-circle" size={16} color={Colors.primary[400]} />
-              <Text style={s.serviceText}>Learning Platforms & Educational Apps</Text>
-            </View>
+          <Text style={s.sectionTitle}>What You Can Learn</Text>
+          <View style={s.featureList}>
+            {[
+              "Hiragana & Katakana with stroke-by-stroke writing",
+              "Kanji readings, meanings, and practice",
+              "Vocabulary organised by JLPT level and topic",
+              "Grammar patterns with example sentences",
+              "Quizzes, flashcards, and custom practice lists",
+            ].map((item) => (
+              <View key={item} style={s.featureItem}>
+                <Ionicons name="checkmark-circle" size={16} color={Colors.primary[400]} />
+                <Text style={s.featureText}>{item}</Text>
+              </View>
+            ))}
           </View>
         </View>
 
         <View style={s.card}>
-          <Text style={s.sectionTitle}>Get In Touch</Text>
+          <Text style={s.sectionTitle}>Support</Text>
           <Text style={s.contactDesc}>
-            Interested in working with us or need support? Reach out directly!
+            Questions, feedback, or a problem with your account? We&apos;re happy to help.
           </Text>
 
-          <TouchableOpacity style={s.contactBtn} onPress={handleWhatsApp} activeOpacity={0.8}>
-            <View style={[s.iconBox, { backgroundColor: "#25D36620" }]}>
-              <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
+          <TouchableOpacity
+            style={s.linkRow}
+            onPress={() => openUrl(`mailto:${SUPPORT_EMAIL}`)}
+            activeOpacity={0.8}
+          >
+            <View style={[s.iconBox, { backgroundColor: Colors.primary[500] + "20" }]}>
+              <Ionicons name="mail" size={20} color={Colors.primary[400]} />
             </View>
-            <Text style={s.contactBtnText}>WhatsApp Us</Text>
+            <Text style={s.linkRowText}>{SUPPORT_EMAIL}</Text>
             <Ionicons name="open-outline" size={16} color={Colors.dark.textMuted} />
           </TouchableOpacity>
 
           <View style={s.divider} />
 
-          <TouchableOpacity style={s.contactBtn} onPress={handleContact} activeOpacity={0.8}>
-            <View style={[s.iconBox, { backgroundColor: Colors.primary[500] + "20" }]}>
-              <Ionicons name="call" size={20} color={Colors.primary[400]} />
+          <TouchableOpacity style={s.linkRow} onPress={() => openUrl(SITE_URL)} activeOpacity={0.8}>
+            <View style={[s.iconBox, { backgroundColor: Colors.accent[500] + "20" }]}>
+              <Ionicons name="globe-outline" size={20} color={Colors.accent[400]} />
             </View>
-            <Text style={s.contactBtnText}>Call: +91 7822989933</Text>
+            <Text style={s.linkRowText}>japangolearn.com</Text>
+            <Ionicons name="open-outline" size={16} color={Colors.dark.textMuted} />
           </TouchableOpacity>
         </View>
 
-        <Text style={s.copyright}>© 2026 Trading Tech. All rights reserved.</Text>
+        <View style={s.card}>
+          <Text style={s.sectionTitle}>Legal</Text>
+          {LEGAL_LINKS.map((link, i, arr) => (
+            <React.Fragment key={link.label}>
+              <TouchableOpacity
+                style={s.linkRow}
+                onPress={() => openUrl(link.url)}
+                activeOpacity={0.8}
+              >
+                <View style={[s.iconBox, { backgroundColor: Colors.dark.surface }]}>
+                  <Ionicons name={link.icon} size={20} color={Colors.dark.textSecondary} />
+                </View>
+                <Text style={s.linkRowText}>{link.label}</Text>
+                <Ionicons name="open-outline" size={16} color={Colors.dark.textMuted} />
+              </TouchableOpacity>
+              {i < arr.length - 1 && <View style={s.divider} />}
+            </React.Fragment>
+          ))}
+        </View>
+
+        <Text style={s.copyright}>© 2026 JapanGoLearn. All rights reserved.</Text>
       </ScrollView>
     </View>
   );
@@ -175,36 +214,6 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.dark.border,
   },
-  badgeRow: {
-    flexDirection: "row",
-    marginBottom: Spacing.sm,
-  },
-  badge: {
-    backgroundColor: Colors.primary[600] + "20",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: BorderRadius.full,
-    borderWidth: 1,
-    borderColor: Colors.primary[500] + "40",
-  },
-  badgeText: {
-    color: Colors.primary[400],
-    fontSize: 10,
-    fontWeight: "bold",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  companyName: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: Colors.dark.text,
-    marginBottom: Spacing.sm,
-  },
-  companyDesc: {
-    fontSize: FontSize.base,
-    color: Colors.dark.textSecondary,
-    lineHeight: 24,
-  },
   sectionTitle: {
     fontSize: FontSize.lg,
     fontWeight: "bold",
@@ -212,15 +221,21 @@ const s = StyleSheet.create({
     marginBottom: Spacing.md,
     letterSpacing: 0.5,
   },
-  serviceList: {
+  bodyText: {
+    fontSize: FontSize.base,
+    color: Colors.dark.textSecondary,
+    lineHeight: 24,
+  },
+  featureList: {
     gap: Spacing.sm,
   },
-  serviceItem: {
+  featureItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.sm,
   },
-  serviceText: {
+  featureText: {
+    flex: 1,
     fontSize: FontSize.sm,
     color: Colors.dark.textSecondary,
   },
@@ -230,7 +245,7 @@ const s = StyleSheet.create({
     marginBottom: Spacing.lg,
     lineHeight: 20,
   },
-  contactBtn: {
+  linkRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: Spacing.sm,
@@ -243,7 +258,7 @@ const s = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  contactBtnText: {
+  linkRowText: {
     flex: 1,
     fontSize: FontSize.base,
     color: Colors.dark.text,

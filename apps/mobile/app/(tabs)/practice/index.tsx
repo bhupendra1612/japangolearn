@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -27,38 +27,26 @@ export default function PracticeHubScreen() {
   const [streak, setStreak] = useState({ current: 0, longest: 0 });
   const [loading, setLoading] = useState(true);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (session?.user) {
-        loadData();
-      }
-    }, [session])
-  );
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    const userId = session?.user.id;
+    if (!userId) return;
     setLoading(true);
-    await Promise.all([loadLists(), loadStreak()]);
-    setLoading(false);
-  };
 
-  const loadStreak = async () => {
     const { data } = await supabase
       .from("user_streaks")
       .select("current_streak, longest_streak")
-      .eq("user_id", session!.user.id)
+      .eq("user_id", userId)
       .single();
 
     if (data) {
       setStreak({ current: data.current_streak, longest: data.longest_streak });
     }
-  };
 
-  const loadLists = async () => {
     // 1. Get lists
     let { data: listsData } = await supabase
       .from("practice_lists")
       .select("id, title, is_smart_list")
-      .eq("user_id", session!.user.id)
+      .eq("user_id", userId)
       .order("is_smart_list", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -67,7 +55,7 @@ export default function PracticeHubScreen() {
       const { data: smartList } = await supabase
         .from("practice_lists")
         .insert({
-          user_id: session!.user.id,
+          user_id: userId,
           title: "Needs Practice",
           is_smart_list: true,
         })
@@ -91,7 +79,14 @@ export default function PracticeHubScreen() {
       );
       setLists(listsWithCounts);
     }
-  };
+    setLoading(false);
+  }, [session?.user.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadData();
+    }, [loadData])
+  );
 
   const handleDeleteList = (listId: string, isSmartList: boolean) => {
     if (isSmartList) {

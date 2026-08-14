@@ -5,7 +5,7 @@ import { Colors } from "@/constants/theme";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const ONBOARDED_KEY = "@easyjapanese_onboarded";
+const ONBOARDED_KEY = "@japangolearn_onboarded";
 
 export default function Index() {
   const { session, loading, isGuest } = useAuth();

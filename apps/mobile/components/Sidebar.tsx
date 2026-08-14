@@ -161,7 +161,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     <Text style={styles.logoEmoji}>🇯🇵</Text>
                   </View>
                   <View>
-                    <Text style={styles.appName}>EasyJapanese</Text>
+                    <Text style={styles.appName}>JapanGoLearn</Text>
                     <Text style={styles.appTagline}>学ぼう日本語</Text>
                   </View>
                 </View>
@@ -286,7 +286,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     </LinearGradient>
                   </TouchableOpacity>
                 )}
-                <Text style={styles.version}>EasyJapanese v1.0</Text>
+                <Text style={styles.version}>JapanGoLearn v1.0</Text>
               </View>
             </ScrollView>
           </Animated.View>

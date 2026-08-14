@@ -4,14 +4,16 @@ import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
+import { courseCatalogEnabled } from "@/lib/marketplace";
 
 const navLinks = [
   { href: "/", label: "Home" },
+  { href: "/courses", label: "Courses" },
   { href: "/hiragana", label: "Hiragana" },
   { href: "/katakana", label: "Katakana" },
   { href: "/vocabulary", label: "Vocabulary" },
   { href: "/blog", label: "Blog" },
-];
+].filter((link) => link.href !== "/courses" || courseCatalogEnabled);
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);

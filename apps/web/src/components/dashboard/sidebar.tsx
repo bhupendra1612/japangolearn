@@ -17,9 +17,12 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { featureFlags } from "@/lib/feature-flags";
+import { courseCatalogEnabled, teacherStudioEnabled } from "@/lib/marketplace";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+  { label: "Courses", icon: BookOpen, href: "/courses" },
+  { label: "Teach", icon: BookText, href: "/dashboard/teacher" },
   { label: "Learning Path", icon: Route, href: "/dashboard/levels" },
   { label: "Writing", icon: PenLine, href: "/dashboard/writing" },
   { label: "Vocabulary", icon: BookOpen, href: "/dashboard/vocabulary" },
@@ -28,10 +31,13 @@ const navItems = [
   { label: "Achievements", icon: Trophy, href: "/dashboard/achievements" },
   { label: "AI Practice", icon: Bot, href: "/dashboard/ai-practice", premium: true },
   { label: "Profile", icon: User, href: "/dashboard/profile" },
-].filter(
-  (item) =>
-    item.href !== "/dashboard/ai-practice" || (featureFlags.aiPractice && featureFlags.premium)
-);
+]
+  .filter(
+    (item) =>
+      item.href !== "/dashboard/ai-practice" || (featureFlags.aiPractice && featureFlags.premium)
+  )
+  .filter((item) => item.href !== "/courses" || courseCatalogEnabled)
+  .filter((item) => item.href !== "/dashboard/teacher" || teacherStudioEnabled);
 
 interface DashboardSidebarProps {
   collapsed: boolean;

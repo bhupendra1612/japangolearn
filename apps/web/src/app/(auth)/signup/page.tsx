@@ -221,6 +221,24 @@ export default function SignupPage() {
                 </>
               )}
             </button>
+
+            <p className="text-center text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              By creating an account, you agree to our{" "}
+              <Link
+                href="/terms"
+                className="text-primary-600 dark:text-primary-400 font-medium hover:underline"
+              >
+                Terms &amp; Conditions
+              </Link>{" "}
+              and{" "}
+              <Link
+                href="/privacy"
+                className="text-primary-600 dark:text-primary-400 font-medium hover:underline"
+              >
+                Privacy Policy
+              </Link>
+              .
+            </p>
           </form>
 
           <p className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">

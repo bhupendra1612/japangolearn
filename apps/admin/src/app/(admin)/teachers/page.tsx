@@ -17,7 +17,9 @@ async function reviewTeacher(formData: FormData) {
   const { error } = await supabase.rpc("review_teacher_application", {
     target_user_id: userId,
     decision,
-    notes: notes || null,
+    /* The RPC declares notes with DEFAULT NULL, so omitting it and passing
+       null are equivalent — and undefined is what the generated type accepts. */
+    notes: notes || undefined,
   });
 
   if (error) redirect(`/teachers?error=${encodeURIComponent(error.message)}`);

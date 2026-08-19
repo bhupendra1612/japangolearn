@@ -1,16 +1,231 @@
+/* ==========================================================================
+   JapanGoLearn admin console
+   --------------------------------------------------------------------------
+   Every colour, radius, and shadow used anywhere in the app is a token defined
+   in this block. Nothing below this section may hard-code a colour — that rule
+   is what keeps light and dark in step, because a component that reads tokens
+   is themed for free.
+
+   The three-block pattern below is deliberate:
+     1. bare :root          -> the complete light palette (the fallback)
+     2. prefers-color-scheme -> dark, but only when the user has not chosen
+                                light explicitly
+     3. [data-theme="dark"]  -> dark, winning over an OS that says light
+   Defining a colour in only one of those blocks breaks one of the three
+   states, so every token appears in all of them.
+   ========================================================================== */
+
 :root {
   color-scheme: light;
-  --background: #f6f7f9;
+
+  /* Surfaces, from furthest back to closest to the reader */
+  --background: #f4f6fa;
   --surface: #ffffff;
-  --surface-muted: #eef1f5;
-  --border: #d9dee7;
-  --text: #161a22;
-  --muted: #667085;
-  --accent: #0f766e;
-  --accent-strong: #115e59;
+  --surface-muted: #f1f4f9;
+  --surface-hover: #e9edf5;
+  --surface-sunken: #eaeef5;
+
+  /* The sidebar keeps its own surface tokens: it stays visually distinct from
+     the workspace in both themes, rather than being dark in one and light in
+     the other like the old hard-coded #111827. */
+  --sidebar-surface: #ffffff;
+  --sidebar-border: #e3e8f0;
+  --sidebar-text: #3d4759;
+  --sidebar-text-strong: #10141c;
+  --sidebar-hover: #f1f4f9;
+
+  --border: #e2e7f0;
+  --border-strong: #cbd3e1;
+
+  --text: #10141c;
+  --text-secondary: #414d61;
+  --muted: #6b7688;
+
+  --accent: #6d28d9;
+  --accent-hover: #5b21b6;
+  --accent-contrast: #ffffff;
+  --accent-soft: #f3eeff;
+  --accent-soft-text: #5b21b6;
+  --accent-ring: rgba(109, 40, 217, 0.26);
+
+  --success: #067647;
+  --success-soft: #e7f8ef;
+  --warning: #a15c07;
+  --warning-soft: #fdf3e2;
   --danger: #b42318;
-  --shadow: 0 18px 50px rgba(16, 24, 40, 0.08);
+  --danger-hover: #912018;
+  --danger-soft: #fef3f2;
+  --danger-border: #f6c9c4;
+  --info: #1750c4;
+  --info-soft: #eaf1fe;
+
+  --skeleton-base: #e6eaf2;
+  --skeleton-sheen: #f4f7fc;
+
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 4px 16px rgba(16, 24, 40, 0.07);
+  --shadow-lg: 0 18px 44px rgba(16, 24, 40, 0.12);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  --header-height: 60px;
+  --sidebar-width: 264px;
+
+  --font-sans:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-mono:
+    var(--font-jetbrains-mono), "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --background: #0a0e16;
+    --surface: #141926;
+    --surface-muted: #1b2130;
+    --surface-hover: #222938;
+    --surface-sunken: #10151f;
+
+    --sidebar-surface: #0f141f;
+    --sidebar-border: #222939;
+    --sidebar-text: #a6b1c4;
+    --sidebar-text-strong: #f2f5fa;
+    --sidebar-hover: #1b2231;
+
+    --border: #242c3c;
+    --border-strong: #333d51;
+
+    --text: #eef1f7;
+    --text-secondary: #c2cad9;
+    --muted: #8d99ad;
+
+    --accent: #a78bfa;
+    --accent-hover: #c4b5fd;
+    --accent-contrast: #17102b;
+    --accent-soft: #241b3d;
+    --accent-soft-text: #c9b8fd;
+    --accent-ring: rgba(167, 139, 250, 0.32);
+
+    --success: #5fd39b;
+    --success-soft: #10291e;
+    --warning: #eab464;
+    --warning-soft: #2c2113;
+    --danger: #ff9188;
+    --danger-hover: #ffb0a9;
+    --danger-soft: #2d1614;
+    --danger-border: #582b26;
+    --info: #85b0ff;
+    --info-soft: #14203a;
+
+    --skeleton-base: #1e2534;
+    --skeleton-sheen: #2a3346;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.42);
+    --shadow-lg: 0 18px 44px rgba(0, 0, 0, 0.55);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: #0a0e16;
+  --surface: #141926;
+  --surface-muted: #1b2130;
+  --surface-hover: #222938;
+  --surface-sunken: #10151f;
+
+  --sidebar-surface: #0f141f;
+  --sidebar-border: #222939;
+  --sidebar-text: #a6b1c4;
+  --sidebar-text-strong: #f2f5fa;
+  --sidebar-hover: #1b2231;
+
+  --border: #242c3c;
+  --border-strong: #333d51;
+
+  --text: #eef1f7;
+  --text-secondary: #c2cad9;
+  --muted: #8d99ad;
+
+  --accent: #a78bfa;
+  --accent-hover: #c4b5fd;
+  --accent-contrast: #17102b;
+  --accent-soft: #241b3d;
+  --accent-soft-text: #c9b8fd;
+  --accent-ring: rgba(167, 139, 250, 0.32);
+
+  --success: #5fd39b;
+  --success-soft: #10291e;
+  --warning: #eab464;
+  --warning-soft: #2c2113;
+  --danger: #ff9188;
+  --danger-hover: #ffb0a9;
+  --danger-soft: #2d1614;
+  --danger-border: #582b26;
+  --info: #85b0ff;
+  --info-soft: #14203a;
+
+  --skeleton-base: #1e2534;
+  --skeleton-sheen: #2a3346;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.42);
+  --shadow-lg: 0 18px 44px rgba(0, 0, 0, 0.55);
+}
+
+/* @japangolearn/ui ships its own light-only palette. Admin imports that
+   stylesheet, so its tokens are re-pointed at ours — otherwise <Badge> and
+   <Button> stay light while the rest of the console goes dark. */
+:root {
+  --jgl-primary: var(--accent);
+  --jgl-primary-hover: var(--accent-hover);
+  --jgl-surface: var(--surface);
+  --jgl-text: var(--text);
+  --jgl-muted: var(--muted);
+  --jgl-border: var(--border);
+  --jgl-radius: var(--radius-md);
+  --jgl-focus: 0 0 0 3px var(--accent-ring);
+}
+
+.jgl-badge--neutral {
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+}
+
+.jgl-badge--success {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.jgl-badge--warning {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.jgl-badge--danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.jgl-badge--info {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.jgl-button--secondary {
+  background: var(--surface);
+  color: var(--text-secondary);
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
 
 * {
   box-sizing: border-box;
@@ -22,14 +237,25 @@ body {
   min-height: 100%;
   background: var(--background);
   color: var(--text);
-  font-family:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Colour and background are the only themed properties that should animate.
+   Transitioning `all` here makes every drawer and hover feel laggy. */
+body,
+.panel,
+.hero-panel,
+.auth-card,
+.sidebar,
+.app-header,
+.stat-card,
+.metric {
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
 }
 
 a {
@@ -39,43 +265,90 @@ a {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
+h1,
+h2,
+h3 {
+  letter-spacing: -0.015em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Visible only to screen readers, used for the drawer and toggle labels. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ==========================================================================
+   Frame and sidebar
+   ========================================================================== */
+
 .admin-frame {
   display: grid;
-  grid-template-columns: 252px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   min-height: 100vh;
 }
 
 .sidebar {
   position: sticky;
   top: 0;
+  display: flex;
+  flex-direction: column;
   height: 100vh;
-  border-right: 1px solid var(--border);
-  background: #111827;
-  color: #f9fafb;
-  padding: 20px 14px;
+  border-right: 1px solid var(--sidebar-border);
+  background: var(--sidebar-surface);
+  color: var(--sidebar-text);
+  padding: 16px 12px;
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 10px 20px;
+  border-radius: var(--radius-md);
+  padding: 8px 10px 8px 8px;
+  margin-bottom: 18px;
+}
+
+.brand:hover {
+  background: var(--sidebar-hover);
 }
 
 .brand-mark {
   display: inline-grid;
-  width: 40px;
-  height: 40px;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
   place-items: center;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--accent);
-  color: #ffffff;
-  font-size: 23px;
+  color: var(--accent-contrast);
+  font-size: 21px;
   font-weight: 800;
+  line-height: 1;
 }
 
 .brand strong,
@@ -83,63 +356,170 @@ textarea {
   display: block;
 }
 
+.brand strong {
+  color: var(--sidebar-text-strong);
+  font-size: 15px;
+}
+
 .brand small {
-  color: #9ca3af;
+  color: var(--muted);
   font-size: 12px;
-  margin-top: 2px;
+  margin-top: 1px;
+}
+
+.nav-section-label {
+  margin: 14px 0 6px;
+  padding: 0 12px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .nav-list {
   display: grid;
-  gap: 4px;
+  gap: 2px;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .nav-link {
-  border-radius: 8px;
-  color: #d1d5db;
-  font-size: 14px;
-  padding: 10px 12px;
-}
-
-.nav-link:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
-}
-
-.workspace {
-  min-width: 0;
-  padding: 24px;
-}
-
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.topbar h1,
-.auth-card h1 {
-  margin: 4px 0 0;
-  font-size: 28px;
-  line-height: 1.1;
-}
-
-.topbar-actions {
   display: flex;
   align-items: center;
   gap: 10px;
+  border-radius: var(--radius-sm);
+  color: var(--sidebar-text);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 9px 12px;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
-.admin-badge {
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--muted);
-  font-size: 13px;
-  padding: 9px 12px;
+.nav-link svg {
+  flex-shrink: 0;
+  width: 17px;
+  height: 17px;
+  opacity: 0.75;
 }
+
+.nav-link:hover {
+  background: var(--sidebar-hover);
+  color: var(--sidebar-text-strong);
+}
+
+.nav-link[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
+  font-weight: 650;
+}
+
+.nav-link[aria-current="page"] svg {
+  opacity: 1;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--sidebar-border);
+}
+
+/* ==========================================================================
+   Header
+   ========================================================================== */
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--header-height);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(10px);
+  padding: 10px 24px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.header-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Hamburger. Hidden until the sidebar collapses into a drawer. */
+.nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.nav-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.icon-button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.page-body {
+  padding: 24px;
+}
+
+/* ==========================================================================
+   Panels and cards
+   ========================================================================== */
 
 .stack {
   display: grid;
@@ -150,9 +530,9 @@ textarea {
 .panel,
 .auth-card {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-sm);
 }
 
 .hero-panel {
@@ -166,7 +546,7 @@ textarea {
 .hero-panel h2,
 .panel h2 {
   margin: 4px 0 8px;
-  font-size: 24px;
+  font-size: 21px;
 }
 
 .hero-panel p,
@@ -179,8 +559,8 @@ textarea {
 
 .eyebrow {
   margin: 0;
-  color: var(--accent-strong);
-  font-size: 12px;
+  color: var(--accent);
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -199,7 +579,7 @@ textarea {
 .metric,
 .stat-card {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface-muted);
   padding: 14px;
 }
@@ -208,7 +588,8 @@ textarea {
 .stat-card strong {
   display: block;
   font-size: 26px;
-  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
 }
 
 .metric span,
@@ -219,19 +600,55 @@ textarea {
 }
 
 .cards-grid {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
 
 .stat-card {
+  display: block;
   background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color 120ms ease,
+    transform 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .stat-card:hover {
   border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.stat-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.stat-icon {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
+}
+
+.stat-icon svg {
+  width: 17px;
+  height: 17px;
 }
 
 .stat-card strong {
-  margin: 12px 0 6px;
+  margin: 12px 0 4px;
+}
+
+.stat-card small {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
 }
 
 .panel {
@@ -243,9 +660,54 @@ textarea {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 18px;
+  padding: 16px 18px;
   border-bottom: 1px solid var(--border);
 }
+
+.section-heading-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.section-icon {
+  display: inline-grid;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent-soft-text);
+  margin-top: 2px;
+}
+
+.section-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.row-count {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 5px 10px;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Tables
+
+   Desktop keeps a real table. Below the mobile breakpoint each row becomes a
+   stacked card driven by the data-label attribute the cells carry, because a
+   780px-wide table inside a horizontal scroller is unusable on a phone.
+   ========================================================================== */
 
 .table-wrap {
   overflow-x: auto;
@@ -253,7 +715,7 @@ textarea {
 
 table {
   width: 100%;
-  min-width: 780px;
+  min-width: 720px;
   border-collapse: collapse;
 }
 
@@ -261,27 +723,40 @@ th,
 td {
   max-width: 280px;
   border-bottom: 1px solid var(--border);
-  padding: 12px 14px;
+  padding: 11px 14px;
   text-align: left;
   vertical-align: top;
   font-size: 13px;
 }
 
 th {
+  position: sticky;
+  top: 0;
   background: var(--surface-muted);
-  color: #475467;
-  font-size: 12px;
-  font-weight: 800;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
+  white-space: nowrap;
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+tbody tr:hover td {
+  background: var(--surface-muted);
 }
 
 td {
+  color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
 
 .mono {
   color: var(--muted);
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
@@ -291,54 +766,142 @@ td {
   gap: 4px;
   margin: 18px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--surface-muted);
   color: var(--muted);
-  padding: 16px;
+  padding: 20px;
+  text-align: center;
+  justify-items: center;
 }
 
-.empty-state strong,
-.form-error {
+.empty-state svg {
+  width: 24px;
+  height: 24px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.empty-state strong {
   color: var(--text);
 }
 
 .form-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   margin: 0;
-  border-color: #fecdca;
-  background: #fff4f2;
+  border-color: var(--danger-border);
+  background: var(--danger-soft);
   color: var(--danger);
+  font-size: 13.5px;
+  line-height: 1.5;
+  padding: 14px 16px;
+  text-align: left;
 }
+
+.form-error svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ==========================================================================
+   Controls
+   ========================================================================== */
 
 .primary-button,
 .secondary-button,
 .danger-button {
-  border: 0;
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 7px;
   min-height: 40px;
   padding: 0 14px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 650;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.primary-button svg,
+.secondary-button svg,
+.danger-button svg {
+  width: 16px;
+  height: 16px;
 }
 
 .primary-button {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--accent-contrast);
+}
+
+.primary-button:hover {
+  background: var(--accent-hover);
 }
 
 .secondary-button {
-  border: 1px solid var(--border);
+  border-color: var(--border);
   background: var(--surface);
+  color: var(--text-secondary);
+}
+
+.secondary-button:hover {
+  background: var(--surface-hover);
   color: var(--text);
 }
 
 .danger-button {
-  border: 1px solid #fda29b;
-  background: #fff4f2;
+  border-color: var(--danger-border);
+  background: var(--danger-soft);
   color: var(--danger);
 }
+
+.danger-button:hover {
+  border-color: var(--danger);
+}
+
+label {
+  display: grid;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+  padding: 11px 12px;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+}
+
+textarea {
+  resize: vertical;
+}
+
+input:focus,
+textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+/* ==========================================================================
+   Auth pages
+   ========================================================================== */
 
 .auth-page {
   display: grid;
@@ -351,37 +914,25 @@ td {
   display: grid;
   width: min(100%, 420px);
   gap: 18px;
-  padding: 26px;
+  padding: 28px;
+  box-shadow: var(--shadow-lg);
 }
 
-label {
-  display: grid;
-  gap: 7px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
+.auth-card h1 {
+  margin: 4px 0 0;
+  font-size: 26px;
+  line-height: 1.15;
 }
 
-input,
-textarea {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #ffffff;
-  color: var(--text);
-  outline: none;
-  padding: 11px 12px;
+.auth-theme-toggle {
+  position: fixed;
+  top: 18px;
+  right: 18px;
 }
 
-textarea {
-  resize: vertical;
-}
-
-input:focus,
-textarea:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
-}
+/* ==========================================================================
+   Teacher review
+   ========================================================================== */
 
 .teacher-review-list {
   display: grid;
@@ -391,7 +942,8 @@ textarea:focus {
 
 .teacher-review-card {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
   padding: 18px;
 }
 
@@ -401,6 +953,7 @@ textarea:focus {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .teacher-review-heading h3 {
@@ -408,23 +961,35 @@ textarea:focus {
 }
 
 .status-pill {
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--surface-muted);
-  padding: 6px 10px;
-  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 5px 10px;
+  font-size: 11px;
   font-weight: 800;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
 }
 
 .status-approved {
-  background: #ecfdf3;
-  color: #027a48;
+  background: var(--success-soft);
+  color: var(--success);
 }
 
 .status-submitted,
 .status-under_review {
-  background: #eff8ff;
-  color: #175cd3;
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.status-changes_requested {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.status-rejected {
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .teacher-details {
@@ -436,19 +1001,22 @@ textarea:focus {
 
 .teacher-details div {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
   padding: 12px;
 }
 
 .teacher-details dt {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .teacher-details dd {
   margin: 6px 0 0;
+  color: var(--text);
   white-space: pre-wrap;
 }
 
@@ -461,42 +1029,227 @@ textarea:focus {
   justify-content: flex-start;
 }
 
-@media (max-width: 920px) {
-  .admin-frame {
-    grid-template-columns: 1fr;
-  }
+/* ==========================================================================
+   Skeletons
+   ========================================================================== */
 
-  .sidebar {
-    position: static;
-    height: auto;
-  }
+.skeleton {
+  border-radius: var(--radius-sm);
+  background: var(--skeleton-base);
+  background-image: linear-gradient(
+    90deg,
+    var(--skeleton-base) 0%,
+    var(--skeleton-sheen) 50%,
+    var(--skeleton-base) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-sheen 1.4s ease-in-out infinite;
+}
 
-  .nav-list {
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+@keyframes skeleton-sheen {
+  from {
+    background-position: 200% 0;
   }
-
-  .hero-panel {
-    grid-template-columns: 1fr;
+  to {
+    background-position: -200% 0;
   }
 }
 
-@media (max-width: 620px) {
-  .workspace {
-    padding: 16px;
+/* Movement is the whole point of a shimmer, so with reduced motion the
+   skeleton holds a flat tone instead of pulsing. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    background-image: none;
+  }
+}
+
+.skeleton-text {
+  height: 12px;
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid var(--border);
+  padding: 14px;
+}
+
+.skeleton-row:last-child {
+  border-bottom: 0;
+}
+
+/* ==========================================================================
+   Responsive
+
+   1024px: the sidebar becomes an off-canvas drawer.
+   760px:  tables become stacked cards.
+   ========================================================================== */
+
+.drawer-backdrop {
+  display: none;
+}
+
+@media (max-width: 1024px) {
+  .admin-frame {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .topbar,
-  .section-heading {
-    align-items: stretch;
-    flex-direction: column;
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 50;
+    width: min(86vw, var(--sidebar-width));
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%);
+    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    visibility: hidden;
   }
 
-  .topbar-actions,
+  .sidebar[data-open="true"] {
+    transform: translateX(0);
+    visibility: visible;
+  }
+
+  .drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    border: 0;
+    background: rgba(8, 11, 18, 0.55);
+    padding: 0;
+    cursor: pointer;
+    animation: fade-in 180ms ease;
+  }
+
+  .nav-toggle {
+    display: inline-flex;
+  }
+
+  .hero-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-header {
+    padding: 10px 14px;
+  }
+
+  .page-body {
+    padding: 16px 14px 28px;
+  }
+
   .metrics-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   }
 
-  .topbar-actions {
+  .cards-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .hero-panel,
+  .teacher-review-card {
+    padding: 18px;
+  }
+
+  .section-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .teacher-details {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Table -> stacked cards. The header row is dropped and each cell prints its
+     own label from data-label, so a row reads top to bottom on a phone. */
+  .table-wrap {
+    overflow-x: visible;
+    padding: 12px;
+  }
+
+  table,
+  tbody,
+  tr,
+  td {
+    display: block;
+    width: 100%;
+  }
+
+  table {
+    min-width: 0;
+  }
+
+  thead {
+    display: none;
+  }
+
+  tbody tr {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-muted);
+    padding: 4px 0;
+    margin-bottom: 12px;
+  }
+
+  tbody tr:last-child {
+    margin-bottom: 0;
+  }
+
+  tbody tr:hover td {
+    background: transparent;
+  }
+
+  td {
     display: grid;
+    grid-template-columns: minmax(88px, 34%) minmax(0, 1fr);
+    gap: 12px;
+    align-items: baseline;
+    max-width: none;
+    border-bottom: 1px solid var(--border);
+    padding: 9px 14px;
+  }
+
+  tbody tr td:last-child {
+    border-bottom: 0;
+  }
+
+  td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .skeleton-row {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 460px) {
+  /* The account name is the first thing to go when the header runs out of
+     room — the hamburger, page title, and theme toggle all matter more. */
+  .header-actions .jgl-badge {
+    display: none;
+  }
+
+  .teacher-review-actions .primary-button,
+  .teacher-review-actions .secondary-button,
+  .teacher-review-actions .danger-button {
+    width: 100%;
   }
 }

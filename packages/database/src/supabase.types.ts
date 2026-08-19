@@ -765,12 +765,15 @@ export type Database = {
           avatar_url: string | null;
           created_at: string;
           current_jlpt_level: string;
+          daily_xp_goal: number;
           display_name: string | null;
           id: string;
           last_active_at: string | null;
+          notifications_seen_at: string | null;
           onboarding_completed: boolean;
           role: string;
           streak_days: number;
+          streak_freezes: number;
           updated_at: string;
           xp: number;
         };
@@ -1130,6 +1133,7 @@ export type Database = {
       award_xp: {
         Args: {
           p_activity_type: string;
+          p_answers?: Json;
           p_attempt_key: string;
           p_correct_answers: number;
           p_total_questions: number;
@@ -1140,6 +1144,101 @@ export type Database = {
           unlocked_ids: string[];
           was_duplicate: boolean;
           xp_awarded: number;
+        }[];
+      };
+      get_resume_point: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          activity_type: string;
+          correct_answers: number;
+          last_at: string;
+          total_questions: number;
+        }[];
+      };
+      search_curriculum: {
+        Args: {
+          p_limit?: number;
+          p_query: string;
+        };
+        Returns: {
+          item_id: number;
+          item_type: string;
+          jlpt_level: string | null;
+          meaning: string | null;
+          rank: number;
+          subtitle: string | null;
+          title: string;
+        }[];
+      };
+      get_skill_breakdown: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          accuracy: number;
+          avg_mastery: number;
+          item_type: string;
+          mastered: number;
+          tracked: number;
+        }[];
+      };
+      get_kanji_of_the_day: {
+        Args: {
+          p_level?: string;
+        };
+        Returns: {
+          glyph: string;
+          jlpt_level: string;
+          kanji_id: number;
+          meanings: string[];
+          reading_kun: Json;
+          reading_on: Json;
+          romaji: string;
+          stroke_count: number;
+        }[];
+      };
+      get_notifications: {
+        Args: {
+          p_limit?: number;
+        };
+        Returns: {
+          body: string;
+          href: string;
+          kind: string;
+          occurred_at: string;
+          title: string;
+        }[];
+      };
+      mark_notifications_seen: {
+        Args: Record<PropertyKey, never>;
+        Returns: string;
+      };
+      set_daily_xp_goal: {
+        Args: {
+          p_goal: number;
+        };
+        Returns: number;
+      };
+      get_due_reviews: {
+        Args: {
+          p_limit?: number;
+        };
+        Returns: {
+          answer: string | null;
+          item_id: string;
+          item_type: string;
+          mastery_score: number;
+          next_review_at: string;
+          prompt: string | null;
+          reading: string | null;
+        }[];
+      };
+      get_review_summary: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          due_now: number;
+          due_today: number;
+          mastered_items: number;
+          tracked_items: number;
+          weak_items: number;
         }[];
       };
       delete_account: { Args: never; Returns: undefined };

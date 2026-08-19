@@ -1,27 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
-import { BookOpen, Mail, Lock, User, Eye, EyeOff, Loader2, Sparkles } from "lucide-react";
-
-const jlptOptions = [
-  { value: "N5", label: "N5 — Complete Beginner", desc: "I'm just starting" },
-  { value: "N4", label: "N4 — Elementary", desc: "I know hiragana & katakana" },
-  { value: "N3", label: "N3 — Intermediate", desc: "I can have basic conversations" },
-  { value: "N2", label: "N2 — Upper-Intermediate", desc: "I can read articles" },
-  { value: "N1", label: "N1 — Advanced", desc: "I want native-level fluency" },
-];
+import { Mail, Lock, User, Eye, EyeOff, Loader2, Sparkles } from "lucide-react";
+import { DEFAULT_JLPT_LEVEL } from "@japangolearn/content";
+import { AuthBrandHeader } from "@/components/auth/auth-brand-header";
+import { JlptLevelSelect } from "@/components/auth/jlpt-level-select";
 
 export default function SignupPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [jlptLevel, setJlptLevel] = useState("N5");
+  const [jlptLevel, setJlptLevel] = useState<string>(DEFAULT_JLPT_LEVEL);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [resendIn, setResendIn] = useState(0);
+  const [resumedSignup, setResumedSignup] = useState(false);
+
+  // Cooldown between "resend code" clicks.
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const id = setTimeout(() => setResendIn((v) => v - 1), 1000);
+    return () => clearTimeout(id);
+  }, [resendIn]);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,11 +35,10 @@ export default function SignupPage() {
     setLoading(true);
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
         data: {
           display_name: name,
           current_jlpt_level: jlptLevel,
@@ -44,31 +49,154 @@ export default function SignupPage() {
     if (error) {
       setError(error.message);
       setLoading(false);
-    } else {
-      setSuccess(true);
-      setLoading(false);
+      return;
     }
+
+    // Supabase returns success (with an empty identities array) when the email
+    // already has a confirmed account, so it never leaks which addresses are
+    // registered. Detect it rather than showing a code screen for a code that
+    // was never sent.
+    if (data.user && (data.user.identities?.length ?? 0) === 0) {
+      setError("This email is already registered. Please log in instead.");
+      setLoading(false);
+      return;
+    }
+
+    // An account that exists but was never confirmed still has identities and
+    // does get a fresh code. Its created_at predates this request, which is the
+    // only way to tell it apart from a brand new signup.
+    const createdAtMs = data.user?.created_at ? Date.parse(data.user.created_at) : Date.now();
+    if (!data.session && Number.isFinite(createdAtMs) && Date.now() - createdAtMs > 10_000) {
+      setResumedSignup(true);
+    }
+
+    setLoading(false);
+    if (data.session) {
+      // Email confirmation disabled — straight in.
+      window.location.href = "/dashboard";
+      return;
+    }
+    // Supabase mailed a 6-digit code; collect it here instead of sending the
+    // user off to click a link in their inbox.
+    setSuccess(true);
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const code = otp.replace(/\D/g, "");
+    if (code.length !== 6) {
+      setError("Enter the 6-digit code from your email");
+      return;
+    }
+    setError("");
+    setVerifying(true);
+
+    const supabase = createClient();
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: code,
+      type: "signup",
+    });
+
+    if (error) {
+      setError(error.message || "That code is not valid. Check it and try again.");
+      setVerifying(false);
+      return;
+    }
+    window.location.href = "/dashboard";
+  };
+
+  const handleResend = async () => {
+    if (resendIn > 0) return;
+    setError("");
+    const supabase = createClient();
+    const { error } = await supabase.auth.resend({ type: "signup", email });
+    if (error) {
+      setError(error.message || "Could not resend the code");
+      return;
+    }
+    setResendIn(60);
   };
 
   if (success) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white dark:bg-surface-dark relative overflow-hidden px-4">
         <div className="absolute inset-0 gradient-bg-hero" />
-        <div className="relative text-center max-w-md animate-scale-in">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl gradient-bg-primary text-white mb-6">
-            <Sparkles className="w-8 h-8" />
-          </div>
-          <h2 className="text-2xl font-bold mb-4">Check your email! 📧</h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">
-            We&apos;ve sent a confirmation link to <strong>{email}</strong>. Click the link to
-            verify your account and start learning Japanese!
-          </p>
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-2 gradient-bg-primary text-white font-semibold px-6 py-3 rounded-xl hover:opacity-90 transition-all"
+        <div className="relative w-full max-w-md animate-scale-in">
+          <AuthBrandHeader
+            linkHome={false}
+            title="Check your email 📧"
+            subtitle={
+              resumedSignup ? (
+                <>
+                  This email was already registered but never verified. We sent a new code to{" "}
+                  <strong>{email}</strong>.
+                </>
+              ) : (
+                <>
+                  We sent a 6-digit code to <strong>{email}</strong>. Enter it below to activate
+                  your account.
+                </>
+              )
+            }
+          />
+
+          <form
+            onSubmit={handleVerifyOtp}
+            className="p-8 rounded-2xl bg-white dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 shadow-xl space-y-5"
           >
-            Go to Login
-          </Link>
+            <div>
+              <label htmlFor="otp" className="block text-sm font-medium mb-2">
+                Verification code
+              </label>
+              <input
+                id="otp"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                autoFocus
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="––––––"
+                className="w-full text-center text-3xl font-bold tracking-[0.5em] py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
+              />
+            </div>
+
+            {error && (
+              <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={verifying}
+              className="w-full flex items-center justify-center gap-2 gradient-bg-primary text-white font-semibold py-3 rounded-xl hover:opacity-90 transition-all duration-300 disabled:opacity-50"
+            >
+              {verifying ? <Loader2 className="w-5 h-5 animate-spin" /> : "Verify & Continue"}
+            </button>
+
+            <div className="flex items-center justify-between text-sm">
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resendIn > 0}
+                className="text-primary-600 dark:text-primary-400 font-medium hover:underline disabled:text-gray-400 disabled:no-underline"
+              >
+                {resendIn > 0 ? `Resend in ${resendIn}s` : "Resend code"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSuccess(false);
+                  setOtp("");
+                  setError("");
+                }}
+                className="text-gray-500 dark:text-gray-400 hover:underline"
+              >
+                Use a different email
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     );
@@ -83,18 +211,10 @@ export default function SignupPage() {
       <div className="absolute bottom-20 right-20 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl" />
 
       <div className="relative w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2">
-            <div className="flex items-center justify-center w-12 h-12 rounded-2xl gradient-bg-primary text-white">
-              <BookOpen className="w-6 h-6" />
-            </div>
-            <span className="text-2xl font-bold gradient-text">JapanGoLearn</span>
-          </Link>
-          <p className="mt-3 text-gray-500 dark:text-gray-400">
-            Start your Japanese journey today — for free!
-          </p>
-        </div>
+        <AuthBrandHeader
+          title="Create Your Account"
+          subtitle="Start your Japanese journey today — for free!"
+        />
 
         {/* Form Card */}
         <div className="p-8 rounded-2xl bg-white dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 shadow-xl neon-glow animate-scale-in">
@@ -164,41 +284,10 @@ export default function SignupPage() {
 
             {/* JLPT Level Selection */}
             <div>
-              <label className="block text-sm font-medium mb-2">Your Japanese Level</label>
-              <div className="grid grid-cols-1 gap-2">
-                {jlptOptions.map((option) => (
-                  <label
-                    key={option.value}
-                    className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all duration-200 ${
-                      jlptLevel === option.value
-                        ? "border-primary-500 bg-primary-50 dark:bg-primary-900/20 ring-1 ring-primary-500"
-                        : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="jlpt"
-                      value={option.value}
-                      checked={jlptLevel === option.value}
-                      onChange={(e) => setJlptLevel(e.target.value)}
-                      className="sr-only"
-                    />
-                    <div
-                      className={`w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold ${
-                        jlptLevel === option.value
-                          ? "gradient-bg-primary text-white"
-                          : "bg-gray-100 dark:bg-gray-800 text-gray-500"
-                      }`}
-                    >
-                      {option.value}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{option.label}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{option.desc}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
+              {/* A span, not a label: the control below is a button-based listbox
+                  with its own aria-label, so there is no input to associate. */}
+              <span className="mb-2 block text-sm font-medium">Your Japanese Level</span>
+              <JlptLevelSelect value={jlptLevel} onChange={setJlptLevel} disabled={loading} />
             </div>
 
             {error && (

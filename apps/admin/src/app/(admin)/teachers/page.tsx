@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { AlertTriangle, Check, GraduationCap, Inbox, PenLine, X } from "lucide-react";
 import { requireAdmin } from "@/lib/auth";
 import { requireTeacherReview } from "@/lib/marketplace";
 
@@ -39,19 +40,25 @@ export default async function TeacherApprovalsPage({ searchParams }: PageProps) 
     .order("submitted_at", { ascending: false, nullsFirst: false });
 
   return (
-    <main className="stack">
+    <div className="stack">
       <section className="panel">
         <div className="section-heading">
-          <div>
-            <p className="eyebrow">Marketplace</p>
-            <h2>Teacher approvals</h2>
-            <p>Review teacher profiles before they can create and publish courses.</p>
+          <div className="section-heading-main">
+            <span className="section-icon">
+              <GraduationCap size={18} aria-hidden="true" />
+            </span>
+            <div style={{ minWidth: 0 }}>
+              <p className="eyebrow">Marketplace</p>
+              <h2>Teacher approvals</h2>
+              <p>Review teacher profiles before they can create and publish courses.</p>
+            </div>
           </div>
         </div>
 
         {(error || typeof query.error === "string") && (
           <div className="form-error">
-            {typeof query.error === "string" ? query.error : error?.message}
+            <AlertTriangle size={18} aria-hidden="true" />
+            <span>{typeof query.error === "string" ? query.error : error?.message}</span>
           </div>
         )}
 
@@ -97,12 +104,15 @@ export default async function TeacherApprovalsPage({ searchParams }: PageProps) 
                   </label>
                   <div className="teacher-review-actions">
                     <button className="primary-button" name="decision" value="approved">
+                      <Check size={16} aria-hidden="true" />
                       Approve teacher
                     </button>
                     <button className="secondary-button" name="decision" value="changes_requested">
+                      <PenLine size={16} aria-hidden="true" />
                       Request changes
                     </button>
                     <button className="danger-button" name="decision" value="rejected">
+                      <X size={16} aria-hidden="true" />
                       Reject
                     </button>
                   </div>
@@ -112,11 +122,12 @@ export default async function TeacherApprovalsPage({ searchParams }: PageProps) 
           </div>
         ) : (
           <div className="empty-state">
+            <Inbox aria-hidden="true" />
             <strong>No teacher applications</strong>
             <span>Submitted applications will appear here.</span>
           </div>
         )}
       </section>
-    </main>
+    </div>
   );
 }

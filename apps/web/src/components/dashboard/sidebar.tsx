@@ -12,7 +12,10 @@ import {
   User,
   BookOpen,
   BookText,
+  Bookmark,
+  Brain,
   PenLine,
+  Search,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -21,6 +24,9 @@ import { courseCatalogEnabled, teacherStudioEnabled } from "@/lib/marketplace";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+  { label: "Review", icon: Brain, href: "/dashboard/review" },
+  { label: "Search", icon: Search, href: "/dashboard/search" },
+  { label: "Saved", icon: Bookmark, href: "/dashboard/saved" },
   { label: "Courses", icon: BookOpen, href: "/courses" },
   { label: "Teach", icon: BookText, href: "/dashboard/teacher" },
   { label: "Learning Path", icon: Route, href: "/dashboard/levels" },
@@ -42,9 +48,11 @@ const navItems = [
 interface DashboardSidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  /** Items due now, shown as a badge on the Review link. */
+  dueReviews?: number;
 }
 
-export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps) {
+export function DashboardSidebar({ collapsed, onToggle, dueReviews = 0 }: DashboardSidebarProps) {
   const pathname = usePathname();
 
   return (
@@ -113,6 +121,21 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
               >
                 {item.label}
               </span>
+
+              {/* Due-review count. Collapsed, the label is hidden but the count
+                  still matters, so it becomes a dot on the icon instead. */}
+              {item.href === "/dashboard/review" && dueReviews > 0 && (
+                <span
+                  className={
+                    collapsed
+                      ? "absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary-500 ring-2 ring-white dark:ring-gray-900"
+                      : "ml-auto min-w-[20px] rounded-md bg-primary-500 px-1.5 py-0.5 text-center text-[10px] font-bold text-white"
+                  }
+                  aria-label={`${dueReviews} reviews due`}
+                >
+                  {collapsed ? "" : dueReviews > 99 ? "99+" : dueReviews}
+                </span>
+              )}
 
               {/* Premium badge */}
               {item.premium && !collapsed && (

@@ -48,6 +48,10 @@ const TYPE_CONFIG: Record<string, { emoji: string; color: string }> = {
     emoji: "🎧",
     color: "bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400",
   },
+  review: {
+    emoji: "🧠",
+    color: "bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400",
+  },
 };
 
 function timeAgo(isoDate: string): string {

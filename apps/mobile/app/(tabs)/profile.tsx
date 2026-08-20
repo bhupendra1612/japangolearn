@@ -194,7 +194,9 @@ export default function ProfileScreen() {
         style: "destructive",
         onPress: async () => {
           await signOut();
-          router.replace("/(auth)/login");
+          // app/index.tsx decides where a signed-out user belongs. Navigating
+          // straight to "(auth)" here races the <Stack.Protected> swap.
+          router.replace("/");
         },
       },
     ]);
@@ -226,7 +228,7 @@ export default function ProfileScreen() {
                     if (error) {
                       showFeedback(error.message || "Failed to delete account", true);
                     } else {
-                      router.replace("/(auth)/login");
+                      router.replace("/");
                     }
                   },
                 },
@@ -370,6 +372,28 @@ export default function ProfileScreen() {
           <Text style={[s.statValue, { color: Colors.gold[400] }]}>Lv.{xpLevel.level}</Text>
           <Text style={s.statLabel}>Player</Text>
         </View>
+      </View>
+
+      {/* Progress */}
+      <View style={s.card}>
+        <Text style={s.sectionTitle}>Progress</Text>
+
+        <TouchableOpacity
+          style={[s.actionItem, { borderBottomWidth: 0 }]}
+          onPress={() => router.push("/(tabs)/achievements")}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Trophies"
+        >
+          <View style={[s.actionIconBg, { backgroundColor: Colors.gold[400] + "20" }]}>
+            <Ionicons name="trophy-outline" size={18} color={Colors.gold[400]} />
+          </View>
+          <View style={s.actionTextWrap}>
+            <Text style={s.actionLabel}>Trophies</Text>
+            <Text style={s.actionDesc}>Achievements you have unlocked</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={Colors.dark.textMuted} />
+        </TouchableOpacity>
       </View>
 
       {/* Actions List */}

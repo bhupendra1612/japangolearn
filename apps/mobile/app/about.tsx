@@ -1,9 +1,16 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Linking,
+  Image,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { LinearGradient } from "expo-linear-gradient";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import {
   DELETE_ACCOUNT_URL,
@@ -58,9 +65,13 @@ export default function AboutScreen() {
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
         {/* App Hero Section */}
         <View style={s.heroSection}>
-          <LinearGradient colors={[Colors.primary[600], Colors.primary[800]]} style={s.logoWrapper}>
-            <Text style={s.logoEmoji}>🇯🇵</Text>
-          </LinearGradient>
+          <View style={s.logoWrapper}>
+            <Image
+              source={require("@/assets/logo.png")}
+              style={s.logoImage}
+              resizeMode="contain"
+            />
+          </View>
           <Text style={s.appName}>JapanGoLearn</Text>
           <Text style={s.versionText}>Version 1.0.0</Text>
         </View>
@@ -141,6 +152,43 @@ export default function AboutScreen() {
           ))}
         </View>
 
+        {/* KanjiVG is CC BY-SA 3.0 and its licence requires that we state our
+            use of it and link to the project. Do not remove this. */}
+        <View style={s.card}>
+          <Text style={s.sectionTitle}>Credits</Text>
+          <Text style={s.bodyText}>
+            Stroke-order data for hiragana, katakana, and kanji comes from KanjiVG by Ulrich Apel,
+            used under the Creative Commons Attribution-ShareAlike 3.0 licence.
+          </Text>
+          <TouchableOpacity
+            style={s.linkRow}
+            onPress={() => openUrl("https://kanjivg.tagaini.net")}
+            activeOpacity={0.8}
+            accessibilityRole="link"
+            accessibilityLabel="KanjiVG project website"
+          >
+            <View style={[s.iconBox, { backgroundColor: Colors.dark.surface }]}>
+              <Ionicons name="brush-outline" size={20} color={Colors.dark.textSecondary} />
+            </View>
+            <Text style={s.linkRowText}>kanjivg.tagaini.net</Text>
+            <Ionicons name="open-outline" size={16} color={Colors.dark.textMuted} />
+          </TouchableOpacity>
+          <View style={s.divider} />
+          <TouchableOpacity
+            style={s.linkRow}
+            onPress={() => openUrl("https://creativecommons.org/licenses/by-sa/3.0/")}
+            activeOpacity={0.8}
+            accessibilityRole="link"
+            accessibilityLabel="Creative Commons Attribution-ShareAlike 3.0 licence"
+          >
+            <View style={[s.iconBox, { backgroundColor: Colors.dark.surface }]}>
+              <Ionicons name="document-text-outline" size={20} color={Colors.dark.textSecondary} />
+            </View>
+            <Text style={s.linkRowText}>CC BY-SA 3.0 licence</Text>
+            <Ionicons name="open-outline" size={16} color={Colors.dark.textMuted} />
+          </TouchableOpacity>
+        </View>
+
         <Text style={s.copyright}>© 2026 JapanGoLearn. All rights reserved.</Text>
       </ScrollView>
     </View>
@@ -183,6 +231,8 @@ const s = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 24,
+    overflow: "hidden",
+    backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: Spacing.md,
@@ -192,8 +242,9 @@ const s = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
   },
-  logoEmoji: {
-    fontSize: 40,
+  logoImage: {
+    width: "100%",
+    height: "100%",
   },
   appName: {
     fontSize: FontSize["2xl"],

@@ -20,6 +20,7 @@ import { AddToListModal } from "@/components/AddToListModal";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import StrokeWriter from "@/components/StrokeWriter";
 import { useAuth } from "@/lib/auth";
+import { useAndroidBack } from "@/lib/use-android-back";
 import type { VocabularyWord } from "@japangolearn/database";
 import { createXpAttemptKey } from "@japangolearn/content";
 
@@ -118,6 +119,10 @@ export default function VocabularyScreen() {
   // Detail state
   const [selectedWord, setSelectedWord] = useState<Word | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+
+  // Detail and quiz are local state, not routes, so Android's back button would
+  // otherwise leave the screen entirely instead of returning to the list.
+  useAndroidBack(mode !== "browse", useCallback(() => setMode("browse"), []));
 
   // Custom List State
   const [showAddListModal, setShowAddListModal] = useState(false);

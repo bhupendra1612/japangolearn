@@ -19,6 +19,7 @@ import { AddToListModal } from "@/components/AddToListModal";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import StrokeWriter from "@/components/StrokeWriter";
 import { useAuth } from "@/lib/auth";
+import { useAndroidBack } from "@/lib/use-android-back";
 import type { Kana } from "@japangolearn/database";
 
 // ─── Types ───
@@ -96,6 +97,10 @@ export default function WritingScreen() {
   // Detail state
   const [selectedKana, setSelectedKana] = useState<Kana | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+
+  // Detail and quiz are local state, not routes, so Android's back button would
+  // otherwise leave the screen entirely instead of returning to the grid.
+  useAndroidBack(mode !== "grid", useCallback(() => setMode("grid"), []));
 
   // Custom List State
   const [showAddListModal, setShowAddListModal] = useState(false);

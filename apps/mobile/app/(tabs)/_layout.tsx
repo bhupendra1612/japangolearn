@@ -58,7 +58,14 @@ export default function TabLayout() {
     <View style={{ flex: 1 }} {...panResponder.panHandlers}>
       <Tabs
         screenOptions={{
-          headerShown: true,
+          // Off by default. A transparent header still renders an absolutely
+          // positioned, touch-absorbing bar across the top ~64px, so on screens
+          // that put nothing in it, it silently swallowed taps on whatever the
+          // screen drew there — which is what broke the back button on the
+          // Writing and Vocabulary detail views. Only Home and Profile put
+          // content in the header (the sidebar button); they re-enable it.
+          // Every screen already applies its own paddingTop: insets.top.
+          headerShown: false,
           headerStyle: { backgroundColor: "transparent" },
           headerTintColor: Colors.dark.text,
           headerShadowVisible: false,
@@ -89,6 +96,7 @@ export default function TabLayout() {
           options={{
             title: "Home",
             tabBarIcon: ({ color }) => <TabIcon name="home" color={color} />,
+            headerShown: true,
             headerTransparent: true,
             headerTitle: "",
             headerLeft: renderHeaderLeft,
@@ -129,9 +137,11 @@ export default function TabLayout() {
           name="writing"
           options={{
             title: "Writing",
-            tabBarIcon: ({ color }) => <TabIcon name="pencil" color={color} />,
             headerTransparent: true,
             headerTitle: "",
+            // Kept off the tab bar to hold the bar at five items. Writing is
+            // still reachable from Quick Actions on Home and from the Sidebar.
+            href: null,
           }}
         />
         <Tabs.Protected guard={!!session}>
@@ -149,6 +159,7 @@ export default function TabLayout() {
             options={{
               title: "Profile",
               tabBarIcon: ({ color }) => <TabIcon name="person-circle" color={color} />,
+              headerShown: true,
               headerTransparent: true,
               headerTitle: "",
               headerLeft: renderHeaderLeft,
@@ -158,9 +169,11 @@ export default function TabLayout() {
             name="achievements"
             options={{
               title: "Trophies",
-              tabBarIcon: ({ color }) => <TabIcon name="trophy" color={color} />,
               headerTransparent: true,
               headerTitle: "",
+              // Kept off the tab bar to hold the bar at five items. Trophies is
+              // reached from the Progress card on Profile, and from the Sidebar.
+              href: null,
             }}
           />
         </Tabs.Protected>

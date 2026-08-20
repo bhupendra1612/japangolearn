@@ -4,8 +4,9 @@ import { Session, User } from "@supabase/supabase-js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { Profile, ProfileUpdate } from "@japangolearn/database";
 import { decode } from "base64-arraybuffer";
-
-const GUEST_KEY = "@japangolearn_guest_mode";
+import { captureException } from "@/lib/monitoring";
+import { GUEST_KEY } from "@/constants/storage";
+import { DEFAULT_JLPT_LEVEL } from "@/constants/jlpt";
 
 type ProfileUpdateData = Pick<ProfileUpdate, "display_name" | "current_jlpt_level">;
 
@@ -19,8 +20,11 @@ type AuthContextType = {
   signUp: (
     email: string,
     password: string,
-    displayName: string
-  ) => Promise<{ error: any; hasSession: boolean }>;
+    displayName: string,
+    jlptLevel?: string
+  ) => Promise<{ error: any; hasSession: boolean; resumedSignup?: boolean }>;
+  verifySignupOtp: (email: string, token: string) => Promise<{ error: any }>;
+  resendSignupOtp: (email: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<{ error: any }>;
   continueAsGuest: () => Promise<void>;
@@ -39,6 +43,8 @@ const AuthContext = createContext<AuthContextType>({
   isGuest: false,
   signIn: async () => ({ error: null }),
   signUp: async () => ({ error: null, hasSession: false }),
+  verifySignupOtp: async () => ({ error: null }),
+  resendSignupOtp: async () => ({ error: null }),
   signOut: async () => {},
   deleteAccount: async () => ({ error: null }),
   continueAsGuest: async () => {},
@@ -58,13 +64,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isGuest, setIsGuest] = useState(false);
 
   const fetchProfile = async (userId: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("profiles")
       .select(
         "id, display_name, avatar_url, current_jlpt_level, xp, streak_days, onboarding_completed, role"
       )
       .eq("id", userId)
       .single();
+
+    if (error) {
+      // Without this the app silently signs in with an empty profile and every
+      // screen falls back to "Learner"/0 XP with no clue why.
+      captureException(error, { scope: "fetchProfile", userId });
+      return;
+    }
+
     if (data) setProfile(data as Profile);
   };
 
@@ -114,13 +128,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error };
   };
 
-  const signUp = async (email: string, password: string, displayName: string) => {
+  const signUp = async (
+    email: string,
+    password: string,
+    displayName: string,
+    jlptLevel: string = DEFAULT_JLPT_LEVEL
+  ) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { display_name: displayName } },
+      // private.handle_new_user() reads these off raw_user_meta_data when it
+      // creates the profile row.
+      options: { data: { display_name: displayName, current_jlpt_level: jlptLevel } },
     });
-    return { error, hasSession: !!data.session };
+
+    if (error) return { error, hasSession: false };
+
+    // Signing up an address that already has a *confirmed* account is not an
+    // error in Supabase — it returns a user with an empty identities array and
+    // sends nothing, so attackers cannot enumerate registered emails. Turn that
+    // into a normal error so the user is told to sign in instead of being sent
+    // to an OTP screen where no code will ever arrive.
+    if (data.user && (data.user.identities?.length ?? 0) === 0) {
+      return {
+        error: { message: "This email is already registered. Please sign in instead." },
+        hasSession: false,
+        resumedSignup: false,
+      };
+    }
+
+    // An account that exists but was never confirmed still has identities, and
+    // Supabase does send a fresh code for it. The only way to tell it apart
+    // from a brand new signup is that its created_at predates this request.
+    const createdAtMs = data.user?.created_at ? Date.parse(data.user.created_at) : Date.now();
+    const resumedSignup =
+      !data.session && Number.isFinite(createdAtMs) && Date.now() - createdAtMs > 10_000;
+
+    return { error, hasSession: !!data.session, resumedSignup };
+  };
+
+  // Signup confirmation uses a 6-digit code rather than a link, so the user
+  // never leaves the app. A successful verification returns a session, which
+  // onAuthStateChange picks up.
+  const verifySignupOtp = async (email: string, token: string) => {
+    const { error } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token: token.trim(),
+      type: "signup",
+    });
+    if (!error) {
+      setIsGuest(false);
+      await AsyncStorage.removeItem(GUEST_KEY);
+    }
+    return { error };
+  };
+
+  const resendSignupOtp = async (email: string) => {
+    const { error } = await supabase.auth.resend({ type: "signup", email: email.trim() });
+    return { error };
   };
 
   const signOut = async () => {
@@ -235,6 +300,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isGuest,
         signIn,
         signUp,
+        verifySignupOtp,
+        resendSignupOtp,
         signOut,
         deleteAccount,
         continueAsGuest,

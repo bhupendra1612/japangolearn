@@ -2,7 +2,6 @@ import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "reac
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useAuth } from "@/lib/auth";
 import { BorderRadius, Colors, FontSize, FontWeight, Spacing } from "@/constants/theme";
 
 type AuthPromptModalProps = {
@@ -20,12 +19,10 @@ export function AuthPromptModal({
   onClose,
   description,
 }: AuthPromptModalProps) {
-  const { isGuest, exitGuestMode } = useAuth();
-
   const continueTo = (pathname: "/(auth)/login" | "/(auth)/signup") => {
-    if (isGuest) {
-      exitGuestMode();
-    }
+    // Guest mode is intentionally left alone here. Clearing it now would fail
+    // the "(tabs)" guard and unmount this screen mid-navigation; signing in
+    // clears it anyway, and backing out keeps the guest session intact.
     onClose();
     router.push({ pathname, params: { redirectTo } } as never);
   };

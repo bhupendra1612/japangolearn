@@ -9,10 +9,12 @@ import {
   Platform,
   Animated,
   ActivityIndicator,
+  Image,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { Link, router, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/lib/auth";
-import { getSafeRedirectTo } from "@/lib/auth-navigation";
+import { getSafeRedirectTo, setPendingRedirect } from "@/lib/auth-navigation";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 
 export default function LoginScreen() {
@@ -21,6 +23,7 @@ export default function LoginScreen() {
   const redirectTo = getSafeRedirectTo(params.redirectTo);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -41,12 +44,15 @@ export default function LoginScreen() {
     setLoading(true);
     setError("");
     const { error: err } = await signIn(email, password);
-    setLoading(false);
     if (err) {
+      setLoading(false);
       setError(err.message || JSON.stringify(err));
-    } else {
-      router.replace(redirectTo as never);
+      return;
     }
+    // Hand the destination to app/index.tsx: the "(auth)" group is being
+    // unmounted right now, so navigating from here would be dropped.
+    setPendingRedirect(redirectTo);
+    router.replace("/");
   };
 
   return (
@@ -60,7 +66,11 @@ export default function LoginScreen() {
         {/* Logo & Title */}
         <View style={styles.header}>
           <View style={styles.logoContainer}>
-            <Text style={styles.logoEmoji}>🇯🇵</Text>
+            <Image
+              source={require("@/assets/logo.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
           <Text style={styles.title}>Welcome Back</Text>
           <Text style={styles.subtitle}>Sign in to continue learning Japanese</Text>
@@ -90,14 +100,31 @@ export default function LoginScreen() {
 
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="••••••••"
-              placeholderTextColor={Colors.dark.textMuted}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
+            <View style={styles.passwordWrap}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="••••••••"
+                placeholderTextColor={Colors.dark.textMuted}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword((v) => !v)}
+                style={styles.eyeBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+              >
+                <Ionicons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={20}
+                  color={Colors.dark.textMuted}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <TouchableOpacity
@@ -148,7 +175,8 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: BorderRadius.xl,
-    backgroundColor: Colors.primary[600],
+    overflow: "hidden",
+    backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: Spacing.xl,
@@ -158,8 +186,9 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 12,
   },
-  logoEmoji: {
-    fontSize: 40,
+  logoImage: {
+    width: "100%",
+    height: "100%",
   },
   title: {
     fontSize: FontSize["3xl"],
@@ -203,6 +232,25 @@ const styles = StyleSheet.create({
     color: Colors.dark.text,
     borderWidth: 1.5,
     borderColor: Colors.dark.border,
+  },
+  passwordWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.dark.card,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1.5,
+    borderColor: Colors.dark.border,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    fontSize: FontSize.base,
+    color: Colors.dark.text,
+  },
+  eyeBtn: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
   },
   button: {
     backgroundColor: Colors.primary[500],

@@ -1,0 +1,85 @@
+name: Deploy Web
+
+# Manual, from any branch.
+#
+#   gh workflow run "Deploy Web" --ref <branch>
+#
+# Exists because the web app cannot be built on Windows: OpenNext writes an
+# invalid absolute path for the middleware manifest, so the worker builds fine
+# and then throws `Dynamic require of "/.next/server/middleware-manifest.json"`
+# on every server-rendered route. Building here on Linux avoids that entirely.
+#
+# Unlike Cloudflare Production, this does not require the commit to be on main
+# or to have passed a staging run first, so a branch can be shipped without a
+# full release. It is dispatch-only, so nothing deploys without being asked.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-web-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      NEXT_PUBLIC_SITE_URL: https://japangolearn.com
+      NEXT_PUBLIC_APP_ENV: production
+      NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm --filter @japangolearn/web typecheck
+
+      - name: Build the worker
+        run: pnpm --filter @japangolearn/web build:cloudflare
+
+      - name: Deploy to Cloudflare
+        run: pnpm --filter @japangolearn/web exec opennextjs-cloudflare deploy
+
+      # A broken worker still deploys successfully and only fails once it serves
+      # a request, so the deploy step passing proves nothing on its own. These
+      # are server-rendered routes, which is what breaks first — /delete-account
+      # in particular is required by Google Play and must never regress.
+      - name: Smoke test the live site
+        run: |
+          set -u
+          failed=0
+          for path in / /privacy /delete-account /terms /about; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' \
+              --retry 5 --retry-delay 5 --retry-all-errors --max-time 30 \
+              "https://japangolearn.com${path}?ci=${GITHUB_RUN_ID}")
+            if [ "$code" = "200" ]; then
+              echo "ok    $code  $path"
+            else
+              echo "FAIL  $code  $path"
+              failed=1
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then
+            echo
+            echo "The deploy is live but serving errors. Roll back with:"
+            echo "  wrangler rollback --name japangolearn-web"
+            exit 1
+          fi

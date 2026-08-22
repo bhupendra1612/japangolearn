@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "EasyJapanese",
-    "slug": "japaneseapp",
+    "name": "JapanGoLearn",
+    "slug": "japangolearn",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "japaneseapp",
+    "scheme": "japangolearn",
     "userInterfaceStyle": "automatic",
     "experiments": {
       "reactCompiler": true
@@ -16,8 +16,11 @@
       "backgroundColor": "#0F0B1E"
     },
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.easyjapanese.app"
+      "supportsTablet": false,
+      "bundleIdentifier": "com.japangolearn.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +28,15 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.easyjapanese.app"
+      "package": "com.japangolearn.app",
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.CAMERA"
+      ],
+      "permissions": ["android.permission.MODIFY_AUDIO_SETTINGS"]
     },
     "web": {
       "bundler": "metro",
@@ -35,22 +46,28 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-sqlite",
       "@sentry/react-native/expo",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "JapanGoLearn uses your photo library so you can choose a profile picture.",
+          "cameraPermission": false
+        }
+      ]
     ],
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "a06a0371-e33d-4186-aeb4-49e288ad335b"
+        "projectId": "292004a3-77c6-4d6b-80f7-59cb1fab1d57"
       }
     },
-    "owner": "robinsingh24",
     "runtimeVersion": {
       "policy": "appVersion"
     },
+    "owner": "robinsingh24",
     "updates": {
-      "url": "https://u.expo.dev/a06a0371-e33d-4186-aeb4-49e288ad335b"
+      "url": "https://u.expo.dev/292004a3-77c6-4d6b-80f7-59cb1fab1d57"
     }
   }
 }

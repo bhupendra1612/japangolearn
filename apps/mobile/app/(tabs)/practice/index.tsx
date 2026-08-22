@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,8 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { useFocusEffect } from "@react-navigation/native";
+import { LoadError } from "@/components/LoadError";
+import { captureException } from "@/lib/monitoring";
 import type { PracticeList } from "@japangolearn/database";
 
 export default function PracticeHubScreen() {
@@ -26,48 +28,50 @@ export default function PracticeHubScreen() {
   const [lists, setLists] = useState<PracticeList[]>([]);
   const [streak, setStreak] = useState({ current: 0, longest: 0 });
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (session?.user) {
-        loadData();
-      }
-    }, [session])
-  );
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    const userId = session?.user.id;
+    if (!userId) return;
     setLoading(true);
-    await Promise.all([loadLists(), loadStreak()]);
-    setLoading(false);
-  };
+    setLoadFailed(false);
 
-  const loadStreak = async () => {
-    const { data } = await supabase
+    // maybeSingle, not single: a user who has never studied has no streak row,
+    // and single() reports that absence as an error. This way a missing row is
+    // just null and anything left really is a failure worth reporting.
+    const { data, error: streakError } = await supabase
       .from("user_streaks")
       .select("current_streak, longest_streak")
-      .eq("user_id", session!.user.id)
-      .single();
+      .eq("user_id", userId)
+      .maybeSingle();
 
-    if (data) {
+    if (streakError) {
+      captureException(streakError, { screen: "practice", query: "user_streaks" });
+    } else if (data) {
       setStreak({ current: data.current_streak, longest: data.longest_streak });
     }
-  };
 
-  const loadLists = async () => {
     // 1. Get lists
-    let { data: listsData } = await supabase
+    let { data: listsData, error: listsError } = await supabase
       .from("practice_lists")
       .select("id, title, is_smart_list")
-      .eq("user_id", session!.user.id)
+      .eq("user_id", userId)
       .order("is_smart_list", { ascending: false })
       .order("created_at", { ascending: false });
+
+    if (listsError) {
+      setLoadFailed(true);
+      captureException(listsError, { screen: "practice" });
+      setLoading(false);
+      return;
+    }
 
     if (!listsData || listsData.length === 0) {
       // Auto-create Needs Practice list if it doesn't exist
       const { data: smartList } = await supabase
         .from("practice_lists")
         .insert({
-          user_id: session!.user.id,
+          user_id: userId,
           title: "Needs Practice",
           is_smart_list: true,
         })
@@ -91,7 +95,14 @@ export default function PracticeHubScreen() {
       );
       setLists(listsWithCounts);
     }
-  };
+    setLoading(false);
+  }, [session?.user.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadData();
+    }, [loadData])
+  );
 
   const handleDeleteList = (listId: string, isSmartList: boolean) => {
     if (isSmartList) {
@@ -160,6 +171,11 @@ export default function PracticeHubScreen() {
           <View style={s.centerBox}>
             <ActivityIndicator size="large" color={Colors.primary[400]} />
           </View>
+        ) : loadFailed ? (
+          <LoadError
+            onRetry={() => void loadData()}
+            message="We could not load your practice lists."
+          />
         ) : (
           <FlatList
             data={lists}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -38,19 +38,15 @@ export function AddToListModal({
   const [newListTitle, setNewListTitle] = useState("");
   const [savingToList, setSavingToList] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (visible && session?.user) {
-      loadLists();
-    }
-  }, [visible, session]);
-
-  const loadLists = async () => {
+  const loadLists = useCallback(async () => {
+    const userId = session?.user.id;
+    if (!userId) return;
     setLoading(true);
     // Fetch user's lists, ensuring the smart list exists
-    let { data, error } = await supabase
+    let { data } = await supabase
       .from("practice_lists")
       .select("id, title, is_smart_list")
-      .eq("user_id", session!.user.id)
+      .eq("user_id", userId)
       .order("is_smart_list", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -59,7 +55,7 @@ export function AddToListModal({
       const { data: smartList } = await supabase
         .from("practice_lists")
         .insert({
-          user_id: session!.user.id,
+          user_id: userId,
           title: "Needs Practice",
           is_smart_list: true,
         })
@@ -73,7 +69,13 @@ export function AddToListModal({
 
     if (data) setLists(data);
     setLoading(false);
-  };
+  }, [session?.user.id]);
+
+  useEffect(() => {
+    if (visible) {
+      void loadLists();
+    }
+  }, [visible, loadLists]);
 
   const handleCreateList = async () => {
     if (!newListTitle.trim() || !session?.user) return;

@@ -14,6 +14,11 @@ Scope: all application tables in `public`, callable functions in `public` and
 | Daily goals/activity/XP/attempts/events/mastery/quests | None                | Select own rows                                                  | Select all rows                       | Server-owned; clients have no insert/update/delete grants |
 | User achievements and level/kana/kanji progress        | None                | Select own rows                                                  | Select all rows                       | Server-owned in this phase                                |
 | Practice lists and items                               | None                | Owner CRUD                                                       | Select through ownership/admin policy | Owner IDs are checked by RLS                              |
+| Teacher profiles and roles                             | Approved profiles   | Own application fields; no direct role/status grants             | Review through guarded RPC            | Approval and role changes are audited                     |
+| Published courses, sections, and preview lessons       | Select              | Entitled/free lessons; approved teacher owns drafts              | Review/select through RLS             | Teacher ownership and approval are checked                |
+| Video assets                                           | None                | Approved teacher owns course assets                              | Select through RLS                    | Bunny API key remains server-only                         |
+| Orders and entitlements                                | None                | Select own records                                               | Select through RLS                    | Client roles cannot finalize orders or grant access       |
+| Marketplace audit log                                  | None                | None                                                             | Select                                | Writes occur only inside guarded functions                |
 
 Every public application table has RLS enabled. User-keyed policy columns and
 foreign keys have supporting indexes. Policies use `(select auth.uid())` and the
@@ -27,6 +32,17 @@ evaluation.
   `search_path = ''`; neither trigger function is executable by API roles.
 - `private.is_admin()` is `SECURITY DEFINER`, has `search_path = ''`, and is
   executable only by authenticated and service roles for RLS evaluation.
+- `private.has_role()`, `private.is_approved_teacher()`, and
+  `private.can_access_course()` are fixed-search-path authorization helpers used by
+  marketplace RLS.
+- `public.submit_teacher_application()` and
+  `public.review_teacher_application()` enforce actor identity and reviewer roles,
+  and record review actions in the marketplace audit log.
+- `public.enroll_free_course()` is idempotent by user and course.
+- `public.create_course_order()` snapshots the published course price and uses a
+  unique idempotency key.
+- `public.fulfill_course_order()` is executable only by `service_role` and grants a
+  paid entitlement atomically with order finalization.
 - `public.award_xp()` is `SECURITY DEFINER`, has `search_path = ''`, validates the
   authenticated user and score, applies a daily cap, and is idempotent by user and
   attempt key.
@@ -53,8 +69,8 @@ old `avatars/<user-id>/...` layout for compatibility.
 - a public table does not have RLS enabled;
 - a `SECURITY DEFINER` function lacks an explicit search path;
 - any `SECURITY DEFINER` function is executable by `PUBLIC` or `anon`;
-- an API role can write to a server-owned attempt, event, XP, mastery, quest, or
-  compatibility-projection table; or
+- an API role can write to a server-owned attempt, event, XP, mastery, quest,
+  role, order, entitlement, audit, or compatibility-projection table; or
 - any required avatar Storage policy is absent.
 
 The audit runs after a clean local database reset in CI. Production should apply the

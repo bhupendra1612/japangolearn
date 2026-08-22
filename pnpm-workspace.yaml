@@ -2,6 +2,17 @@ packages:
   - "apps/*"
   - "packages/*"
 
+# Flat, npm-style node_modules with no symlinks.
+#
+# Required by the OpenNext Cloudflare build: Next's standalone output copies the
+# traced server bundle, and esbuild must then resolve next's own dependencies
+# (styled-jsx, @swc/helpers) by walking up from the copied tree. Under pnpm's
+# default isolated linker those live only inside .pnpm/ and the bundle fails.
+#
+# This was previously set as `node-linker=hoisted` in .npmrc, which pnpm 10+ no
+# longer reads — it must live here.
+nodeLinker: hoisted
+
 allowBuilds:
   "@sentry/cli": true
   esbuild: true
@@ -21,6 +32,13 @@ minimumReleaseAgeExclude:
   - "@supabase/realtime-js@2.110.7"
   - "@supabase/storage-js@2.110.7"
   - "@supabase/supabase-js@2.110.7"
+  - "@cloudflare/workers-types@5.20260722.1"
+  - '@expo/cli@54.0.27'
+  - expo-constants@18.0.14
+  - expo-file-system@19.0.24
+  - expo-modules-autolinking@3.0.27
+  - expo@54.0.37
+  - expo-updates@29.0.20
 
 onlyBuiltDependencies:
   - "@sentry/cli"

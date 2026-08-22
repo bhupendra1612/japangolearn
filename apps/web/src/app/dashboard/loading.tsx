@@ -5,6 +5,9 @@ export default function DashboardLoading() {
         {/* Hero skeleton */}
         <div className="h-48 rounded-2xl bg-gray-200 dark:bg-gray-700/50" />
 
+        {/* Review card */}
+        <div className="h-24 rounded-2xl bg-gray-200 dark:bg-gray-700/50" />
+
         {/* Stats row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (

@@ -1,0 +1,83 @@
+name: Cloudflare Staging
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-staging
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    uses: ./.github/workflows/phase-zero-verify.yml
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      NEXT_PUBLIC_APP_ENV: staging
+      NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
+      APP_ENV: staging
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Reject production Supabase configuration
+        run: pnpm env:validate
+      - name: Configure API staging secrets
+        env:
+          API_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          API_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          jq -n \
+            --arg url "$API_SUPABASE_URL" \
+            --arg key "$API_SUPABASE_PUBLISHABLE_KEY" \
+            '{SUPABASE_URL: $url, SUPABASE_PUBLISHABLE_KEY: $key}' \
+            | pnpm --filter @japangolearn/api exec wrangler secret bulk --env staging
+      - name: Deploy staging web Worker
+        env:
+          NEXT_PUBLIC_SITE_URL: ${{ vars.WEB_URL }}
+        run: pnpm --filter @japangolearn/web deploy:staging
+      - name: Deploy staging admin Worker
+        env:
+          NEXT_PUBLIC_SITE_URL: ${{ vars.ADMIN_URL }}
+        run: pnpm --filter @japangolearn/admin deploy:staging
+      - name: Deploy staging API Worker
+        run: pnpm --filter @japangolearn/api deploy:staging
+
+  smoke-test:
+    needs: deploy
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Verify configured staging URLs
+        env:
+          WEB_URL: ${{ vars.WEB_URL }}
+          ADMIN_URL: ${{ vars.ADMIN_URL }}
+          API_URL: ${{ vars.API_URL }}
+        run: |
+          test -n "$WEB_URL"
+          test -n "$ADMIN_URL"
+          test -n "$API_URL"
+          curl --fail --retry 4 --retry-all-errors "$WEB_URL"
+          curl --fail --retry 4 --retry-all-errors "$ADMIN_URL/login"
+          curl --fail --retry 4 --retry-all-errors "$API_URL/api/v1/health"

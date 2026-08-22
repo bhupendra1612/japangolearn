@@ -6,6 +6,7 @@ import { DashboardTopBar } from "@/components/dashboard/topbar";
 import { BottomNav } from "@/components/dashboard/bottom-nav";
 import { MobileSidebar } from "@/components/dashboard/mobile-sidebar";
 import { ToastProvider } from "@/components/ui/toast-provider";
+import type { DashboardNotification } from "@/lib/insights";
 
 interface DashboardShellProps {
   children: React.ReactNode;
@@ -13,6 +14,9 @@ interface DashboardShellProps {
   xp: number;
   streak: number;
   jlptLevel: string;
+  /** Items due now; badges the Review entry in both navigations. */
+  dueReviews?: number;
+  notifications?: DashboardNotification[];
 }
 
 const SIDEBAR_KEY = "ej_sidebar_collapsed";
@@ -23,6 +27,8 @@ export function DashboardShell({
   xp,
   streak,
   jlptLevel,
+  dueReviews = 0,
+  notifications = [],
 }: DashboardShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -43,7 +49,7 @@ export function DashboardShell({
     <ToastProvider>
       <div className="flex h-screen bg-slate-100 dark:bg-gray-950 overflow-hidden">
         {/* Desktop Sidebar */}
-        <DashboardSidebar collapsed={collapsed} onToggle={handleToggle} />
+        <DashboardSidebar collapsed={collapsed} onToggle={handleToggle} dueReviews={dueReviews} />
 
         {/* Mobile Sidebar Drawer */}
         <MobileSidebar open={mobileOpen} onClose={() => setMobileOpen(false)} />
@@ -57,6 +63,7 @@ export function DashboardShell({
             jlptLevel={jlptLevel}
             onMobileMenuToggle={() => setMobileOpen((o) => !o)}
             mobileMenuOpen={mobileOpen}
+            notifications={notifications}
           />
 
           {/* Scrollable content */}
@@ -64,7 +71,7 @@ export function DashboardShell({
         </div>
 
         {/* Mobile Bottom Navigation */}
-        <BottomNav />
+        <BottomNav dueReviews={dueReviews} />
       </div>
     </ToastProvider>
   );

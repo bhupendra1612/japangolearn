@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   ScrollView,
   Animated,
-  Dimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,6 +20,13 @@ import { AddToListModal } from "@/components/AddToListModal";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import StrokeWriter from "@/components/StrokeWriter";
 import { useAuth } from "@/lib/auth";
+import { useAndroidBack } from "@/lib/use-android-back";
+import { CONTENT_JLPT_LEVEL } from "@/constants/jlpt";
+import { LoadError } from "@/components/LoadError";
+import { captureException } from "@/lib/monitoring";
+import { readCache, writeCache } from "@/lib/offline-cache";
+import { isOfflineError } from "@/lib/connectivity";
+import { OfflineNotice } from "@/components/OfflineNotice";
 import type { VocabularyWord } from "@japangolearn/database";
 import { createXpAttemptKey } from "@japangolearn/content";
 
@@ -29,9 +35,9 @@ type Word = VocabularyWord;
 
 type ViewMode = "browse" | "detail" | "quiz";
 
-// ─── Constants ───
-const { width: SCREEN_W } = Dimensions.get("window");
+const VOCAB_CACHE_KEY = "vocabulary-n5";
 
+// ─── Constants ───
 const CATEGORY_ICONS: Record<string, string> = {
   Verbs: "🏃",
   "i-Adjectives": "✨",
@@ -110,6 +116,9 @@ export default function VocabularyScreen() {
   const { session } = useAuth();
   const [words, setWords] = useState<Word[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const [servedFrom, setServedFrom] = useState<number | null>(null);
   const [mode, setMode] = useState<ViewMode>("browse");
 
   // Browse state
@@ -121,6 +130,13 @@ export default function VocabularyScreen() {
   // Detail state
   const [selectedWord, setSelectedWord] = useState<Word | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+
+  // Detail and quiz are local state, not routes, so Android's back button would
+  // otherwise leave the screen entirely instead of returning to the list.
+  useAndroidBack(
+    mode !== "browse",
+    useCallback(() => setMode("browse"), [])
+  );
 
   // Custom List State
   const [showAddListModal, setShowAddListModal] = useState(false);
@@ -140,21 +156,41 @@ export default function VocabularyScreen() {
   const cardAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    loadVocabulary();
-  }, []);
-
-  const loadVocabulary = async () => {
+  const loadVocabulary = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    setLoadFailed(false);
+    const { data, error } = await supabase
       .from("vocabulary")
       .select("id, kanji, hiragana, romaji, romaji_hindi, english, topic, jlpt_level, icon")
-      .eq("jlpt_level", "N5")
+      .eq("jlpt_level", CONTENT_JLPT_LEVEL)
       .order("topic")
       .order("hiragana");
-    if (data) setWords(data);
+
+    if (!error && data) {
+      setWords(data);
+      setServedFrom(null);
+      void writeCache(VOCAB_CACHE_KEY, data);
+      setLoading(false);
+      return;
+    }
+
+    captureException(error, { screen: "vocabulary" });
+    setOffline(isOfflineError(error));
+
+    // Fall back to the last successful load rather than showing nothing.
+    const cached = await readCache<Word[]>(VOCAB_CACHE_KEY);
+    if (cached) {
+      setWords(cached.data);
+      setServedFrom(cached.savedAt);
+    } else {
+      setLoadFailed(true);
+    }
     setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadVocabulary();
+  }, [loadVocabulary]);
 
   // ─── Derived Data ───
   const categories = useMemo(() => {
@@ -272,6 +308,24 @@ export default function VocabularyScreen() {
   );
 
   // ─── Quiz Logic ───
+  const setupQuizQuestion = useCallback(
+    (pool: Word[], idx: number) => {
+      if (idx >= pool.length) {
+        setQuizDone(true);
+        return;
+      }
+      const target = pool[idx];
+      const others = words.filter((word) => word.id !== target.id);
+      const randomOthers = others.sort(() => Math.random() - 0.5).slice(0, 3);
+      const options = [...randomOthers.map((word) => word.english), target.english].sort(
+        () => Math.random() - 0.5
+      );
+      setQuizOptions(options);
+      setQuizAnswer(null);
+    },
+    [words]
+  );
+
   const startQuiz = useCallback(() => {
     const pool = filtered.length >= 4 ? filtered : words;
     if (pool.length < 4) return;
@@ -286,22 +340,7 @@ export default function VocabularyScreen() {
     setMode("quiz");
     fadeAnim.setValue(0);
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-  }, [filtered, words, fadeAnim]);
-
-  const setupQuizQuestion = (pool: Word[], idx: number) => {
-    if (idx >= pool.length) {
-      setQuizDone(true);
-      return;
-    }
-    const target = pool[idx];
-    const others = words.filter((w) => w.id !== target.id);
-    const randomOthers = others.sort(() => Math.random() - 0.5).slice(0, 3);
-    const opts = [...randomOthers.map((w) => w.english), target.english].sort(
-      () => Math.random() - 0.5
-    );
-    setQuizOptions(opts);
-    setQuizAnswer(null);
-  };
+  }, [filtered, words, fadeAnim, setupQuizQuestion]);
 
   const handleQuizAnswer = useCallback(
     (answer: string) => {
@@ -321,14 +360,12 @@ export default function VocabularyScreen() {
         if (next >= quizPool.length) {
           const finalCorrect = quizScore.correct + (correct ? 1 : 0);
           if (session) {
-            supabase
-              .rpc("award_xp", {
-                p_activity_type: "vocabulary_quiz",
-                p_correct_answers: finalCorrect,
-                p_total_questions: quizPool.length,
-                p_attempt_key: quizAttemptKey,
-              })
-              .then();
+            void supabase.rpc("award_xp", {
+              p_activity_type: "vocabulary_quiz",
+              p_correct_answers: finalCorrect,
+              p_total_questions: quizPool.length,
+              p_attempt_key: quizAttemptKey,
+            });
           }
           setQuizDone(true);
         } else {
@@ -336,7 +373,16 @@ export default function VocabularyScreen() {
         }
       }, 1200);
     },
-    [quizAnswer, quizPool, quizIndex, quizAttemptKey, session, speakWord]
+    [
+      quizAnswer,
+      quizPool,
+      quizIndex,
+      quizAttemptKey,
+      quizScore.correct,
+      session,
+      speakWord,
+      setupQuizQuestion,
+    ]
   );
 
   // ═══════════════════ BROWSE MODE ═══════════════════
@@ -437,12 +483,22 @@ export default function VocabularyScreen() {
         words{selectedCategory !== "All" ? ` · ${selectedCategory}` : ""}
       </Text>
 
+      {servedFrom !== null && (
+        <OfflineNotice savedAt={servedFrom} onRetry={() => void loadVocabulary()} />
+      )}
+
       {/* Sectioned word list */}
       {loading ? (
         <View style={s.centerBox}>
           <ActivityIndicator size="large" color={Colors.primary[500]} />
           <Text style={s.loadingText}>Loading N5 Vocabulary...</Text>
         </View>
+      ) : loadFailed ? (
+        <LoadError
+          onRetry={() => void loadVocabulary()}
+          offline={offline}
+          message="We could not load the vocabulary."
+        />
       ) : (
         <FlatList
           data={sectionedData}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -13,11 +13,19 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
+import { CONTENT_JLPT_LEVEL } from "@/constants/jlpt";
+import { LoadError } from "@/components/LoadError";
+import { captureException } from "@/lib/monitoring";
+import { readCache, writeCache } from "@/lib/offline-cache";
+import { isOfflineError } from "@/lib/connectivity";
+import { OfflineNotice } from "@/components/OfflineNotice";
 import type { Json } from "@japangolearn/database";
 
 if (Platform.OS === "android") {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
+
+const GRAMMAR_CACHE_KEY = "grammar-n5";
 
 type Example = { japanese: string; romaji: string; english: string };
 type Pattern = {
@@ -56,24 +64,46 @@ export default function GrammarScreen() {
   const [patterns, setPatterns] = useState<Pattern[]>([]);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const [servedFrom, setServedFrom] = useState<number | null>(null);
 
-  useEffect(() => {
-    fetchPatterns();
-  }, []);
-
-  const fetchPatterns = async () => {
-    const { data } = await supabase
+  const fetchPatterns = useCallback(async () => {
+    setLoading(true);
+    setLoadFailed(false);
+    const { data, error } = await supabase
       .from("grammar_patterns")
       .select("*")
-      .eq("jlpt_level", "N5")
+      .eq("jlpt_level", CONTENT_JLPT_LEVEL)
       .order("order_index");
-    if (data) {
-      setPatterns(
-        data.map((pattern) => ({ ...pattern, examples: normalizeExamples(pattern.examples) }))
-      );
+    if (!error && data) {
+      const normalized = data.map((pattern) => ({
+        ...pattern,
+        examples: normalizeExamples(pattern.examples),
+      }));
+      setPatterns(normalized);
+      setServedFrom(null);
+      void writeCache(GRAMMAR_CACHE_KEY, normalized);
+      setLoading(false);
+      return;
+    }
+
+    captureException(error, { screen: "grammar" });
+    setOffline(isOfflineError(error));
+
+    const cached = await readCache<Pattern[]>(GRAMMAR_CACHE_KEY);
+    if (cached) {
+      setPatterns(cached.data);
+      setServedFrom(cached.savedAt);
+    } else {
+      setLoadFailed(true);
     }
     setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    void fetchPatterns();
+  }, [fetchPatterns]);
 
   const toggleExpand = (id: number) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -165,6 +195,10 @@ export default function GrammarScreen() {
         <Text style={styles.subtitle}>{patterns.length} JLPT N5 patterns</Text>
       </View>
 
+      {servedFrom !== null && (
+        <OfflineNotice savedAt={servedFrom} onRetry={() => void fetchPatterns()} />
+      )}
+
       <FlatList
         data={patterns}
         keyExtractor={(item) => item.id.toString()}
@@ -172,7 +206,13 @@ export default function GrammarScreen() {
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          loading ? null : (
+          loading ? null : loadFailed ? (
+            <LoadError
+              onRetry={() => void fetchPatterns()}
+              offline={offline}
+              message="We could not load the grammar patterns."
+            />
+          ) : (
             <View style={styles.empty}>
               <Text style={styles.emptyEmoji}>📚</Text>
               <Text style={styles.emptyText}>No grammar patterns found</Text>

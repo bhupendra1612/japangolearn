@@ -1,8 +1,7 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
   Animated,
   RefreshControl,
@@ -15,6 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { captureException } from "@/lib/monitoring";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import { getXpLevelProgress } from "@japangolearn/content";
@@ -87,12 +87,7 @@ export default function DashboardHome() {
   const [weekActivity, setWeekActivity] = useState<Record<string, number>>({});
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!user) return;
     const today = new Date().toISOString().split("T")[0];
     const weekAgo = new Date();
@@ -119,6 +114,13 @@ export default function DashboardHome() {
         .gte("created_at", weekAgo.toISOString()),
     ]);
 
+    // Home still renders without this data — the greeting, daily kanji and
+    // quick actions do not depend on it — so a failure degrades to zeros rather
+    // than an error screen. It must still be reported, or a broken dashboard
+    // looks like a user with no activity.
+    const failure = [goalRes, actRes, achieveRes, weekRes].find((result) => result.error)?.error;
+    if (failure) captureException(failure, { screen: "home" });
+
     if (goalRes.data) setDailyGoal(goalRes.data);
     if (actRes.data) setActivities(actRes.data);
     if (achieveRes.data) setAchievementCount(achieveRes.data.length);
@@ -131,7 +133,12 @@ export default function DashboardHome() {
       });
       setWeekActivity(map);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
+    void fetchData();
+  }, [fadeAnim, fetchData]);
 
   const onRefresh = async () => {
     setRefreshing(true);

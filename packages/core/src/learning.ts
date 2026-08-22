@@ -3,9 +3,79 @@ export const XP_PER_CORRECT = {
   grammar_quiz: 5,
   writing_quiz: 5,
   practice_quiz: 10,
+  /* Reviews pay less than fresh practice so a large due queue cannot be farmed. */
+  review_session: 3,
 } as const;
 
 export type QuizActivityType = keyof typeof XP_PER_CORRECT;
+
+/** Content families that carry an independent mastery record. */
+export const MASTERY_ITEM_TYPES = ["vocabulary", "kana", "kanji", "grammar"] as const;
+
+export type MasteryItemType = (typeof MASTERY_ITEM_TYPES)[number];
+
+/**
+ * One graded question, sent to `award_xp` alongside the aggregate score. This is
+ * the signal that drives `learning_attempt_answers` and the spaced-repetition
+ * schedule in `mastery_records` — without it the server only learns "7 of 10"
+ * and can never tell which items a learner is failing.
+ */
+export type GradedAnswer = {
+  itemType: MasteryItemType;
+  itemId: string;
+  isCorrect: boolean;
+  prompt?: string;
+  answer?: string;
+  correctAnswer?: string;
+  responseMs?: number;
+};
+
+/** Wire shape the database function expects (snake_case, JSON-safe). */
+export type GradedAnswerPayload = {
+  item_type: MasteryItemType;
+  item_id: string;
+  is_correct: boolean;
+  prompt?: string;
+  answer?: string;
+  correct_answer?: string;
+  response_ms?: number;
+};
+
+const MAX_TEXT = 400;
+
+function trim(value: string | undefined) {
+  if (!value) return undefined;
+  const clean = value.trim();
+  return clean.length === 0 ? undefined : clean.slice(0, MAX_TEXT);
+}
+
+/**
+ * Drops entries the database would reject anyway, so one malformed question
+ * cannot cost a learner their finished quiz.
+ */
+export function toGradedAnswerPayload(answers: GradedAnswer[]): GradedAnswerPayload[] {
+  return answers
+    .filter(
+      (entry) =>
+        MASTERY_ITEM_TYPES.includes(entry.itemType) &&
+        typeof entry.itemId === "string" &&
+        entry.itemId.length > 0 &&
+        entry.itemId.length <= 64 &&
+        typeof entry.isCorrect === "boolean"
+    )
+    .map((entry) => ({
+      item_type: entry.itemType,
+      item_id: entry.itemId,
+      is_correct: entry.isCorrect,
+      prompt: trim(entry.prompt),
+      answer: trim(entry.answer),
+      correct_answer: trim(entry.correctAnswer),
+      response_ms:
+        Number.isFinite(entry.responseMs) && (entry.responseMs as number) >= 0
+          ? Math.min(Math.round(entry.responseMs as number), 3_600_000)
+          : undefined,
+    }));
+}
 
 export type QuizScore = {
   correctAnswers: number;

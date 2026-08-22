@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -45,15 +45,7 @@ export default function PracticeListScreen() {
   const [items, setItems] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (session?.user && id) {
-        loadData();
-      }
-    }, [session, id])
-  );
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
 
     // 1. Load list details
@@ -164,7 +156,15 @@ export default function PracticeListScreen() {
     }
 
     setLoading(false);
-  };
+  }, [id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (session?.user && id) {
+        void loadData();
+      }
+    }, [session?.user, id, loadData])
+  );
 
   const handleRemoveItem = (itemId: string) => {
     Alert.alert("Remove Item", "Remove this item from the list?", [

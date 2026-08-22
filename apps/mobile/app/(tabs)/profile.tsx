@@ -20,27 +20,44 @@ import { router } from "expo-router";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getXpLevelProgress } from "@japangolearn/content";
+import { JLPT_SIGNUP_LEVELS } from "@/constants/jlpt";
 
 const AVATAR_SIZE = 100;
 
-const JLPT_LEVELS = [
-  { value: "N5", label: "N5", desc: "Beginner" },
-  { value: "N4", label: "N4", desc: "Elementary" },
-  { value: "N3", label: "N3", desc: "Intermediate" },
-  { value: "N2", label: "N2", desc: "Advanced" },
-  { value: "N1", label: "N1", desc: "Expert" },
-] as const;
+/** Short blurbs, because these render in narrow buttons rather than a list. */
+const LEVEL_BLURB: Record<string, string> = {
+  N5: "Beginner",
+  N4: "Elementary",
+  N3: "Intermediate",
+  N2: "Upper-Intermediate",
+  N1: "Advanced",
+};
+
+/**
+ * Derived from the shared list so availability has one source of truth. This
+ * was a third hand-maintained copy of the levels, and it had already drifted —
+ * it called N2 "Advanced" while the rest of the product calls it
+ * Upper-Intermediate.
+ */
+const JLPT_LEVELS = JLPT_SIGNUP_LEVELS.map((level) => ({
+  value: level.value,
+  label: level.value,
+  desc: LEVEL_BLURB[level.value] ?? level.desc,
+  available: level.available,
+}));
 
 type Section = "view" | "edit-profile" | "change-password";
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { user, profile, signOut, updateProfile, updatePassword, uploadAvatar } = useAuth();
+  const { user, profile, signOut, deleteAccount, updateProfile, updatePassword, uploadAvatar } =
+    useAuth();
 
   // UI state
   const [activeSection, setActiveSection] = useState<Section>("view");
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -192,10 +209,50 @@ export default function ProfileScreen() {
         style: "destructive",
         onPress: async () => {
           await signOut();
-          router.replace("/(auth)/login");
+          // app/index.tsx decides where a signed-out user belongs. Navigating
+          // straight to "(auth)" here races the <Stack.Protected> swap.
+          router.replace("/");
         },
       },
     ]);
+  };
+
+  // --- Delete account ---
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete Account",
+      "This permanently deletes your account, learning progress, and personal data. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Continue",
+          style: "destructive",
+          onPress: () => {
+            Alert.alert(
+              "Are you absolutely sure?",
+              "Your account and data will be permanently deleted right now.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete Forever",
+                  style: "destructive",
+                  onPress: async () => {
+                    setDeletingAccount(true);
+                    const { error } = await deleteAccount();
+                    setDeletingAccount(false);
+                    if (error) {
+                      showFeedback(error.message || "Failed to delete account", true);
+                    } else {
+                      router.replace("/");
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
   };
 
   // =================== RENDER ===================
@@ -332,6 +389,28 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+      {/* Progress */}
+      <View style={s.card}>
+        <Text style={s.sectionTitle}>Progress</Text>
+
+        <TouchableOpacity
+          style={[s.actionItem, { borderBottomWidth: 0 }]}
+          onPress={() => router.push("/(tabs)/achievements")}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Trophies"
+        >
+          <View style={[s.actionIconBg, { backgroundColor: Colors.gold[400] + "20" }]}>
+            <Ionicons name="trophy-outline" size={18} color={Colors.gold[400]} />
+          </View>
+          <View style={s.actionTextWrap}>
+            <Text style={s.actionLabel}>Trophies</Text>
+            <Text style={s.actionDesc}>Achievements you have unlocked</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={Colors.dark.textMuted} />
+        </TouchableOpacity>
+      </View>
+
       {/* Actions List */}
       <View style={s.card}>
         <Text style={s.sectionTitle}>Account</Text>
@@ -447,6 +526,20 @@ export default function ProfileScreen() {
         <Text style={s.signOutText}>Sign Out</Text>
       </TouchableOpacity>
 
+      {/* Delete Account */}
+      <TouchableOpacity
+        style={s.deleteAccountBtn}
+        onPress={handleDeleteAccount}
+        activeOpacity={0.7}
+        disabled={deletingAccount}
+      >
+        {deletingAccount ? (
+          <ActivityIndicator color={Colors.dark.textMuted} size="small" />
+        ) : (
+          <Text style={s.deleteAccountText}>Delete Account</Text>
+        )}
+      </TouchableOpacity>
+
       <Text style={s.footer}>{"一歩一歩、前へ進もう\nStep by step, move forward"}</Text>
     </>
   );
@@ -482,21 +575,37 @@ export default function ProfileScreen() {
         {/* JLPT Level Selector */}
         <View style={s.fieldGroup}>
           <Text style={s.fieldLabel}>JLPT Level</Text>
-          <Text style={s.fieldHint}>Select your current Japanese proficiency level</Text>
+          <Text style={s.fieldHint}>
+            JapanGoLearn currently covers N5. Later levels are listed so you can see what is
+            coming, and unlock as their content is published.
+          </Text>
           <View style={s.jlptRow}>
             {JLPT_LEVELS.map((lvl) => {
               const isActive = editJlpt === lvl.value;
+              // Selecting a level with no content would change nothing a learner
+              // can see, so it is shown but not choosable.
+              const locked = !lvl.available;
               return (
                 <TouchableOpacity
                   key={lvl.value}
-                  style={[s.jlptBtn, isActive && s.jlptBtnActive]}
-                  onPress={() => setEditJlpt(lvl.value)}
+                  style={[s.jlptBtn, isActive && s.jlptBtnActive, locked && s.jlptBtnLocked]}
+                  onPress={() => {
+                    if (!locked) setEditJlpt(lvl.value);
+                  }}
+                  disabled={locked}
                   activeOpacity={0.7}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: isActive, disabled: locked }}
+                  accessibilityLabel={
+                    locked ? `${lvl.label}, coming soon, not yet available` : lvl.label
+                  }
                 >
                   <Text style={[s.jlptBtnLabel, isActive && s.jlptBtnLabelActive]}>
                     {lvl.label}
                   </Text>
-                  <Text style={[s.jlptBtnDesc, isActive && s.jlptBtnDescActive]}>{lvl.desc}</Text>
+                  <Text style={[s.jlptBtnDesc, isActive && s.jlptBtnDescActive]}>
+                    {locked ? "Coming soon" : lvl.desc}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
@@ -1032,6 +1141,22 @@ const s = StyleSheet.create({
     fontWeight: FontWeight.semibold,
   },
 
+  // --- Delete Account ---
+  deleteAccountBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing.md,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.lg,
+    minHeight: 20,
+  },
+  deleteAccountText: {
+    color: Colors.dark.textMuted,
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.medium,
+    textDecorationLine: "underline",
+  },
+
   // --- Footer ---
   footer: {
     textAlign: "center",
@@ -1150,6 +1275,9 @@ const s = StyleSheet.create({
   jlptBtnActive: {
     backgroundColor: Colors.primary[600] + "30",
     borderColor: Colors.primary[500],
+  },
+  jlptBtnLocked: {
+    opacity: 0.4,
   },
   jlptBtnLabel: {
     fontSize: FontSize.base,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   Search,
   ChevronDown,
@@ -13,6 +13,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { createXpAttemptKey } from "@japangolearn/content";
+import type { GradedAnswer } from "@japangolearn/core";
 
 interface GrammarPattern {
   id: number;
@@ -95,6 +96,10 @@ export function GrammarClient({ patterns }: { patterns: GrammarPattern[] }) {
   const [quizPool, setQuizPool] = useState<GrammarPattern[]>([]);
   const [quizAttemptKey, setQuizAttemptKey] = useState(() => createXpAttemptKey());
 
+  /* Per-item results for the session; read once when the quiz ends. */
+  const answersRef = useRef<GradedAnswer[]>([]);
+  const questionShownAtRef = useRef<number>(Date.now());
+
   const categories = ["All", ...Array.from(new Set(patterns.map((p) => p.category)))];
 
   const filtered = patterns.filter((p) => {
@@ -131,6 +136,7 @@ export function GrammarClient({ patterns }: { patterns: GrammarPattern[] }) {
     setQuizIndex(0);
     setQuizAnswer(null);
     setQuizAttemptKey(createXpAttemptKey());
+    answersRef.current = [];
     nextQuizQuestion(0, shuffled);
     setMode("quiz");
   };
@@ -143,6 +149,7 @@ export function GrammarClient({ patterns }: { patterns: GrammarPattern[] }) {
     const target = pool[index];
     setQuizPattern(target);
     setQuizAnswer(null);
+    questionShownAtRef.current = Date.now();
 
     const others = patterns.filter((p) => p.id !== target.id);
     const randomOthers = others.sort(() => Math.random() - 0.5).slice(0, 3);
@@ -160,6 +167,18 @@ export function GrammarClient({ patterns }: { patterns: GrammarPattern[] }) {
     const newTotal = quizScore.total + 1;
     setQuizScore({ correct: newCorrect, total: newTotal });
 
+    if (quizPattern) {
+      answersRef.current.push({
+        itemType: "grammar",
+        itemId: String(quizPattern.id),
+        isCorrect,
+        prompt: quizPattern.title,
+        answer,
+        correctAnswer: quizPattern.meaning,
+        responseMs: Date.now() - questionShownAtRef.current,
+      });
+    }
+
     setTimeout(async () => {
       const next = quizIndex + 1;
       setQuizIndex(next);
@@ -172,6 +191,7 @@ export function GrammarClient({ patterns }: { patterns: GrammarPattern[] }) {
             correctAnswers: newCorrect,
             totalQuestions: quizPool.length,
             attemptKey: quizAttemptKey,
+            answers: answersRef.current,
           });
         } catch (err) {
           console.error("Failed to record learning attempt", err);

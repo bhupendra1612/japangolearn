@@ -12,6 +12,10 @@ jobs:
     env:
       NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-build-placeholder
+      NEXT_PUBLIC_APP_ENV: test
+      EXPO_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ci-build-placeholder
+      EXPO_PUBLIC_APP_ENV: test
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -50,6 +54,9 @@ jobs:
 
       - name: Build admin
         run: pnpm build:admin
+
+      - name: Build API
+        run: pnpm build:api
 
       - name: Check mobile
         run: pnpm check:mobile

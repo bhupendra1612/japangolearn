@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Volume2, Eye, EyeOff, ArrowRight, RotateCcw, CheckCircle2, XCircle } from "lucide-react";
 import { StrokeWriter, isKanaSupported } from "./stroke-writer";
 import { createXpAttemptKey } from "@japangolearn/content";
+import type { GradedAnswer } from "@japangolearn/core";
 
 interface Kana {
   id: number;
@@ -123,6 +124,10 @@ export function WritingClient({ kanaList }: { kanaList: Kana[] }) {
   const [quizIndex, setQuizIndex] = useState(0);
   const [quizAttemptKey, setQuizAttemptKey] = useState(() => createXpAttemptKey());
 
+  /* Per-item results for the session; read once when the quiz ends. */
+  const answersRef = useRef<GradedAnswer[]>([]);
+  const questionShownAtRef = useRef<number>(Date.now());
+
   // Group kana by group_name
   const groups = kanaList.reduce<Record<string, Kana[]>>((acc, k) => {
     if (!acc[k.group_name]) acc[k.group_name] = [];
@@ -157,6 +162,7 @@ export function WritingClient({ kanaList }: { kanaList: Kana[] }) {
     setQuizIndex(0);
     setQuizAnswer(null);
     setQuizAttemptKey(createXpAttemptKey());
+    answersRef.current = [];
     nextQuizQuestion(0);
     setMode("quiz");
   };
@@ -166,6 +172,7 @@ export function WritingClient({ kanaList }: { kanaList: Kana[] }) {
     const target = kanaList[index];
     setQuizKana(target);
     setQuizAnswer(null);
+    questionShownAtRef.current = Date.now();
     // Generate 4 options with correct answer
     const others = kanaList.filter((k) => k.id !== target.id);
     const shuffled = others.sort(() => Math.random() - 0.5).slice(0, 3);
@@ -181,7 +188,19 @@ export function WritingClient({ kanaList }: { kanaList: Kana[] }) {
       correct: s.correct + (isCorrect ? 1 : 0),
       total: s.total + 1,
     }));
-    if (quizKana) speak(quizKana.character);
+
+    if (quizKana) {
+      answersRef.current.push({
+        itemType: "kana",
+        itemId: String(quizKana.id),
+        isCorrect,
+        prompt: quizKana.character,
+        answer,
+        correctAnswer: quizKana.romaji,
+        responseMs: Date.now() - questionShownAtRef.current,
+      });
+      speak(quizKana.character);
+    }
     // Auto advance after delay
     const newCorrect = quizScore.correct + (isCorrect ? 1 : 0);
     setTimeout(async () => {
@@ -199,6 +218,7 @@ export function WritingClient({ kanaList }: { kanaList: Kana[] }) {
             correctAnswers: newCorrect,
             totalQuestions: kanaList.length,
             attemptKey: quizAttemptKey,
+            answers: answersRef.current,
           });
         } catch (err) {
           console.error("Failed to record learning attempt", err);

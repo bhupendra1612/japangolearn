@@ -2,7 +2,6 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from "react"
 import {
   View,
   Text,
-  FlatList,
   StyleSheet,
   TouchableOpacity,
   Dimensions,
@@ -10,7 +9,6 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
-import Svg, { Text as SvgText, Line, Rect } from "react-native-svg";
 import * as Speech from "expo-speech";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,6 +19,12 @@ import { AddToListModal } from "@/components/AddToListModal";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import StrokeWriter from "@/components/StrokeWriter";
 import { useAuth } from "@/lib/auth";
+import { useAndroidBack } from "@/lib/use-android-back";
+import { LoadError } from "@/components/LoadError";
+import { captureException } from "@/lib/monitoring";
+import { readCache, writeCache } from "@/lib/offline-cache";
+import { isOfflineError } from "@/lib/connectivity";
+import { OfflineNotice } from "@/components/OfflineNotice";
 import type { Kana } from "@japangolearn/database";
 
 // ─── Types ───
@@ -93,11 +97,21 @@ export default function WritingScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const [kanaList, setKanaList] = useState<Kana[]>([]);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const [servedFrom, setServedFrom] = useState<number | null>(null);
   const [kanaType, setKanaType] = useState<"hiragana" | "katakana">("hiragana");
   const [mode, setMode] = useState<ViewMode>("grid");
   // Detail state
   const [selectedKana, setSelectedKana] = useState<Kana | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+
+  // Detail and quiz are local state, not routes, so Android's back button would
+  // otherwise leave the screen entirely instead of returning to the grid.
+  useAndroidBack(
+    mode !== "grid",
+    useCallback(() => setMode("grid"), [])
+  );
 
   // Custom List State
   const [showAddListModal, setShowAddListModal] = useState(false);
@@ -121,23 +135,42 @@ export default function WritingScreen() {
 
   const isHiragana = kanaType === "hiragana";
 
-  useEffect(() => {
-    fetchKana();
-    setSelectedKana(null);
-    setActiveGroup("All");
-    setMode("grid");
-  }, [kanaType]);
-
-  const fetchKana = async () => {
+  const fetchKana = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    setLoadFailed(false);
+    const { data, error } = await supabase
       .from("kana")
       .select("*")
       .eq("type", kanaType)
       .order("sort_order");
-    if (data) setKanaList(data);
+
+    if (!error && data) {
+      setKanaList(data);
+      setServedFrom(null);
+      void writeCache(`kana-${kanaType}`, data);
+      setLoading(false);
+      return;
+    }
+
+    captureException(error, { screen: "writing", kanaType });
+    setOffline(isOfflineError(error));
+
+    const cached = await readCache<Kana[]>(`kana-${kanaType}`);
+    if (cached) {
+      setKanaList(cached.data);
+      setServedFrom(cached.savedAt);
+    } else {
+      setLoadFailed(true);
+    }
     setLoading(false);
-  };
+  }, [kanaType]);
+
+  useEffect(() => {
+    void fetchKana();
+    setSelectedKana(null);
+    setActiveGroup("All");
+    setMode("grid");
+  }, [fetchKana]);
 
   // Filtered list
   const filtered = useMemo(() => {
@@ -224,6 +257,24 @@ export default function WritingScreen() {
   );
 
   // ─── Quiz Logic ───
+  const setupQuizQuestion = useCallback(
+    (pool: Kana[], idx: number) => {
+      if (idx >= pool.length) {
+        setQuizDone(true);
+        return;
+      }
+      const target = pool[idx];
+      const others = kanaList.filter((kana) => kana.id !== target.id);
+      const shuffled = others.sort(() => Math.random() - 0.5).slice(0, 3);
+      const options = [...shuffled.map((kana) => kana.romaji), target.romaji].sort(
+        () => Math.random() - 0.5
+      );
+      setQuizOptions(options);
+      setQuizAnswer(null);
+    },
+    [kanaList]
+  );
+
   const startQuiz = useCallback(() => {
     const pool = [...filtered]
       .sort(() => Math.random() - 0.5)
@@ -237,20 +288,7 @@ export default function WritingScreen() {
     setMode("quiz");
     fadeAnim.setValue(0);
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-  }, [filtered, fadeAnim]);
-
-  const setupQuizQuestion = (pool: Kana[], idx: number) => {
-    if (idx >= pool.length) {
-      setQuizDone(true);
-      return;
-    }
-    const target = pool[idx];
-    const others = kanaList.filter((k) => k.id !== target.id);
-    const shuffled = others.sort(() => Math.random() - 0.5).slice(0, 3);
-    const opts = [...shuffled.map((k) => k.romaji), target.romaji].sort(() => Math.random() - 0.5);
-    setQuizOptions(opts);
-    setQuizAnswer(null);
-  };
+  }, [filtered, fadeAnim, setupQuizQuestion]);
 
   const handleQuizAnswer = useCallback(
     (answer: string) => {
@@ -274,7 +312,7 @@ export default function WritingScreen() {
         }
       }, 1200);
     },
-    [quizAnswer, quizPool, quizIndex, speakKana]
+    [quizAnswer, quizPool, quizIndex, speakKana, setupQuizQuestion]
   );
 
   // ═══════════════════ GRID MODE ═══════════════════
@@ -363,12 +401,22 @@ export default function WritingScreen() {
         })}
       </ScrollView>
 
+      {servedFrom !== null && (
+        <OfflineNotice savedAt={servedFrom} onRetry={() => void fetchKana()} />
+      )}
+
       {/* Sectioned Grid */}
       {loading ? (
         <View style={s.centerBox}>
           <ActivityIndicator color={Colors.primary[400]} size="large" />
           <Text style={s.loadingText}>Loading {kanaType}...</Text>
         </View>
+      ) : loadFailed ? (
+        <LoadError
+          onRetry={() => void fetchKana()}
+          offline={offline}
+          message={`We could not load ${kanaType}.`}
+        />
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.gridScroll}>
           {groupedKana.map((group) => {

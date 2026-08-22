@@ -95,6 +95,13 @@ export default async function LevelsPage() {
     const isActive = id === currentLevel;
     const isLocked = idx > currentIdx && !isCompleted;
 
+    /* progress_percent is now derived from mastery coverage by the database on
+       every completed attempt. It used to be seeded at 0 and never written, so
+       this read fell back to a cosmetic 5% for the active level — that placebo
+       is gone now that the number means something. */
+    const progressPercent = isCompleted ? 100 : (prog?.progress ?? 0);
+    const totalLessons = (dbLevel?.total_kanji ?? 0) + (dbLevel?.total_grammar ?? 0);
+
     return {
       id,
       kanji: meta.kanji,
@@ -104,13 +111,10 @@ export default async function LevelsPage() {
       total_vocabulary: dbLevel?.total_vocabulary ?? 0,
       total_grammar: dbLevel?.total_grammar ?? 0,
       color: meta.color,
-      progress: isCompleted ? 100 : (prog?.progress ?? (isActive ? 5 : 0)),
+      progress: progressPercent,
       status: isCompleted ? "completed" : isActive ? "active" : isLocked ? "locked" : "active",
-      lessons_completed: Math.round(
-        ((isCompleted ? 100 : (prog?.progress ?? 0)) / 100) *
-          ((dbLevel?.total_kanji ?? 0) + (dbLevel?.total_grammar ?? 0))
-      ),
-      total_lessons: (dbLevel?.total_kanji ?? 0) + (dbLevel?.total_grammar ?? 0),
+      lessons_completed: Math.round((progressPercent / 100) * totalLessons),
+      total_lessons: totalLessons,
     };
   });
 

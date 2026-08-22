@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   BookOpen,
@@ -11,6 +12,27 @@ import {
   Target,
   Languages,
 } from "lucide-react";
+import {
+  JLPT_LEVELS,
+  OFFERED_LEVELS,
+  getCurriculumStats,
+  hasContent,
+  type CurriculumStats,
+} from "@/lib/curriculum";
+import { courseCatalogEnabled, teacherStudioEnabled } from "@/lib/marketplace";
+import { Faq } from "@/components/home/faq";
+import { FeaturedCourses } from "@/components/home/featured-courses";
+import { FreeTools } from "@/components/home/free-tools";
+import { HowItWorks } from "@/components/home/how-it-works";
+import { TeachWithUs } from "@/components/home/teach-with-us";
+
+const siteUrl = "https://japangolearn.com";
+
+export const revalidate = 3600;
+
+export const metadata: Metadata = {
+  alternates: { canonical: siteUrl },
+};
 
 const features = [
   {
@@ -30,8 +52,7 @@ const features = [
   {
     icon: Trophy,
     title: "Gamified Progress",
-    description:
-      "Earn XP, maintain streaks, unlock achievements, and climb leaderboards as you learn.",
+    description: "Earn XP, hold a daily streak, and unlock achievements as you study.",
     color: "from-gold-400 to-amber-600",
   },
   {
@@ -42,61 +63,91 @@ const features = [
   },
   {
     icon: Globe,
-    title: "3D Cultural Immersion",
+    title: "Built for Hindi Speakers",
     description:
-      "Explore Japanese culture through interactive 3D scenes — temples, cities, and more.",
+      "Every vocabulary word carries a Hindi pronunciation guide next to its English meaning.",
     color: "from-violet-500 to-fuchsia-600",
   },
   {
     icon: Target,
     title: "JLPT Structured Path",
     description:
-      "Follow a clear progression from N5 (beginner) to N1 (advanced) aligned with official JLPT exams.",
+      "Study in the same order as the official JLPT exams, starting from N5 and building up.",
     color: "from-teal-400 to-emerald-600",
   },
 ];
 
-const jlptLevels = [
-  {
-    level: "N5",
-    label: "Beginner",
-    kanji: "入",
-    color: "from-emerald-400 to-teal-600",
-    desc: "Hiragana, Katakana, 100 Kanji",
-  },
-  {
-    level: "N4",
-    label: "Elementary",
-    kanji: "学",
-    color: "from-blue-400 to-indigo-600",
-    desc: "300 Kanji, Basic Grammar",
-  },
-  {
-    level: "N3",
-    label: "Intermediate",
-    kanji: "語",
-    color: "from-violet-400 to-purple-600",
-    desc: "650 Kanji, Conversational",
-  },
-  {
-    level: "N2",
-    label: "Upper-Intermediate",
-    kanji: "読",
-    color: "from-pink-400 to-rose-600",
-    desc: "1000 Kanji, News & Articles",
-  },
-  {
-    level: "N1",
-    label: "Advanced",
-    kanji: "極",
-    color: "from-amber-400 to-orange-600",
-    desc: "2000+ Kanji, Native Level",
-  },
-];
+const numberFormat = new Intl.NumberFormat("en-IN");
 
-export default function HomePage() {
+/** Rounds down to a "N+" claim that stays true as content is added. */
+function atLeast(value: number) {
+  if (value < 10) return String(value);
+  const magnitude = value < 100 ? 10 : 100;
+  return `${numberFormat.format(Math.floor(value / magnitude) * magnitude)}+`;
+}
+
+function buildStatCards(stats: CurriculumStats) {
+  return [
+    { value: atLeast(stats.totals.vocabulary), label: "Vocabulary words" },
+    { value: atLeast(stats.totals.kanji), label: "Kanji with stroke order" },
+    { value: atLeast(stats.totals.kana), label: "Hiragana & katakana" },
+    { value: atLeast(stats.totals.grammar), label: "Grammar points" },
+  ].filter((stat) => stat.value !== "0");
+}
+
+/**
+ * Describes only the levels that actually have content, so the structured data
+ * cannot advertise a course a learner is unable to start.
+ */
+function buildCourseSchema(stats: CurriculumStats) {
+  const items = JLPT_LEVELS.filter(({ level }) => hasContent(stats.byLevel[level])).map(
+    (definition, index) => {
+      const content = stats.byLevel[definition.level];
+      return {
+        "@type": "ListItem",
+        position: index + 1,
+        item: {
+          "@type": "Course",
+          name: `JLPT ${definition.level} Japanese — ${definition.label}`,
+          description: `${definition.summary}. Currently ${content.vocabulary} vocabulary words, ${content.kanji} kanji, and ${content.grammar} grammar points, free to study.`,
+          provider: { "@id": `${siteUrl}/#organization` },
+          url: `${siteUrl}/vocabulary/level/${definition.level.toLowerCase()}`,
+          educationalLevel: definition.label,
+          inLanguage: "en",
+          teaches: `Japanese Language — JLPT ${definition.level}`,
+          isAccessibleForFree: true,
+          courseMode: "online",
+        },
+      };
+    }
+  );
+
+  if (items.length === 0) return null;
+
+  return {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: "Free JLPT Japanese study material",
+    description: "Free Japanese study material organised by JLPT level",
+    url: `${siteUrl}/vocabulary`,
+    numberOfItems: items.length,
+    itemListElement: items,
+  };
+}
+
+export default async function HomePage() {
+  const stats = await getCurriculumStats();
+  const statCards = buildStatCards(stats);
+  const courseSchema = buildCourseSchema(stats);
+
   return (
     <div className="bg-[#0b0f19] min-h-screen text-white overflow-hidden selection:bg-primary-500/30">
+      {courseSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(courseSchema) }}
+        />
+      )}
       {/* ===== GLOBAL BACKGROUND ORBS ===== */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-primary-600/20 rounded-full blur-[120px]" />
@@ -129,9 +180,9 @@ export default function HomePage() {
               className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto mb-12 leading-relaxed animate-slide-up"
               style={{ animationDelay: "0.1s" }}
             >
-              Visual learning, animated kanji strokes, gamification, and AI-powered practice. Master
-              JLPT levels from <span className="font-semibold text-white">N5 to N1</span> with
-              confidence.
+              Visual learning, animated kanji strokes, gamification, and AI-powered practice. Build
+              your <span className="font-semibold text-white">JLPT N5</span> foundation today, with{" "}
+              <span className="font-semibold text-white">N4</span> on the way.
             </p>
 
             {/* CTA Buttons */}
@@ -155,27 +206,31 @@ export default function HomePage() {
               </Link>
             </div>
 
-            {/* Stats */}
+            {/* Stats — counted from the live curriculum, never hard-coded claims */}
             <div
-              className="mt-20 grid grid-cols-3 gap-8 max-w-2xl mx-auto p-8 rounded-3xl bg-white/5 border border-white/10 backdrop-blur-xl animate-slide-up shadow-2xl"
+              className="mt-20 grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-8 max-w-2xl mx-auto p-6 sm:p-8 rounded-3xl bg-white/5 border border-white/10 backdrop-blur-xl animate-slide-up shadow-2xl lg:grid-cols-4"
               style={{ animationDelay: "0.3s" }}
             >
-              {[
-                { value: "2,136", label: "Jōyō Kanji" },
-                { value: "5", label: "JLPT Levels" },
-                { value: "100%", label: "Free to Start" },
-              ].map((stat) => (
+              {statCards.map((stat) => (
                 <div key={stat.label} className="text-center relative">
                   <p className="text-3xl sm:text-4xl font-black bg-clip-text text-transparent bg-gradient-to-br from-white to-gray-500 drop-shadow-lg">
                     {stat.value}
                   </p>
-                  <p className="text-sm text-gray-400 mt-2 font-medium">{stat.label}</p>
+                  <p className="text-xs sm:text-sm text-gray-400 mt-2 font-medium text-balance">
+                    {stat.label}
+                  </p>
                 </div>
               ))}
             </div>
           </div>
         </div>
       </section>
+
+      {/* ===== FREE TOOLS ===== */}
+      <FreeTools />
+
+      {/* ===== HOW IT WORKS ===== */}
+      <HowItWorks />
 
       {/* ===== JLPT PATH SECTION (GLASSMORPHISM) ===== */}
       <section className="py-24 relative z-10 w-full overflow-hidden">
@@ -189,35 +244,85 @@ export default function HomePage() {
             </h2>
             <p className="text-gray-400 text-lg max-w-2xl mx-auto">
               Follow the structured JLPT progression. Each level builds on the previous, preparing
-              you for the official exam.
+              you for the official exam. We are building the path one level at a time — N5 and N4
+              first.
             </p>
           </div>
 
           <div className="flex flex-col md:flex-row items-stretch justify-center gap-4 lg:gap-6 w-full max-w-full stagger-children">
-            {jlptLevels.map((level, index) => (
-              <div
-                key={level.level}
-                className="relative group w-full md:w-48 lg:w-56 flex shrink-0"
-              >
-                {/* Connector line */}
-                {index < jlptLevels.length - 1 && (
-                  <div className="hidden md:block absolute top-1/2 -right-5 lg:-right-6 w-4 lg:w-6 h-px bg-white/10" />
-                )}
-                <div className="w-full p-6 rounded-3xl bg-white/5 border border-white/10 backdrop-blur-xl hover:bg-white/10 hover:border-white/20 transition-all duration-300 group-hover:-translate-y-2 shadow-xl flex flex-col items-center text-center">
+            {JLPT_LEVELS.map((level, index) => {
+              const content = stats.byLevel[level.level];
+              const ready = hasContent(content);
+              const planned = OFFERED_LEVELS.includes(level.level);
+              const href = `/vocabulary/level/${level.level.toLowerCase()}`;
+
+              const card = (
+                <div
+                  className={`w-full h-full p-6 rounded-3xl border backdrop-blur-xl transition-all duration-300 shadow-xl flex flex-col items-center text-center ${
+                    ready
+                      ? "bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20 group-hover:-translate-y-2"
+                      : "bg-white/[0.02] border-white/5"
+                  }`}
+                >
                   <div
-                    className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br ${level.color} text-white shadow-[0_0_30px_rgba(255,255,255,0.2)] text-3xl font-jp font-bold mb-5 group-hover:scale-110 group-hover:rotate-6 transition-all`}
+                    className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br ${level.color} text-white shadow-[0_0_30px_rgba(255,255,255,0.2)] text-3xl font-jp font-bold mb-5 transition-all ${
+                      ready ? "group-hover:scale-110 group-hover:rotate-6" : "opacity-40 grayscale"
+                    }`}
                   >
                     {level.kanji}
                   </div>
-                  <h3 className="text-2xl font-bold mb-1 text-white">{level.level}</h3>
+                  <h3
+                    className={`text-2xl font-bold mb-1 ${ready ? "text-white" : "text-gray-400"}`}
+                  >
+                    {level.level}
+                  </h3>
                   <p className="text-sm text-gray-300 font-medium mb-3">{level.label}</p>
-                  <p className="text-xs text-gray-400 mt-auto">{level.desc}</p>
+                  <p className="text-xs text-gray-400 mb-4">{level.summary}</p>
+                  <span
+                    className={`mt-auto rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${
+                      ready
+                        ? "bg-emerald-500/15 text-emerald-300"
+                        : "bg-white/5 text-gray-500 border border-white/10"
+                    }`}
+                  >
+                    {ready
+                      ? `${numberFormat.format(content.vocabulary)} words ready`
+                      : planned
+                        ? "Coming soon"
+                        : "Planned"}
+                  </span>
                 </div>
-              </div>
-            ))}
+              );
+
+              return (
+                <div
+                  key={level.level}
+                  className="relative group w-full md:w-48 lg:w-56 flex shrink-0"
+                >
+                  {/* Connector line */}
+                  {index < JLPT_LEVELS.length - 1 && (
+                    <div className="hidden md:block absolute top-1/2 -right-5 lg:-right-6 w-4 lg:w-6 h-px bg-white/10" />
+                  )}
+                  {ready ? (
+                    <Link
+                      href={href}
+                      className="w-full flex"
+                      aria-label={`Study JLPT ${level.level}`}
+                    >
+                      {card}
+                    </Link>
+                  ) : (
+                    card
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
+
+      {/* ===== FEATURED COURSES (marketplace deferred past v1) ===== */}
+      {courseCatalogEnabled && <FeaturedCourses />}
 
       {/* ===== FEATURES SECTION ===== */}
       <section className="py-24 relative z-10">
@@ -263,6 +368,12 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ===== TEACHER RECRUITMENT (marketplace deferred past v1) ===== */}
+      {teacherStudioEnabled && <TeachWithUs />}
+
+      {/* ===== FAQ ===== */}
+      <Faq stats={stats} />
+
       {/* ===== CTA SECTION ===== */}
       <section className="py-24 relative z-10">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
@@ -282,8 +393,8 @@ export default function HomePage() {
                 </span>
               </h2>
               <p className="text-xl text-gray-300 mb-10 max-w-2xl mx-auto font-medium">
-                Join thousands of learners mastering Japanese with visual learning and gamification.
-                It&apos;s totally free to get started.
+                Start with the full JLPT N5 foundation — vocabulary, kanji stroke order, kana, and
+                grammar — free, with no credit card.
               </p>
               <Link
                 href="/signup"

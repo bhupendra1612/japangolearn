@@ -208,6 +208,340 @@ export type Database = {
         };
         Relationships: [];
       };
+      course_categories: {
+        Row: {
+          created_at: string;
+          description: string;
+          id: string;
+          is_active: boolean;
+          name: string;
+          slug: string;
+          sort_order: number;
+          updated_at: string;
+        };
+        Insert: {
+          created_at?: string;
+          description?: string;
+          id?: string;
+          is_active?: boolean;
+          name: string;
+          slug: string;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Update: {
+          created_at?: string;
+          description?: string;
+          id?: string;
+          is_active?: boolean;
+          name?: string;
+          slug?: string;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      course_entitlements: {
+        Row: {
+          course_id: string;
+          created_at: string;
+          expires_at: string | null;
+          granted_at: string;
+          id: string;
+          order_id: string | null;
+          source: string;
+          status: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          course_id: string;
+          created_at?: string;
+          expires_at?: string | null;
+          granted_at?: string;
+          id?: string;
+          order_id?: string | null;
+          source: string;
+          status?: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          course_id?: string;
+          created_at?: string;
+          expires_at?: string | null;
+          granted_at?: string;
+          id?: string;
+          order_id?: string | null;
+          source?: string;
+          status?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "course_entitlements_course_id_fkey";
+            columns: ["course_id"];
+            isOneToOne: false;
+            referencedRelation: "courses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "course_entitlements_order_id_fkey";
+            columns: ["order_id"];
+            isOneToOne: false;
+            referencedRelation: "course_orders";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "course_entitlements_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      course_lessons: {
+        Row: {
+          content: Json;
+          course_id: string;
+          created_at: string;
+          duration_seconds: number | null;
+          id: string;
+          is_preview: boolean;
+          lesson_type: string;
+          position: number;
+          section_id: string;
+          summary: string;
+          title: string;
+          updated_at: string;
+          video_asset_id: string | null;
+        };
+        Insert: {
+          content?: Json;
+          course_id: string;
+          created_at?: string;
+          duration_seconds?: number | null;
+          id?: string;
+          is_preview?: boolean;
+          lesson_type?: string;
+          position?: number;
+          section_id: string;
+          summary?: string;
+          title: string;
+          updated_at?: string;
+          video_asset_id?: string | null;
+        };
+        Update: {
+          content?: Json;
+          course_id?: string;
+          created_at?: string;
+          duration_seconds?: number | null;
+          id?: string;
+          is_preview?: boolean;
+          lesson_type?: string;
+          position?: number;
+          section_id?: string;
+          summary?: string;
+          title?: string;
+          updated_at?: string;
+          video_asset_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "course_lessons_course_id_fkey";
+            columns: ["course_id"];
+            isOneToOne: false;
+            referencedRelation: "courses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "course_lessons_section_id_fkey";
+            columns: ["section_id"];
+            isOneToOne: false;
+            referencedRelation: "course_sections";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "course_lessons_video_asset_id_fkey";
+            columns: ["video_asset_id"];
+            isOneToOne: false;
+            referencedRelation: "video_assets";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      course_orders: {
+        Row: {
+          amount_minor: number;
+          course_id: string;
+          created_at: string;
+          currency: string;
+          id: string;
+          idempotency_key: string;
+          paid_at: string | null;
+          provider: string | null;
+          provider_payment_id: string | null;
+          status: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          amount_minor: number;
+          course_id: string;
+          created_at?: string;
+          currency: string;
+          id?: string;
+          idempotency_key: string;
+          paid_at?: string | null;
+          provider?: string | null;
+          provider_payment_id?: string | null;
+          status?: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          amount_minor?: number;
+          course_id?: string;
+          created_at?: string;
+          currency?: string;
+          id?: string;
+          idempotency_key?: string;
+          paid_at?: string | null;
+          provider?: string | null;
+          provider_payment_id?: string | null;
+          status?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "course_orders_course_id_fkey";
+            columns: ["course_id"];
+            isOneToOne: false;
+            referencedRelation: "courses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "course_orders_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      course_sections: {
+        Row: {
+          course_id: string;
+          created_at: string;
+          id: string;
+          position: number;
+          title: string;
+          updated_at: string;
+        };
+        Insert: {
+          course_id: string;
+          created_at?: string;
+          id?: string;
+          position?: number;
+          title: string;
+          updated_at?: string;
+        };
+        Update: {
+          course_id?: string;
+          created_at?: string;
+          id?: string;
+          position?: number;
+          title?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "course_sections_course_id_fkey";
+            columns: ["course_id"];
+            isOneToOne: false;
+            referencedRelation: "courses";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      courses: {
+        Row: {
+          category_id: string | null;
+          created_at: string;
+          currency: string;
+          description: string;
+          id: string;
+          language: string;
+          level: string;
+          price_minor: number;
+          pricing_type: string;
+          published_at: string | null;
+          slug: string;
+          status: string;
+          summary: string;
+          teacher_id: string;
+          thumbnail_url: string | null;
+          title: string;
+          updated_at: string;
+        };
+        Insert: {
+          category_id?: string | null;
+          created_at?: string;
+          currency?: string;
+          description?: string;
+          id?: string;
+          language?: string;
+          level?: string;
+          price_minor?: number;
+          pricing_type?: string;
+          published_at?: string | null;
+          slug: string;
+          status?: string;
+          summary?: string;
+          teacher_id: string;
+          thumbnail_url?: string | null;
+          title: string;
+          updated_at?: string;
+        };
+        Update: {
+          category_id?: string | null;
+          created_at?: string;
+          currency?: string;
+          description?: string;
+          id?: string;
+          language?: string;
+          level?: string;
+          price_minor?: number;
+          pricing_type?: string;
+          published_at?: string | null;
+          slug?: string;
+          status?: string;
+          summary?: string;
+          teacher_id?: string;
+          thumbnail_url?: string | null;
+          title?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "courses_category_id_fkey";
+            columns: ["category_id"];
+            isOneToOne: false;
+            referencedRelation: "course_categories";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "courses_teacher_id_fkey";
+            columns: ["teacher_id"];
+            isOneToOne: false;
+            referencedRelation: "teacher_profiles";
+            referencedColumns: ["user_id"];
+          },
+        ];
+      };
       daily_goals: {
         Row: {
           created_at: string;
@@ -634,6 +968,47 @@ export type Database = {
           },
         ];
       };
+      marketplace_audit_log: {
+        Row: {
+          action: string;
+          actor_id: string | null;
+          created_at: string;
+          entity_id: string | null;
+          entity_type: string;
+          id: string;
+          new_value: Json | null;
+          previous_value: Json | null;
+        };
+        Insert: {
+          action: string;
+          actor_id?: string | null;
+          created_at?: string;
+          entity_id?: string | null;
+          entity_type: string;
+          id?: string;
+          new_value?: Json | null;
+          previous_value?: Json | null;
+        };
+        Update: {
+          action?: string;
+          actor_id?: string | null;
+          created_at?: string;
+          entity_id?: string | null;
+          entity_type?: string;
+          id?: string;
+          new_value?: Json | null;
+          previous_value?: Json | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_audit_log_actor_id_fkey";
+            columns: ["actor_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       mastery_records: {
         Row: {
           correct_count: number;
@@ -765,12 +1140,15 @@ export type Database = {
           avatar_url: string | null;
           created_at: string;
           current_jlpt_level: string;
+          daily_xp_goal: number;
           display_name: string | null;
           id: string;
           last_active_at: string | null;
+          notifications_seen_at: string | null;
           onboarding_completed: boolean;
           role: string;
           streak_days: number;
+          streak_freezes: number;
           updated_at: string;
           xp: number;
         };
@@ -778,12 +1156,15 @@ export type Database = {
           avatar_url?: string | null;
           created_at?: string;
           current_jlpt_level?: string;
+          daily_xp_goal?: number;
           display_name?: string | null;
           id: string;
           last_active_at?: string | null;
+          notifications_seen_at?: string | null;
           onboarding_completed?: boolean;
           role?: string;
           streak_days?: number;
+          streak_freezes?: number;
           updated_at?: string;
           xp?: number;
         };
@@ -791,16 +1172,82 @@ export type Database = {
           avatar_url?: string | null;
           created_at?: string;
           current_jlpt_level?: string;
+          daily_xp_goal?: number;
           display_name?: string | null;
           id?: string;
           last_active_at?: string | null;
+          notifications_seen_at?: string | null;
           onboarding_completed?: boolean;
           role?: string;
           streak_days?: number;
+          streak_freezes?: number;
           updated_at?: string;
           xp?: number;
         };
         Relationships: [];
+      };
+      teacher_profiles: {
+        Row: {
+          bio: string;
+          created_at: string;
+          display_name: string;
+          experience_years: number;
+          qualifications: string;
+          review_notes: string | null;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          slug: string;
+          status: string;
+          submitted_at: string | null;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          bio?: string;
+          created_at?: string;
+          display_name: string;
+          experience_years?: number;
+          qualifications?: string;
+          review_notes?: string | null;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          slug: string;
+          status?: string;
+          submitted_at?: string | null;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          bio?: string;
+          created_at?: string;
+          display_name?: string;
+          experience_years?: number;
+          qualifications?: string;
+          review_notes?: string | null;
+          reviewed_at?: string | null;
+          reviewed_by?: string | null;
+          slug?: string;
+          status?: string;
+          submitted_at?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "teacher_profiles_reviewed_by_fkey";
+            columns: ["reviewed_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "teacher_profiles_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: true;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       user_achievements: {
         Row: {
@@ -1003,6 +1450,42 @@ export type Database = {
           },
         ];
       };
+      user_roles: {
+        Row: {
+          granted_at: string;
+          granted_by: string | null;
+          role: string;
+          user_id: string;
+        };
+        Insert: {
+          granted_at?: string;
+          granted_by?: string | null;
+          role: string;
+          user_id: string;
+        };
+        Update: {
+          granted_at?: string;
+          granted_by?: string | null;
+          role?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_granted_by_fkey";
+            columns: ["granted_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "user_roles_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       user_streaks: {
         Row: {
           current_streak: number;
@@ -1032,6 +1515,63 @@ export type Database = {
             isOneToOne: true;
             referencedRelation: "profiles";
             referencedColumns: ["id"];
+          },
+        ];
+      };
+      video_assets: {
+        Row: {
+          bunny_video_id: string | null;
+          course_id: string | null;
+          created_at: string;
+          duration_seconds: number | null;
+          error_message: string | null;
+          file_name: string | null;
+          id: string;
+          status: string;
+          teacher_id: string;
+          title: string;
+          updated_at: string;
+        };
+        Insert: {
+          bunny_video_id?: string | null;
+          course_id?: string | null;
+          created_at?: string;
+          duration_seconds?: number | null;
+          error_message?: string | null;
+          file_name?: string | null;
+          id?: string;
+          status?: string;
+          teacher_id: string;
+          title: string;
+          updated_at?: string;
+        };
+        Update: {
+          bunny_video_id?: string | null;
+          course_id?: string | null;
+          created_at?: string;
+          duration_seconds?: number | null;
+          error_message?: string | null;
+          file_name?: string | null;
+          id?: string;
+          status?: string;
+          teacher_id?: string;
+          title?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "video_assets_course_id_fkey";
+            columns: ["course_id"];
+            isOneToOne: false;
+            referencedRelation: "courses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "video_assets_teacher_id_fkey";
+            columns: ["teacher_id"];
+            isOneToOne: false;
+            referencedRelation: "teacher_profiles";
+            referencedColumns: ["user_id"];
           },
         ];
       };
@@ -1130,6 +1670,7 @@ export type Database = {
       award_xp: {
         Args: {
           p_activity_type: string;
+          p_answers?: Json;
           p_attempt_key: string;
           p_correct_answers: number;
           p_total_questions: number;
@@ -1142,7 +1683,203 @@ export type Database = {
           xp_awarded: number;
         }[];
       };
+      create_course_order: {
+        Args: { request_idempotency_key: string; target_course_id: string };
+        Returns: {
+          amount_minor: number;
+          course_id: string;
+          created_at: string;
+          currency: string;
+          id: string;
+          idempotency_key: string;
+          paid_at: string | null;
+          provider: string | null;
+          provider_payment_id: string | null;
+          status: string;
+          updated_at: string;
+          user_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "course_orders";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      delete_account: { Args: never; Returns: undefined };
+      enroll_free_course: {
+        Args: { target_course_id: string };
+        Returns: {
+          course_id: string;
+          created_at: string;
+          expires_at: string | null;
+          granted_at: string;
+          id: string;
+          order_id: string | null;
+          source: string;
+          status: string;
+          updated_at: string;
+          user_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "course_entitlements";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      fulfill_course_order: {
+        Args: {
+          payment_id: string;
+          payment_provider: string;
+          target_order_id: string;
+        };
+        Returns: {
+          course_id: string;
+          created_at: string;
+          expires_at: string | null;
+          granted_at: string;
+          id: string;
+          order_id: string | null;
+          source: string;
+          status: string;
+          updated_at: string;
+          user_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "course_entitlements";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      get_due_reviews: {
+        Args: { p_limit?: number };
+        Returns: {
+          answer: string;
+          item_id: string;
+          item_type: string;
+          mastery_score: number;
+          next_review_at: string;
+          prompt: string;
+          reading: string;
+        }[];
+      };
+      get_kanji_of_the_day: {
+        Args: { p_level?: string };
+        Returns: {
+          glyph: string;
+          jlpt_level: string;
+          kanji_id: number;
+          meanings: string[];
+          reading_kun: Json;
+          reading_on: Json;
+          romaji: string;
+          stroke_count: number;
+        }[];
+      };
+      get_notifications: {
+        Args: { p_limit?: number };
+        Returns: {
+          body: string;
+          href: string;
+          kind: string;
+          occurred_at: string;
+          title: string;
+        }[];
+      };
+      get_resume_point: {
+        Args: never;
+        Returns: {
+          activity_type: string;
+          correct_answers: number;
+          last_at: string;
+          total_questions: number;
+        }[];
+      };
+      get_review_summary: {
+        Args: never;
+        Returns: {
+          due_now: number;
+          due_today: number;
+          mastered_items: number;
+          tracked_items: number;
+          weak_items: number;
+        }[];
+      };
+      get_skill_breakdown: {
+        Args: never;
+        Returns: {
+          accuracy: number;
+          avg_mastery: number;
+          item_type: string;
+          mastered: number;
+          tracked: number;
+        }[];
+      };
       increment_streak: { Args: never; Returns: undefined };
+      mark_notifications_seen: { Args: never; Returns: string };
+      review_teacher_application: {
+        Args: { decision: string; notes?: string; target_user_id: string };
+        Returns: {
+          bio: string;
+          created_at: string;
+          display_name: string;
+          experience_years: number;
+          qualifications: string;
+          review_notes: string | null;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          slug: string;
+          status: string;
+          submitted_at: string | null;
+          updated_at: string;
+          user_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "teacher_profiles";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      search_curriculum: {
+        Args: { p_limit?: number; p_query: string };
+        Returns: {
+          item_id: number;
+          item_type: string;
+          jlpt_level: string;
+          meaning: string;
+          rank: number;
+          subtitle: string;
+          title: string;
+        }[];
+      };
+      set_daily_xp_goal: { Args: { p_goal: number }; Returns: number };
+      submit_teacher_application: {
+        Args: never;
+        Returns: {
+          bio: string;
+          created_at: string;
+          display_name: string;
+          experience_years: number;
+          qualifications: string;
+          review_notes: string | null;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          slug: string;
+          status: string;
+          submitted_at: string | null;
+          updated_at: string;
+          user_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "teacher_profiles";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       track_analytics_event: {
         Args: { p_event_name: string; p_properties?: Json; p_source?: string };
         Returns: string;

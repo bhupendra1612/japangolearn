@@ -65,8 +65,15 @@ export function JlptLevelSelect({
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       const delta = event.key === "ArrowDown" ? 1 : -1;
-      const nextIndex = Math.min(JLPT_SIGNUP_LEVELS.length - 1, Math.max(0, activeIndex + delta));
-      onChange(JLPT_SIGNUP_LEVELS[nextIndex].value);
+      // Step over levels that have no content, so the keyboard cannot land on
+      // an option the mouse is not allowed to choose.
+      for (let next = activeIndex + delta; next >= 0 && next < JLPT_SIGNUP_LEVELS.length; ) {
+        if (JLPT_SIGNUP_LEVELS[next].available) {
+          onChange(JLPT_SIGNUP_LEVELS[next].value);
+          return;
+        }
+        next += delta;
+      }
     }
   };
 
@@ -110,17 +117,27 @@ export function JlptLevelSelect({
         >
           {JLPT_SIGNUP_LEVELS.map((level) => {
             const active = level.value === selected.value;
+            // Levels with no content are listed so the roadmap is visible, but
+            // are not choosable — picking one would promise a course that does
+            // not exist and then serve N5 material anyway.
+            const locked = !level.available;
             return (
               <li key={level.value}>
                 <button
                   type="button"
                   role="option"
                   aria-selected={active}
-                  onClick={() => choose(level.value)}
+                  aria-disabled={locked}
+                  disabled={locked}
+                  onClick={() => {
+                    if (!locked) choose(level.value);
+                  }}
                   className={`flex w-full items-center gap-3 rounded-lg p-2.5 text-left transition-colors ${
-                    active
-                      ? "bg-primary-50 dark:bg-primary-900/30"
-                      : "hover:bg-gray-50 dark:hover:bg-gray-800"
+                    locked
+                      ? "cursor-not-allowed opacity-40"
+                      : active
+                        ? "bg-primary-50 dark:bg-primary-900/30"
+                        : "hover:bg-gray-50 dark:hover:bg-gray-800"
                   }`}
                 >
                   <span
@@ -141,7 +158,7 @@ export function JlptLevelSelect({
                       {level.label}
                     </span>
                     <span className="block truncate text-xs text-gray-500 dark:text-gray-400">
-                      {level.desc}
+                      {locked ? "Coming soon" : level.desc}
                     </span>
                   </span>
                   {active && (

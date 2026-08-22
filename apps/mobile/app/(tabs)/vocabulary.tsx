@@ -21,6 +21,7 @@ import { AuthPromptModal } from "@/components/AuthPromptModal";
 import StrokeWriter from "@/components/StrokeWriter";
 import { useAuth } from "@/lib/auth";
 import { useAndroidBack } from "@/lib/use-android-back";
+import { CONTENT_JLPT_LEVEL } from "@/constants/jlpt";
 import type { VocabularyWord } from "@japangolearn/database";
 import { createXpAttemptKey } from "@japangolearn/content";
 
@@ -151,7 +152,7 @@ export default function VocabularyScreen() {
     const { data } = await supabase
       .from("vocabulary")
       .select("id, kanji, hiragana, romaji, romaji_hindi, english, topic, jlpt_level, icon")
-      .eq("jlpt_level", "N5")
+      .eq("jlpt_level", CONTENT_JLPT_LEVEL)
       .order("topic")
       .order("hiragana");
     if (data) setWords(data);

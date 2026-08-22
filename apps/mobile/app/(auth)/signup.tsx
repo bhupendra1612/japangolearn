@@ -375,17 +375,30 @@ export default function SignupScreen() {
             <Text style={styles.modalTitle}>Your Japanese Level</Text>
             {JLPT_SIGNUP_LEVELS.map((option) => {
               const active = jlptLevel === option.value;
+              // Levels without content are listed so the roadmap is visible, but
+              // cannot be picked — selecting one would promise a course that
+              // does not exist and then quietly serve N5 material instead.
+              const locked = !option.available;
               return (
                 <TouchableOpacity
                   key={option.value}
-                  style={[styles.levelRow, active && styles.levelRowActive]}
+                  style={[
+                    styles.levelRow,
+                    active && styles.levelRowActive,
+                    locked && styles.levelRowLocked,
+                  ]}
                   onPress={() => {
+                    if (locked) return;
                     setJlptLevel(option.value);
                     setLevelPickerOpen(false);
                   }}
+                  disabled={locked}
                   activeOpacity={0.8}
                   accessibilityRole="radio"
-                  accessibilityState={{ selected: active }}
+                  accessibilityState={{ selected: active, disabled: locked }}
+                  accessibilityLabel={
+                    locked ? `${option.label}, coming soon, not yet available` : option.label
+                  }
                 >
                   <View style={[styles.levelBadge, active && styles.levelBadgeActive]}>
                     <Text style={[styles.levelBadgeText, active && styles.levelBadgeTextActive]}>
@@ -396,7 +409,7 @@ export default function SignupScreen() {
                     <Text style={[styles.levelLabel, active && styles.levelLabelActive]}>
                       {option.label}
                     </Text>
-                    <Text style={styles.levelDesc}>{option.desc}</Text>
+                    <Text style={styles.levelDesc}>{locked ? "Coming soon" : option.desc}</Text>
                   </View>
                   {active && (
                     <Ionicons name="checkmark-circle" size={20} color={Colors.accent[400]} />
@@ -559,6 +572,9 @@ const styles = StyleSheet.create({
   levelRowActive: {
     borderColor: Colors.accent[500],
     backgroundColor: Colors.accent[600] + "20",
+  },
+  levelRowLocked: {
+    opacity: 0.4,
   },
   levelBadge: {
     width: 40,

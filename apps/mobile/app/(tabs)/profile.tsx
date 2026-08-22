@@ -20,16 +20,31 @@ import { router } from "expo-router";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getXpLevelProgress } from "@japangolearn/content";
+import { JLPT_SIGNUP_LEVELS } from "@/constants/jlpt";
 
 const AVATAR_SIZE = 100;
 
-const JLPT_LEVELS = [
-  { value: "N5", label: "N5", desc: "Beginner" },
-  { value: "N4", label: "N4", desc: "Elementary" },
-  { value: "N3", label: "N3", desc: "Intermediate" },
-  { value: "N2", label: "N2", desc: "Advanced" },
-  { value: "N1", label: "N1", desc: "Expert" },
-] as const;
+/** Short blurbs, because these render in narrow buttons rather than a list. */
+const LEVEL_BLURB: Record<string, string> = {
+  N5: "Beginner",
+  N4: "Elementary",
+  N3: "Intermediate",
+  N2: "Upper-Intermediate",
+  N1: "Advanced",
+};
+
+/**
+ * Derived from the shared list so availability has one source of truth. This
+ * was a third hand-maintained copy of the levels, and it had already drifted —
+ * it called N2 "Advanced" while the rest of the product calls it
+ * Upper-Intermediate.
+ */
+const JLPT_LEVELS = JLPT_SIGNUP_LEVELS.map((level) => ({
+  value: level.value,
+  label: level.value,
+  desc: LEVEL_BLURB[level.value] ?? level.desc,
+  available: level.available,
+}));
 
 type Section = "view" | "edit-profile" | "change-password";
 
@@ -560,21 +575,37 @@ export default function ProfileScreen() {
         {/* JLPT Level Selector */}
         <View style={s.fieldGroup}>
           <Text style={s.fieldLabel}>JLPT Level</Text>
-          <Text style={s.fieldHint}>Select your current Japanese proficiency level</Text>
+          <Text style={s.fieldHint}>
+            JapanGoLearn currently covers N5. Later levels are listed so you can see what is
+            coming, and unlock as their content is published.
+          </Text>
           <View style={s.jlptRow}>
             {JLPT_LEVELS.map((lvl) => {
               const isActive = editJlpt === lvl.value;
+              // Selecting a level with no content would change nothing a learner
+              // can see, so it is shown but not choosable.
+              const locked = !lvl.available;
               return (
                 <TouchableOpacity
                   key={lvl.value}
-                  style={[s.jlptBtn, isActive && s.jlptBtnActive]}
-                  onPress={() => setEditJlpt(lvl.value)}
+                  style={[s.jlptBtn, isActive && s.jlptBtnActive, locked && s.jlptBtnLocked]}
+                  onPress={() => {
+                    if (!locked) setEditJlpt(lvl.value);
+                  }}
+                  disabled={locked}
                   activeOpacity={0.7}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: isActive, disabled: locked }}
+                  accessibilityLabel={
+                    locked ? `${lvl.label}, coming soon, not yet available` : lvl.label
+                  }
                 >
                   <Text style={[s.jlptBtnLabel, isActive && s.jlptBtnLabelActive]}>
                     {lvl.label}
                   </Text>
-                  <Text style={[s.jlptBtnDesc, isActive && s.jlptBtnDescActive]}>{lvl.desc}</Text>
+                  <Text style={[s.jlptBtnDesc, isActive && s.jlptBtnDescActive]}>
+                    {locked ? "Coming soon" : lvl.desc}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
@@ -1244,6 +1275,9 @@ const s = StyleSheet.create({
   jlptBtnActive: {
     backgroundColor: Colors.primary[600] + "30",
     borderColor: Colors.primary[500],
+  },
+  jlptBtnLocked: {
+    opacity: 0.4,
   },
   jlptBtnLabel: {
     fontSize: FontSize.base,

@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
+import { CONTENT_JLPT_LEVEL } from "@/constants/jlpt";
 import type { Json } from "@japangolearn/database";
 
 if (Platform.OS === "android") {
@@ -65,7 +66,7 @@ export default function GrammarScreen() {
     const { data } = await supabase
       .from("grammar_patterns")
       .select("*")
-      .eq("jlpt_level", "N5")
+      .eq("jlpt_level", CONTENT_JLPT_LEVEL)
       .order("order_index");
     if (data) {
       setPatterns(

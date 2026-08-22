@@ -22,6 +22,9 @@ import { useAuth } from "@/lib/auth";
 import { useAndroidBack } from "@/lib/use-android-back";
 import { LoadError } from "@/components/LoadError";
 import { captureException } from "@/lib/monitoring";
+import { readCache, writeCache } from "@/lib/offline-cache";
+import { isOfflineError } from "@/lib/connectivity";
+import { OfflineNotice } from "@/components/OfflineNotice";
 import type { Kana } from "@japangolearn/database";
 
 // ─── Types ───
@@ -95,6 +98,8 @@ export default function WritingScreen() {
   const { session } = useAuth();
   const [kanaList, setKanaList] = useState<Kana[]>([]);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const [servedFrom, setServedFrom] = useState<number | null>(null);
   const [kanaType, setKanaType] = useState<"hiragana" | "katakana">("hiragana");
   const [mode, setMode] = useState<ViewMode>("grid");
   // Detail state
@@ -103,7 +108,10 @@ export default function WritingScreen() {
 
   // Detail and quiz are local state, not routes, so Android's back button would
   // otherwise leave the screen entirely instead of returning to the grid.
-  useAndroidBack(mode !== "grid", useCallback(() => setMode("grid"), []));
+  useAndroidBack(
+    mode !== "grid",
+    useCallback(() => setMode("grid"), [])
+  );
 
   // Custom List State
   const [showAddListModal, setShowAddListModal] = useState(false);
@@ -135,11 +143,24 @@ export default function WritingScreen() {
       .select("*")
       .eq("type", kanaType)
       .order("sort_order");
-    if (error) {
-      setLoadFailed(true);
-      captureException(error, { screen: "writing", kanaType });
-    } else if (data) {
+
+    if (!error && data) {
       setKanaList(data);
+      setServedFrom(null);
+      void writeCache(`kana-${kanaType}`, data);
+      setLoading(false);
+      return;
+    }
+
+    captureException(error, { screen: "writing", kanaType });
+    setOffline(isOfflineError(error));
+
+    const cached = await readCache<Kana[]>(`kana-${kanaType}`);
+    if (cached) {
+      setKanaList(cached.data);
+      setServedFrom(cached.savedAt);
+    } else {
+      setLoadFailed(true);
     }
     setLoading(false);
   }, [kanaType]);
@@ -380,6 +401,10 @@ export default function WritingScreen() {
         })}
       </ScrollView>
 
+      {servedFrom !== null && (
+        <OfflineNotice savedAt={servedFrom} onRetry={() => void fetchKana()} />
+      )}
+
       {/* Sectioned Grid */}
       {loading ? (
         <View style={s.centerBox}>
@@ -387,7 +412,11 @@ export default function WritingScreen() {
           <Text style={s.loadingText}>Loading {kanaType}...</Text>
         </View>
       ) : loadFailed ? (
-        <LoadError onRetry={() => void fetchKana()} message={`We could not load ${kanaType}.`} />
+        <LoadError
+          onRetry={() => void fetchKana()}
+          offline={offline}
+          message={`We could not load ${kanaType}.`}
+        />
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.gridScroll}>
           {groupedKana.map((group) => {

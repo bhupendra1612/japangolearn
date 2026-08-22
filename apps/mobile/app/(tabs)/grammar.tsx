@@ -16,11 +16,16 @@ import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants
 import { CONTENT_JLPT_LEVEL } from "@/constants/jlpt";
 import { LoadError } from "@/components/LoadError";
 import { captureException } from "@/lib/monitoring";
+import { readCache, writeCache } from "@/lib/offline-cache";
+import { isOfflineError } from "@/lib/connectivity";
+import { OfflineNotice } from "@/components/OfflineNotice";
 import type { Json } from "@japangolearn/database";
 
 if (Platform.OS === "android") {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
+
+const GRAMMAR_CACHE_KEY = "grammar-n5";
 
 type Example = { japanese: string; romaji: string; english: string };
 type Pattern = {
@@ -60,6 +65,8 @@ export default function GrammarScreen() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const [servedFrom, setServedFrom] = useState<number | null>(null);
 
   const fetchPatterns = useCallback(async () => {
     setLoading(true);
@@ -69,13 +76,27 @@ export default function GrammarScreen() {
       .select("*")
       .eq("jlpt_level", CONTENT_JLPT_LEVEL)
       .order("order_index");
-    if (error) {
+    if (!error && data) {
+      const normalized = data.map((pattern) => ({
+        ...pattern,
+        examples: normalizeExamples(pattern.examples),
+      }));
+      setPatterns(normalized);
+      setServedFrom(null);
+      void writeCache(GRAMMAR_CACHE_KEY, normalized);
+      setLoading(false);
+      return;
+    }
+
+    captureException(error, { screen: "grammar" });
+    setOffline(isOfflineError(error));
+
+    const cached = await readCache<Pattern[]>(GRAMMAR_CACHE_KEY);
+    if (cached) {
+      setPatterns(cached.data);
+      setServedFrom(cached.savedAt);
+    } else {
       setLoadFailed(true);
-      captureException(error, { screen: "grammar" });
-    } else if (data) {
-      setPatterns(
-        data.map((pattern) => ({ ...pattern, examples: normalizeExamples(pattern.examples) }))
-      );
     }
     setLoading(false);
   }, []);
@@ -174,6 +195,10 @@ export default function GrammarScreen() {
         <Text style={styles.subtitle}>{patterns.length} JLPT N5 patterns</Text>
       </View>
 
+      {servedFrom !== null && (
+        <OfflineNotice savedAt={servedFrom} onRetry={() => void fetchPatterns()} />
+      )}
+
       <FlatList
         data={patterns}
         keyExtractor={(item) => item.id.toString()}
@@ -184,6 +209,7 @@ export default function GrammarScreen() {
           loading ? null : loadFailed ? (
             <LoadError
               onRetry={() => void fetchPatterns()}
+              offline={offline}
               message="We could not load the grammar patterns."
             />
           ) : (

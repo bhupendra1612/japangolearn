@@ -14,19 +14,30 @@ import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants
 export function LoadError({
   onRetry,
   retrying = false,
+  offline = false,
   message = "We could not load this right now.",
 }: {
   onRetry: () => void;
   retrying?: boolean;
+  /** The request never reached the server, rather than the server failing. */
+  offline?: boolean;
   message?: string;
 }) {
   return (
     <View style={styles.wrap}>
       <View style={styles.iconCircle}>
-        <Ionicons name="cloud-offline-outline" size={30} color={Colors.dark.textMuted} />
+        <Ionicons
+          name={offline ? "cloud-offline-outline" : "alert-circle-outline"}
+          size={30}
+          color={Colors.dark.textMuted}
+        />
       </View>
-      <Text style={styles.title}>{message}</Text>
-      <Text style={styles.hint}>Check your connection and try again.</Text>
+      <Text style={styles.title}>{offline ? "You are offline" : message}</Text>
+      <Text style={styles.hint}>
+        {offline
+          ? "Connect to the internet and try again. Anything you have opened before stays available."
+          : "This is our end, not yours. Please try again in a moment."}
+      </Text>
       <TouchableOpacity
         style={[styles.button, retrying && styles.buttonBusy]}
         onPress={onRetry}

@@ -24,6 +24,9 @@ import { useAndroidBack } from "@/lib/use-android-back";
 import { CONTENT_JLPT_LEVEL } from "@/constants/jlpt";
 import { LoadError } from "@/components/LoadError";
 import { captureException } from "@/lib/monitoring";
+import { readCache, writeCache } from "@/lib/offline-cache";
+import { isOfflineError } from "@/lib/connectivity";
+import { OfflineNotice } from "@/components/OfflineNotice";
 import type { VocabularyWord } from "@japangolearn/database";
 import { createXpAttemptKey } from "@japangolearn/content";
 
@@ -31,6 +34,8 @@ import { createXpAttemptKey } from "@japangolearn/content";
 type Word = VocabularyWord;
 
 type ViewMode = "browse" | "detail" | "quiz";
+
+const VOCAB_CACHE_KEY = "vocabulary-n5";
 
 // ─── Constants ───
 const CATEGORY_ICONS: Record<string, string> = {
@@ -112,6 +117,8 @@ export default function VocabularyScreen() {
   const [words, setWords] = useState<Word[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const [servedFrom, setServedFrom] = useState<number | null>(null);
   const [mode, setMode] = useState<ViewMode>("browse");
 
   // Browse state
@@ -126,7 +133,10 @@ export default function VocabularyScreen() {
 
   // Detail and quiz are local state, not routes, so Android's back button would
   // otherwise leave the screen entirely instead of returning to the list.
-  useAndroidBack(mode !== "browse", useCallback(() => setMode("browse"), []));
+  useAndroidBack(
+    mode !== "browse",
+    useCallback(() => setMode("browse"), [])
+  );
 
   // Custom List State
   const [showAddListModal, setShowAddListModal] = useState(false);
@@ -155,11 +165,25 @@ export default function VocabularyScreen() {
       .eq("jlpt_level", CONTENT_JLPT_LEVEL)
       .order("topic")
       .order("hiragana");
-    if (error) {
-      setLoadFailed(true);
-      captureException(error, { screen: "vocabulary" });
-    } else if (data) {
+
+    if (!error && data) {
       setWords(data);
+      setServedFrom(null);
+      void writeCache(VOCAB_CACHE_KEY, data);
+      setLoading(false);
+      return;
+    }
+
+    captureException(error, { screen: "vocabulary" });
+    setOffline(isOfflineError(error));
+
+    // Fall back to the last successful load rather than showing nothing.
+    const cached = await readCache<Word[]>(VOCAB_CACHE_KEY);
+    if (cached) {
+      setWords(cached.data);
+      setServedFrom(cached.savedAt);
+    } else {
+      setLoadFailed(true);
     }
     setLoading(false);
   }, []);
@@ -459,6 +483,10 @@ export default function VocabularyScreen() {
         words{selectedCategory !== "All" ? ` · ${selectedCategory}` : ""}
       </Text>
 
+      {servedFrom !== null && (
+        <OfflineNotice savedAt={servedFrom} onRetry={() => void loadVocabulary()} />
+      )}
+
       {/* Sectioned word list */}
       {loading ? (
         <View style={s.centerBox}>
@@ -468,6 +496,7 @@ export default function VocabularyScreen() {
       ) : loadFailed ? (
         <LoadError
           onRetry={() => void loadVocabulary()}
+          offline={offline}
           message="We could not load the vocabulary."
         />
       ) : (

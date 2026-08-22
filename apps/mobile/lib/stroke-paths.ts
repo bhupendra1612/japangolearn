@@ -14,8 +14,13 @@
  * https://kanjivg.tagaini.net
  */
 
+import { readCache, writeCache } from "@/lib/offline-cache";
+
 /** KanjiVG authors every glyph on a 109x109 grid. */
 export const STROKE_VIEWBOX = 109;
+
+/** Namespace for persisted stroke data, keyed by KanjiVG file name. */
+const STROKE_CACHE_PREFIX = "strokes-";
 
 export interface StrokePath {
   /** SVG path data for one stroke, in stroke order. */
@@ -196,9 +201,22 @@ export async function fetchStrokePaths(character: string): Promise<StrokePath[] 
     return null;
   }
 
-  const response = await fetch(
-    `https://cdn.jsdelivr.net/gh/KanjiVG/kanjivg@master/kanji/${fileName}.svg`
-  );
+  let response: Response;
+  try {
+    response = await fetch(
+      `https://cdn.jsdelivr.net/gh/KanjiVG/kanjivg@master/kanji/${fileName}.svg`
+    );
+  } catch (networkError) {
+    // Offline. A character studied before is still on the device, so the
+    // animation keeps working in a tunnel rather than falling back to a
+    // static glyph.
+    const stored = await readCache<StrokePath[]>(`${STROKE_CACHE_PREFIX}${fileName}`);
+    if (stored) {
+      cache.set(character, stored.data);
+      return stored.data;
+    }
+    throw networkError;
+  }
 
   if (!response.ok) {
     cache.set(character, null);
@@ -219,5 +237,8 @@ export async function fetchStrokePaths(character: string): Promise<StrokePath[] 
 
   const result = paths.length > 0 ? paths : null;
   cache.set(character, result);
+  // Persist so the next launch, and any launch without a connection, can draw
+  // this character without reaching the network.
+  if (result) void writeCache(`${STROKE_CACHE_PREFIX}${fileName}`, result);
   return result;
 }

@@ -20,6 +20,8 @@ import { AuthPromptModal } from "@/components/AuthPromptModal";
 import StrokeWriter from "@/components/StrokeWriter";
 import { useAuth } from "@/lib/auth";
 import { useAndroidBack } from "@/lib/use-android-back";
+import { LoadError } from "@/components/LoadError";
+import { captureException } from "@/lib/monitoring";
 import type { Kana } from "@japangolearn/database";
 
 // ─── Types ───
@@ -92,6 +94,7 @@ export default function WritingScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const [kanaList, setKanaList] = useState<Kana[]>([]);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [kanaType, setKanaType] = useState<"hiragana" | "katakana">("hiragana");
   const [mode, setMode] = useState<ViewMode>("grid");
   // Detail state
@@ -126,12 +129,18 @@ export default function WritingScreen() {
 
   const fetchKana = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    setLoadFailed(false);
+    const { data, error } = await supabase
       .from("kana")
       .select("*")
       .eq("type", kanaType)
       .order("sort_order");
-    if (data) setKanaList(data);
+    if (error) {
+      setLoadFailed(true);
+      captureException(error, { screen: "writing", kanaType });
+    } else if (data) {
+      setKanaList(data);
+    }
     setLoading(false);
   }, [kanaType]);
 
@@ -377,6 +386,8 @@ export default function WritingScreen() {
           <ActivityIndicator color={Colors.primary[400]} size="large" />
           <Text style={s.loadingText}>Loading {kanaType}...</Text>
         </View>
+      ) : loadFailed ? (
+        <LoadError onRetry={() => void fetchKana()} message={`We could not load ${kanaType}.`} />
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.gridScroll}>
           {groupedKana.map((group) => {

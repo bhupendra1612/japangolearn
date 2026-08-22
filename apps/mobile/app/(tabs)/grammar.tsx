@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { CONTENT_JLPT_LEVEL } from "@/constants/jlpt";
+import { LoadError } from "@/components/LoadError";
+import { captureException } from "@/lib/monitoring";
 import type { Json } from "@japangolearn/database";
 
 if (Platform.OS === "android") {
@@ -57,24 +59,30 @@ export default function GrammarScreen() {
   const [patterns, setPatterns] = useState<Pattern[]>([]);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
 
-  useEffect(() => {
-    fetchPatterns();
-  }, []);
-
-  const fetchPatterns = async () => {
-    const { data } = await supabase
+  const fetchPatterns = useCallback(async () => {
+    setLoading(true);
+    setLoadFailed(false);
+    const { data, error } = await supabase
       .from("grammar_patterns")
       .select("*")
       .eq("jlpt_level", CONTENT_JLPT_LEVEL)
       .order("order_index");
-    if (data) {
+    if (error) {
+      setLoadFailed(true);
+      captureException(error, { screen: "grammar" });
+    } else if (data) {
       setPatterns(
         data.map((pattern) => ({ ...pattern, examples: normalizeExamples(pattern.examples) }))
       );
     }
     setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    void fetchPatterns();
+  }, [fetchPatterns]);
 
   const toggleExpand = (id: number) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -173,7 +181,12 @@ export default function GrammarScreen() {
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          loading ? null : (
+          loading ? null : loadFailed ? (
+            <LoadError
+              onRetry={() => void fetchPatterns()}
+              message="We could not load the grammar patterns."
+            />
+          ) : (
             <View style={styles.empty}>
               <Text style={styles.emptyEmoji}>📚</Text>
               <Text style={styles.emptyText}>No grammar patterns found</Text>

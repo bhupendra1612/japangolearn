@@ -14,6 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { captureException } from "@/lib/monitoring";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import { getXpLevelProgress } from "@japangolearn/content";
@@ -112,6 +113,13 @@ export default function DashboardHome() {
         .eq("user_id", user.id)
         .gte("created_at", weekAgo.toISOString()),
     ]);
+
+    // Home still renders without this data — the greeting, daily kanji and
+    // quick actions do not depend on it — so a failure degrades to zeros rather
+    // than an error screen. It must still be reported, or a broken dashboard
+    // looks like a user with no activity.
+    const failure = [goalRes, actRes, achieveRes, weekRes].find((result) => result.error)?.error;
+    if (failure) captureException(failure, { screen: "home" });
 
     if (goalRes.data) setDailyGoal(goalRes.data);
     if (actRes.data) setActivities(actRes.data);

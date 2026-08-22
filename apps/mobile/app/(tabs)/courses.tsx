@@ -17,6 +17,7 @@ import { BorderRadius, Colors, FontSize, FontWeight, Spacing } from "@/constants
 import { useAuth } from "@/lib/auth";
 import { featureFlags } from "@/lib/feature-flags";
 import { supabase } from "@/lib/supabase";
+import { captureException } from "@/lib/monitoring";
 
 function priceLabel(course: CourseRow) {
   if (course.pricing_type === "free") return "FREE";
@@ -42,11 +43,12 @@ function CoursesScreenContent() {
   const [busyCourseId, setBusyCourseId] = useState<string | null>(null);
 
   const loadCourses = useCallback(async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("courses")
       .select("*")
       .eq("status", "published")
       .order("published_at", { ascending: false });
+    if (error) captureException(error, { screen: "courses" });
     setCourses(data ?? []);
 
     if (user) {

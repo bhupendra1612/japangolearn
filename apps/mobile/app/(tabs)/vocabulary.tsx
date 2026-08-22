@@ -22,6 +22,8 @@ import StrokeWriter from "@/components/StrokeWriter";
 import { useAuth } from "@/lib/auth";
 import { useAndroidBack } from "@/lib/use-android-back";
 import { CONTENT_JLPT_LEVEL } from "@/constants/jlpt";
+import { LoadError } from "@/components/LoadError";
+import { captureException } from "@/lib/monitoring";
 import type { VocabularyWord } from "@japangolearn/database";
 import { createXpAttemptKey } from "@japangolearn/content";
 
@@ -109,6 +111,7 @@ export default function VocabularyScreen() {
   const { session } = useAuth();
   const [words, setWords] = useState<Word[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [mode, setMode] = useState<ViewMode>("browse");
 
   // Browse state
@@ -143,21 +146,27 @@ export default function VocabularyScreen() {
   const cardAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    loadVocabulary();
-  }, []);
-
-  const loadVocabulary = async () => {
+  const loadVocabulary = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    setLoadFailed(false);
+    const { data, error } = await supabase
       .from("vocabulary")
       .select("id, kanji, hiragana, romaji, romaji_hindi, english, topic, jlpt_level, icon")
       .eq("jlpt_level", CONTENT_JLPT_LEVEL)
       .order("topic")
       .order("hiragana");
-    if (data) setWords(data);
+    if (error) {
+      setLoadFailed(true);
+      captureException(error, { screen: "vocabulary" });
+    } else if (data) {
+      setWords(data);
+    }
     setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadVocabulary();
+  }, [loadVocabulary]);
 
   // ─── Derived Data ───
   const categories = useMemo(() => {
@@ -456,6 +465,11 @@ export default function VocabularyScreen() {
           <ActivityIndicator size="large" color={Colors.primary[500]} />
           <Text style={s.loadingText}>Loading N5 Vocabulary...</Text>
         </View>
+      ) : loadFailed ? (
+        <LoadError
+          onRetry={() => void loadVocabulary()}
+          message="We could not load the vocabulary."
+        />
       ) : (
         <FlatList
           data={sectionedData}

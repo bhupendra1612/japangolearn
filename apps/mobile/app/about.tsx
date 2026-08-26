@@ -1,13 +1,5 @@
 import React from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Linking,
-  Image,
-} from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -66,11 +58,7 @@ export default function AboutScreen() {
         {/* App Hero Section */}
         <View style={s.heroSection}>
           <View style={s.logoWrapper}>
-            <Image
-              source={require("@/assets/logo.png")}
-              style={s.logoImage}
-              resizeMode="contain"
-            />
+            <Image source={require("@/assets/logo.png")} style={s.logoImage} resizeMode="contain" />
           </View>
           <Text style={s.appName}>JapanGoLearn</Text>
           <Text style={s.versionText}>Version 1.0.0</Text>

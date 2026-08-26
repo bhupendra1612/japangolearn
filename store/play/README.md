@@ -22,13 +22,13 @@ prefix keeps the intended order obvious to us.
 
 ## Exact requirements
 
-| Asset | Spec | Status |
-| --- | --- | --- |
-| App icon | **512 × 512** px, 32-bit PNG with alpha, under 1 MB | ✅ `graphics/app-icon-512.png` |
-| Feature graphic | **exactly 1024 × 500** px, JPEG or 24-bit PNG, **no alpha channel** | ⬜ needed |
-| Phone screenshots | **2 minimum, 8 maximum**. JPEG or 24-bit PNG, no alpha. Each side between 320 px and 3840 px, and the longer side no more than twice the shorter | ⬜ needed |
-| Short description | ≤ 80 characters | ✅ drafted below |
-| Full description | ≤ 4000 characters | ✅ drafted below |
+| Asset             | Spec                                                                                                                                             | Status                         |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
+| App icon          | **512 × 512** px, 32-bit PNG with alpha, under 1 MB                                                                                              | ✅ `graphics/app-icon-512.png` |
+| Feature graphic   | **exactly 1024 × 500** px, JPEG or 24-bit PNG, **no alpha channel**                                                                              | ⬜ needed                      |
+| Phone screenshots | **2 minimum, 8 maximum**. JPEG or 24-bit PNG, no alpha. Each side between 320 px and 3840 px, and the longer side no more than twice the shorter | ⬜ needed                      |
+| Short description | ≤ 80 characters                                                                                                                                  | ✅ drafted below               |
+| Full description  | ≤ 4000 characters                                                                                                                                | ✅ drafted below               |
 
 **Recommended screenshot size: 1080 × 1920** (9:16 portrait). The app is
 portrait-locked, so portrait screenshots are the correct choice.
@@ -155,12 +155,12 @@ Fill these while you are in there:
 
 Verified against the code, not assumed. The app collects and links to identity:
 
-| Data type | Collected | Purpose |
-| --- | --- | --- |
-| Email address | Yes | Account creation and verification |
-| Name | Yes | Display name in profile |
-| Photos | Yes, optional | Profile picture only, chosen by the user |
-| App activity | Yes | XP, streaks, quiz results, study history |
+| Data type     | Collected     | Purpose                                  |
+| ------------- | ------------- | ---------------------------------------- |
+| Email address | Yes           | Account creation and verification        |
+| Name          | Yes           | Display name in profile                  |
+| Photos        | Yes, optional | Profile picture only, chosen by the user |
+| App activity  | Yes           | XP, streaks, quiz results, study history |
 
 Declare **no** for: location, contacts, calendar, financial info, health,
 messages, files, installed apps, device identifiers for advertising.

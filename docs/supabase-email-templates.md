@@ -16,19 +16,19 @@ applied by migration — paste them in by hand.
 ## 1. Configure SMTP (do this first)
 
 Supabase Dashboard → **Project Settings → Authentication → SMTP Settings** →
-enable *Custom SMTP*.
+enable _Custom SMTP_.
 
 ### Cloudflare Email Sending — the one we use
 
-Email *Routing* is inbound-only and cannot send. Email *Sending* (public beta
+Email _Routing_ is inbound-only and cannot send. Email _Sending_ (public beta
 since 2026-04-16) provides SMTP. Both prerequisites are already met: the
 account is on **Workers Paid**, and `japangolearn.com` is on Cloudflare DNS.
 Includes 3,000 emails/month, then $0.35 per 1,000.
 
 **Step 1 — onboard the domain.** Cloudflare dashboard → **Compute → Email
-Service → Email Sending** → *Onboard Domain* → pick `japangolearn.com`.
+Service → Email Sending** → _Onboard Domain_ → pick `japangolearn.com`.
 Cloudflare adds the MX (bounce handling), SPF, DKIM and DMARC records itself.
-Review, then *Done*. Propagation is usually 5–15 minutes on Cloudflare DNS.
+Review, then _Done_. Propagation is usually 5–15 minutes on Cloudflare DNS.
 
 **Step 2 — create the credential.** My Profile → **API Tokens** → create a
 token with the **Email Sending: Edit** permission. Treat it as a password:
@@ -36,14 +36,14 @@ anyone holding it can send from any onboarded domain on the account.
 
 **Step 3 — SMTP settings in Supabase:**
 
-| Field | Value |
-| --- | --- |
-| Host | `smtp.mx.cloudflare.net` |
-| Port | `465` (implicit TLS / SMTPS) |
-| Username | the literal string `api_token` |
-| Password | the API token from step 2 |
-| Sender email | `no-reply@japangolearn.com` |
-| Sender name | `JapanGoLearn` |
+| Field        | Value                          |
+| ------------ | ------------------------------ |
+| Host         | `smtp.mx.cloudflare.net`       |
+| Port         | `465` (implicit TLS / SMTPS)   |
+| Username     | the literal string `api_token` |
+| Password     | the API token from step 2      |
+| Sender email | `no-reply@japangolearn.com`    |
+| Sender name  | `JapanGoLearn`                 |
 
 Cloudflare supports **only** port 465 with implicit TLS — plaintext port 25 and
 STARTTLS on 587 are rejected. If Supabase cannot connect, confirm it is set to
@@ -53,25 +53,25 @@ Other limits worth knowing: 50 recipients per SMTP session, 5 MiB message size.
 
 ### Brevo (free fallback — 300 emails/day, no card)
 
-After verifying `japangolearn.com` under Brevo → *Senders, Domains & Dedicated IPs*:
+After verifying `japangolearn.com` under Brevo → _Senders, Domains & Dedicated IPs_:
 
-| Field | Value |
-| --- | --- |
-| Host | `smtp-relay.brevo.com` |
-| Port | `587` |
-| Username | your Brevo SMTP login (shown under *SMTP & API*) |
-| Password | your Brevo SMTP key |
-| Sender email | `no-reply@japangolearn.com` |
-| Sender name | `JapanGoLearn` |
+| Field        | Value                                            |
+| ------------ | ------------------------------------------------ |
+| Host         | `smtp-relay.brevo.com`                           |
+| Port         | `587`                                            |
+| Username     | your Brevo SMTP login (shown under _SMTP & API_) |
+| Password     | your Brevo SMTP key                              |
+| Sender email | `no-reply@japangolearn.com`                      |
+| Sender name  | `JapanGoLearn`                                   |
 
 Note Brevo's 300/day is shared across marketing and transactional mail.
 
 ### Alternatives
 
-| Provider | Free tier | Host / Port |
-| --- | --- | --- |
-| Mailjet | 6,000/mo (200/day) | `in-v3.mailjet.com` : `587` |
-| Resend | 3,000/mo (100/day) | `smtp.resend.com` : `465` |
+| Provider | Free tier          | Host / Port                 |
+| -------- | ------------------ | --------------------------- |
+| Mailjet  | 6,000/mo (200/day) | `in-v3.mailjet.com` : `587` |
+| Resend   | 3,000/mo (100/day) | `smtp.resend.com` : `465`   |
 
 Whichever you pick, the sender domain must be verified with that provider or
 mail will be rejected.
@@ -89,7 +89,7 @@ failing at 30/hour until this is raised under
 **Authentication → Rate Limits → Emails sent per hour**.
 
 While you are there, under **Authentication → Providers → Email**, confirm
-*Confirm email* is enabled, and set **OTP expiry** to `3600` seconds or less
+_Confirm email_ is enabled, and set **OTP expiry** to `3600` seconds or less
 (Supabase's security advisor flags anything longer).
 
 ---
@@ -109,12 +109,25 @@ Body — replace the whole template with this:
 ```html
 <!doctype html>
 <html>
-  <body style="margin:0;padding:0;background-color:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;padding:32px 12px;">
+  <body
+    style="margin:0;padding:0;background-color:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;"
+  >
+    <table
+      role="presentation"
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      style="background-color:#f4f5f7;padding:32px 12px;"
+    >
       <tr>
         <td align="center">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(16,24,40,0.08);">
-
+          <table
+            role="presentation"
+            width="100%"
+            cellpadding="0"
+            cellspacing="0"
+            style="max-width:480px;background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(16,24,40,0.08);"
+          >
             <!-- Logo -->
             <tr>
               <td align="center" style="padding:32px 32px 8px 32px;">
@@ -143,8 +156,12 @@ Body — replace the whole template with this:
             <!-- Code -->
             <tr>
               <td align="center" style="padding:28px 32px;">
-                <div style="display:inline-block;background-color:#f9f5ff;border:1px solid #e9d7fe;border-radius:12px;padding:18px 28px;">
-                  <span style="font-family:'SF Mono',Menlo,Consolas,monospace;font-size:34px;font-weight:700;letter-spacing:10px;color:#6941c6;">
+                <div
+                  style="display:inline-block;background-color:#f9f5ff;border:1px solid #e9d7fe;border-radius:12px;padding:18px 28px;"
+                >
+                  <span
+                    style="font-family:'SF Mono',Menlo,Consolas,monospace;font-size:34px;font-weight:700;letter-spacing:10px;color:#6941c6;"
+                  >
                     {{ .Token }}
                   </span>
                 </div>
@@ -155,25 +172,29 @@ Body — replace the whole template with this:
             <tr>
               <td align="center" style="padding:0 32px 28px 32px;">
                 <p style="margin:0;font-size:13px;line-height:20px;color:#667085;">
-                  This code expires in 60 minutes. If you didn't create a
-                  JapanGoLearn account, you can safely ignore this email.
+                  This code expires in 60 minutes. If you didn't create a JapanGoLearn account, you
+                  can safely ignore this email.
                 </p>
               </td>
             </tr>
 
             <!-- Footer -->
             <tr>
-              <td align="center" style="padding:20px 32px;border-top:1px solid #eaecf0;background-color:#fcfcfd;">
+              <td
+                align="center"
+                style="padding:20px 32px;border-top:1px solid #eaecf0;background-color:#fcfcfd;"
+              >
                 <p style="margin:0;font-size:12px;line-height:18px;color:#98a2b3;">
                   JapanGoLearn &middot;
-                  <a href="https://japangolearn.com" style="color:#6941c6;text-decoration:none;">japangolearn.com</a>
+                  <a href="https://japangolearn.com" style="color:#6941c6;text-decoration:none;"
+                    >japangolearn.com</a
+                  >
                 </p>
                 <p style="margin:6px 0 0 0;font-size:12px;line-height:18px;color:#98a2b3;">
                   一歩一歩、前へ進もう
                 </p>
               </td>
             </tr>
-
           </table>
         </td>
       </tr>

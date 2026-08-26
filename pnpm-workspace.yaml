@@ -33,7 +33,7 @@ minimumReleaseAgeExclude:
   - "@supabase/storage-js@2.110.7"
   - "@supabase/supabase-js@2.110.7"
   - "@cloudflare/workers-types@5.20260722.1"
-  - '@expo/cli@54.0.27'
+  - "@expo/cli@54.0.27"
   - expo-constants@18.0.14
   - expo-file-system@19.0.24
   - expo-modules-autolinking@3.0.27

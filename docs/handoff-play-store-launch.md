@@ -10,15 +10,15 @@ was misbehaving.
 
 ## 1. Project facts you need
 
-| Thing | Value |
-| --- | --- |
-| Monorepo | pnpm workspaces + turbo, 13 packages |
-| Mobile | Expo SDK 54, React Native 0.81.5, expo-router 6, React 19, New Arch + Hermes |
-| App name / package | `JapanGoLearn` / `com.japangolearn.app` |
-| EAS project | `@robinsingh24/japangolearn`, id `292004a3-77c6-4d6b-80f7-59cb1fab1d57` |
-| Supabase project | ref `teylstfbjtutssnfmhhu` (named "japanese"), region ap-south-1 |
-| Domain | `japangolearn.com`, on Cloudflare DNS, web/admin/api deployed as Cloudflare Workers |
-| Branch | `codex/phase-0-foundation` |
+| Thing              | Value                                                                               |
+| ------------------ | ----------------------------------------------------------------------------------- |
+| Monorepo           | pnpm workspaces + turbo, 13 packages                                                |
+| Mobile             | Expo SDK 54, React Native 0.81.5, expo-router 6, React 19, New Arch + Hermes        |
+| App name / package | `JapanGoLearn` / `com.japangolearn.app`                                             |
+| EAS project        | `@robinsingh24/japangolearn`, id `292004a3-77c6-4d6b-80f7-59cb1fab1d57`             |
+| Supabase project   | ref `teylstfbjtutssnfmhhu` (named "japanese"), region ap-south-1                    |
+| Domain             | `japangolearn.com`, on Cloudflare DNS, web/admin/api deployed as Cloudflare Workers |
+| Branch             | `codex/phase-0-foundation`                                                          |
 
 **There is only ONE Supabase project.** No staging/dev project exists. This
 matters — see §6.
@@ -66,7 +66,7 @@ like it works and fail intermittently.
   go through `/`.
 - `AuthPromptModal` called `exitGuestMode()` before navigating, unmounting
   `(tabs)` from under itself. Guest mode is now left alone; signing in clears it.
-- `index.tsx` marked onboarding complete *before* showing it, so quitting
+- `index.tsx` marked onboarding complete _before_ showing it, so quitting
   mid-carousel skipped it forever. Now marked on actual exit (`onboarding.tsx`).
 - `fetchProfile` in `lib/auth.tsx` discarded errors — a failed profile fetch
   left users signed in with a blank profile and no diagnostic. Now reported via
@@ -82,7 +82,7 @@ like it works and fail intermittently.
 ### Account deletion (Play Store requirement)
 
 - `supabase/migrations/20260813120000_add_delete_account_rpc.sql` — `SECURITY
-  DEFINER` RPC `public.delete_account()`. **Already applied to production.**
+DEFINER` RPC `public.delete_account()`. **Already applied to production.**
   Hard-deletes `auth.users` (cascades everywhere); if retained records block it
   (`course_orders` is `ON DELETE RESTRICT`, `blog_posts.author_id` is
   `NO ACTION`, published courses via `teacher_profiles`) it falls back to
@@ -103,7 +103,7 @@ Duplicate-signup handling has **two distinct cases** — this is subtle:
 - **Confirmed account exists** → Supabase returns success with an **empty
   `identities` array** and sends nothing (deliberate anti-enumeration). Detected
   and surfaced as "This email is already registered. Please sign in instead."
-- **Unconfirmed account exists** → Supabase returns a normal user *with*
+- **Unconfirmed account exists** → Supabase returns a normal user _with_
   identities and genuinely resends a code. The `identities` check cannot see
   this. Detected instead by `created_at` predating the request; shows the code
   screen with "already registered but never verified".
@@ -156,6 +156,7 @@ enumeration, which Supabase hides by default. The owner chose this for UX.
 ## 4. Verified vs not verified
 
 **Verified by me:**
+
 - Guest flow end-to-end in a running app (onboarding → skip → tabs, correct tab
   gating, zero "action was not handled by any navigator" warnings)
 - Eye toggles on mobile login + signup actually flip the field
@@ -166,9 +167,11 @@ enumeration, which Supabase hides by default. The owner chose this for UX.
 - typecheck + lint clean on mobile and web throughout
 
 **Verified by the owner on device:**
+
 - Signup → OTP email → verify → session → profile row created
 
 **NOT verified:**
+
 - Login and sign-out on a real device after the navigation rewrite. I cannot
   enter passwords, so the owner must confirm. Sign out from **both** Profile and
   the Sidebar — those were separate code paths.

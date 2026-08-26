@@ -5,7 +5,6 @@ const { createClient } = require("@supabase/supabase-js");
 
 const ROOT = path.resolve(__dirname, "../../..");
 const DATA_FILE = path.join(__dirname, "n5-remaining.json");
-const PROJECT_URL = "https://teylstfbjtutssnfmhhu.supabase.co";
 
 const ENV_FILES = [
   ".env.local",
@@ -19,18 +18,11 @@ for (const relativePath of ENV_FILES) {
   loadEnvFile(path.join(ROOT, relativePath));
 }
 
-const supabaseUrl =
-  process.env.SUPABASE_URL ||
-  process.env.NEXT_PUBLIC_SUPABASE_URL ||
-  process.env.EXPO_PUBLIC_SUPABASE_URL ||
-  PROJECT_URL;
-const supabaseKey =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error("Missing Supabase URL or key. Check .env.local or app env files.");
+  console.error("Missing server-only SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
   process.exit(1);
 }
 

@@ -29,3 +29,9 @@ pnpm --filter @japangolearn/mobile exec eas env:pull development --path .env.loc
 ```
 
 Mobile preview and production updates use their matching EAS environments through the root release scripts.
+
+## SaaS implementation roadmap
+
+The canonical phase-by-phase plan for the teacher marketplace and Bunny Stream integration is [`docs/saas-implementation-plan.md`](docs/saas-implementation-plan.md). This Codex chat owns every phase. Read the plan together with `docs/p0-engineering.md` and `docs/database-security-audit.md` before starting marketplace work.
+
+Manually review implementation status and evidence in [`docs/saas-phase-progress.md`](docs/saas-phase-progress.md). A phase is complete only when every exit gate is checked and its CI/staging evidence is recorded.

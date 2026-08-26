@@ -5,6 +5,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { trackEvent } from "@/lib/analytics";
 import { initMonitoring, Sentry } from "@/lib/monitoring";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Colors } from "@/constants/theme";
 
 initMonitoring();
@@ -58,10 +59,12 @@ function RootLayout() {
   }, []);
 
   return (
-    <AuthProvider>
-      <StatusBar style="light" />
-      <RootNavigator />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <StatusBar style="light" />
+        <RootNavigator />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

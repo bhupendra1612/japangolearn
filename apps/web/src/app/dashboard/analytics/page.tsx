@@ -14,8 +14,20 @@ import {
 import { SimpleBarChart } from "@/components/dashboard/bar-chart";
 import { SkillRadar } from "@/components/dashboard/skill-radar";
 import { MiniHeatmap } from "@/components/dashboard/mini-heatmap";
+import { getSkillBreakdown } from "@/lib/insights";
+import type { MasteryItemType } from "@japangolearn/core";
 
 export const dynamic = "force-dynamic";
+
+/* The four content families that actually exist. The previous radar hardcoded
+   "Listening" and "Lessons" axes that no web activity can fill, so every
+   learner was permanently told to focus on a skill the product does not teach. */
+const SKILL_AXES: { key: MasteryItemType; label: string }[] = [
+  { key: "vocabulary", label: "Vocab" },
+  { key: "kanji", label: "Kanji" },
+  { key: "kana", label: "Kana" },
+  { key: "grammar", label: "Grammar" },
+];
 
 export default async function AnalyticsPage() {
   const supabase = await createClient();
@@ -26,23 +38,26 @@ export default async function AnalyticsPage() {
 
   const ninetyDaysAgo = new Date(Date.now() - 91 * 24 * 60 * 60 * 1000).toISOString();
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const [{ data: profile }, { data: weeklyXpEntries }, { data: allAttempts }] = await Promise.all([
-    supabase.from("profiles").select("streak_days").eq("id", user.id).single(),
+  const [{ data: profile }, { data: weeklyXpEntries }, { data: allAttempts }, skills] =
+    await Promise.all([
+      supabase.from("profiles").select("streak_days").eq("id", user.id).single(),
 
-    supabase
-      .from("xp_ledger")
-      .select("amount, created_at")
-      .eq("user_id", user.id)
-      .gte("created_at", sevenDaysAgo)
-      .order("created_at", { ascending: false }),
+      supabase
+        .from("xp_ledger")
+        .select("amount, created_at")
+        .eq("user_id", user.id)
+        .gte("created_at", sevenDaysAgo)
+        .order("created_at", { ascending: false }),
 
-    supabase
-      .from("learning_attempts")
-      .select("activity_type, correct_answers, total_questions, duration_seconds, completed_at")
-      .eq("user_id", user.id)
-      .eq("status", "completed")
-      .gte("completed_at", ninetyDaysAgo),
-  ]);
+      supabase
+        .from("learning_attempts")
+        .select("activity_type, correct_answers, total_questions, duration_seconds, completed_at")
+        .eq("user_id", user.id)
+        .eq("status", "completed")
+        .gte("completed_at", ninetyDaysAgo),
+
+      getSkillBreakdown(),
+    ]);
 
   const streak = profile?.streak_days ?? 0;
 
@@ -58,34 +73,30 @@ export default async function AnalyticsPage() {
   const weeklyChartData = dayLabels.map((label, i) => ({ label, value: weeklyXp[i] }));
   const weeklyTotal = weeklyXp.reduce((s, v) => s + v, 0);
 
-  const skillCounts: Record<string, number> = {
-    vocabulary: 0,
-    kanji: 0,
-    grammar: 0,
-    listening: 0,
-    lesson: 0,
-  };
-  allAttempts?.forEach((attempt) => {
-    const skill = {
-      vocabulary_quiz: "vocabulary",
-      grammar_quiz: "grammar",
-      writing_quiz: "kanji",
-      practice_quiz: "lesson",
-    }[attempt.activity_type];
-    if (skill && skillCounts[skill] !== undefined) skillCounts[skill] += 1;
-  });
-  const skillRadarData = [
-    { label: "Vocab", value: skillCounts.vocabulary, max: 50 },
-    { label: "Kanji", value: skillCounts.kanji, max: 50 },
-    { label: "Grammar", value: skillCounts.grammar, max: 50 },
-    { label: "Listening", value: skillCounts.listening, max: 50 },
-    { label: "Lessons", value: skillCounts.lesson, max: 50 },
-  ];
+  /* Mastery per content family, not attempt counts. An axis the learner has
+     never touched sits at 0 with tracked = 0, which is what lets the
+     strongest/weakest comparison below ignore it instead of naming it a
+     weakness. */
+  const skillByType = new Map(skills.map((skill) => [skill.itemType, skill]));
+  const skillRadarData = SKILL_AXES.map(({ key, label }) => ({
+    label,
+    value: skillByType.get(key)?.avgMastery ?? 0,
+    max: 100,
+  }));
 
-  // Find strongest / weakest
-  const sorted = [...skillRadarData].sort((a, b) => b.value - a.value);
-  const strongest = sorted[0];
-  const weakest = sorted[sorted.length - 1];
+  const studiedSkills = SKILL_AXES.map(({ key, label }) => ({
+    label,
+    skill: skillByType.get(key),
+  })).filter((entry) => (entry.skill?.tracked ?? 0) > 0);
+
+  const rankedSkills = [...studiedSkills].sort(
+    (a, b) => (b.skill?.avgMastery ?? 0) - (a.skill?.avgMastery ?? 0)
+  );
+  /* Only meaningful once two families have been studied — with one, "strongest"
+     and "weakest" would name the same thing. */
+  const strongest = rankedSkills.length >= 2 ? rankedSkills[0] : null;
+  const weakest = rankedSkills.length >= 2 ? rankedSkills[rankedSkills.length - 1] : null;
+  const trackedItems = skills.reduce((total, skill) => total + skill.tracked, 0);
 
   const totalStudyMin = Math.round(
     (allAttempts ?? []).reduce((total, attempt) => total + (attempt.duration_seconds ?? 0), 0) / 60
@@ -228,26 +239,76 @@ export default async function AnalyticsPage() {
             <div>
               <h3 className="font-bold">Skill Breakdown</h3>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Your strengths and areas to improve
+                {trackedItems > 0
+                  ? `Average mastery across ${trackedItems.toLocaleString()} tracked item${trackedItems === 1 ? "" : "s"}`
+                  : "Mastery builds as you answer quiz questions"}
               </p>
             </div>
           </div>
-          <SkillRadar skills={skillRadarData} size={220} />
-          {/* Strongest / Weakest */}
-          <div className="flex gap-3 mt-4">
-            <div className="flex-1 p-3 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-              <p className="text-[10px] uppercase tracking-wider text-green-600 dark:text-green-400 font-semibold mb-0.5">
-                Strongest
+
+          {trackedItems > 0 ? (
+            <>
+              <SkillRadar skills={skillRadarData} size={220} />
+
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {SKILL_AXES.map(({ key, label }) => {
+                  const skill = skillByType.get(key);
+                  return (
+                    <div
+                      key={key}
+                      className="rounded-xl bg-gray-50 p-2.5 text-center dark:bg-gray-900/40"
+                    >
+                      <p className="text-[10px] uppercase tracking-wider text-gray-400">{label}</p>
+                      <p className="text-sm font-bold tabular-nums">
+                        {skill ? `${Math.round(skill.avgMastery)}%` : "—"}
+                      </p>
+                      <p className="text-[10px] text-gray-400">
+                        {skill ? `${skill.tracked} tracked` : "not started"}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {strongest && weakest && (
+                <div className="mt-4 flex gap-3">
+                  <div className="flex-1 rounded-xl border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/20">
+                    <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-green-600 dark:text-green-400">
+                      Strongest
+                    </p>
+                    <p className="text-sm font-bold">{strongest.label}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {Math.round(strongest.skill?.accuracy ?? 0)}% accuracy
+                    </p>
+                  </div>
+                  <div className="flex-1 rounded-xl border border-orange-200 bg-orange-50 p-3 dark:border-orange-800 dark:bg-orange-900/20">
+                    <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-orange-600 dark:text-orange-400">
+                      Focus On
+                    </p>
+                    <p className="text-sm font-bold">{weakest.label}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {Math.round(weakest.skill?.accuracy ?? 0)}% accuracy
+                    </p>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="rounded-2xl bg-gray-50 px-4 py-10 text-center dark:bg-gray-900/40">
+              <p className="text-3xl">🌱</p>
+              <p className="mt-2 text-sm font-medium">No mastery data yet</p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Finish a vocabulary, writing, or grammar quiz and each item you answer starts
+                building a mastery score here.
               </p>
-              <p className="text-sm font-bold">{strongest.label}</p>
+              <Link
+                href="/dashboard/vocabulary"
+                className="gradient-bg-primary mt-4 inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+              >
+                Start a quiz
+              </Link>
             </div>
-            <div className="flex-1 p-3 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
-              <p className="text-[10px] uppercase tracking-wider text-orange-600 dark:text-orange-400 font-semibold mb-0.5">
-                Focus On
-              </p>
-              <p className="text-sm font-bold">{weakest.label}</p>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 

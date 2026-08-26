@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { ProgressRing } from "@/components/dashboard/progress-ring";
 import { AvatarUpload, ProfileEditForm } from "@/components/dashboard/profile-edit-form";
+import { DailyGoalSetting } from "@/components/dashboard/daily-goal-setting";
 import { getXpLevelProgress } from "@japangolearn/content";
 
 export const dynamic = "force-dynamic";
@@ -43,7 +44,7 @@ export default async function ProfilePage() {
     supabase
       .from("profiles")
       .select(
-        "display_name, avatar_url, role, current_jlpt_level, xp, streak_days, created_at, last_active_at"
+        "display_name, avatar_url, role, current_jlpt_level, xp, streak_days, created_at, last_active_at, daily_xp_goal"
       )
       .eq("id", user.id)
       .single(),
@@ -103,6 +104,7 @@ export default async function ProfilePage() {
     .toUpperCase();
 
   // Build achievement showcase
+  const dailyGoal = profile?.daily_xp_goal ?? 100;
   const unlockedIds = new Set(userAchievements?.map((ua) => ua.achievement_id) ?? []);
   const unlockedAchievements =
     allAchievements?.filter((a) => unlockedIds.has(a.id)).slice(0, 6) ?? [];
@@ -280,6 +282,14 @@ export default async function ProfilePage() {
             ))}
           </div>
         </div>
+      </section>
+
+      {/* ───── Preferences ───── */}
+      <section
+        className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 animate-slide-up dark:border-gray-700 dark:bg-gray-800/60"
+        style={{ animationDelay: "0.05s" }}
+      >
+        <DailyGoalSetting currentGoal={dailyGoal} />
       </section>
 
       {/* ───── 90-Day Activity Heatmap ───── */}

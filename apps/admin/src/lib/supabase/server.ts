@@ -1,13 +1,14 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { SUPABASE_PROJECT_URL, type Database } from "@japangolearn/database";
+import type { Database } from "@japangolearn/database";
 import { cookies } from "next/headers";
+import { publicEnvironment } from "@/lib/environment";
 
 export async function createClient() {
   const cookieStore = await cookies();
 
   return createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? SUPABASE_PROJECT_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    publicEnvironment.supabaseUrl,
+    publicEnvironment.supabasePublicKey,
     {
       cookies: {
         getAll() {

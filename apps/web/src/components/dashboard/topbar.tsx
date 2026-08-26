@@ -3,8 +3,10 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, User, Settings, LogOut, ChevronDown, Flame, Sparkles, Menu, X } from "lucide-react";
+import { User, Settings, LogOut, ChevronDown, Flame, Sparkles, Menu, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { NotificationBell } from "@/components/dashboard/notification-bell";
+import type { DashboardNotification } from "@/lib/insights";
 
 interface DashboardTopBarProps {
   displayName: string;
@@ -13,6 +15,7 @@ interface DashboardTopBarProps {
   jlptLevel: string;
   onMobileMenuToggle: () => void;
   mobileMenuOpen: boolean;
+  notifications: DashboardNotification[];
 }
 
 export function DashboardTopBar({
@@ -22,24 +25,22 @@ export function DashboardTopBar({
   jlptLevel,
   onMobileMenuToggle,
   mobileMenuOpen,
+  notifications,
 }: DashboardTopBarProps) {
   const [avatarOpen, setAvatarOpen] = useState(false);
-  const [notifOpen, setNotifOpen] = useState(false);
   const [displayXp, setDisplayXp] = useState(xp);
   const router = useRouter();
   const avatarRef = useRef<HTMLDivElement>(null);
-  const notifRef = useRef<HTMLDivElement>(null);
 
   // Animate XP count-up when xp prop changes
   useEffect(() => {
     setDisplayXp(xp);
   }, [xp]);
 
-  // Close dropdowns on outside click
+  // Close the avatar menu on outside click
   useEffect(() => {
     function handle(e: MouseEvent) {
       if (avatarRef.current && !avatarRef.current.contains(e.target as Node)) setAvatarOpen(false);
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
     }
     document.addEventListener("mousedown", handle);
     return () => document.removeEventListener("mousedown", handle);
@@ -110,63 +111,12 @@ export function DashboardTopBar({
         </span>
       </div>
 
-      {/* Notification Bell */}
-      <div className="relative" ref={notifRef}>
-        <button
-          onClick={() => {
-            setNotifOpen(!notifOpen);
-            setAvatarOpen(false);
-          }}
-          className="relative p-2 rounded-xl text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
-          aria-label="Notifications"
-        >
-          <Bell className="w-5 h-5" />
-          {/* Unread dot */}
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
-        </button>
-
-        {notifOpen && (
-          <div className="absolute right-0 top-full mt-2 w-72 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl z-50 overflow-hidden animate-scale-in">
-            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-              <p className="text-sm font-semibold">Notifications</p>
-              <span className="text-xs text-primary-600 dark:text-primary-400 cursor-pointer hover:underline">
-                Mark all read
-              </span>
-            </div>
-            <div className="py-2">
-              {[
-                { icon: "🔥", text: "Keep your streak alive! Study today.", time: "now" },
-                { icon: "⭐", text: "You earned 25 XP from yesterday's lesson.", time: "1h ago" },
-                { icon: "🎉", text: "Welcome to JapanGoLearn!", time: "today" },
-              ].map((n, i) => (
-                <div
-                  key={i}
-                  className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors"
-                >
-                  <span className="text-lg shrink-0 mt-0.5">{n.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-snug">
-                      {n.text}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">{n.time}</p>
-                  </div>
-                  {i === 0 && (
-                    <span className="shrink-0 w-2 h-2 rounded-full bg-primary-500 mt-1.5" />
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      <NotificationBell notifications={notifications} />
 
       {/* Avatar Dropdown */}
       <div className="relative" ref={avatarRef}>
         <button
-          onClick={() => {
-            setAvatarOpen(!avatarOpen);
-            setNotifOpen(false);
-          }}
+          onClick={() => setAvatarOpen(!avatarOpen)}
           className="flex items-center gap-2 p-1 pr-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
         >
           <div className="w-8 h-8 rounded-lg gradient-bg-primary flex items-center justify-center text-white text-xs font-bold shrink-0">

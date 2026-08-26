@@ -11,6 +11,7 @@ const footerLinks = {
     { href: "/terms", label: "Terms & Conditions" },
     { href: "/privacy", label: "Privacy Policy" },
     { href: "/disclaimer", label: "Disclaimer" },
+    { href: "/delete-account", label: "Delete Account" },
   ],
   Connect: [
     { href: "/contact", label: "Contact Us" },

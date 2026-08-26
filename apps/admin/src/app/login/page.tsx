@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { AlertTriangle, LogIn } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 type LoginPageProps = {
   searchParams?: Promise<{
@@ -14,6 +16,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   return (
     <main className="auth-page">
+      <ThemeToggle className="auth-theme-toggle" />
       <form action={signIn} className="auth-card">
         <span className="brand-mark">日</span>
         <div>
@@ -21,7 +24,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <h1>Sign in</h1>
           <p>Use an account whose profile role is set to admin.</p>
         </div>
-        {error && <div className="form-error">{error}</div>}
+        {error && (
+          <div className="form-error">
+            <AlertTriangle size={18} aria-hidden="true" />
+            <span>{error}</span>
+          </div>
+        )}
         <label>
           Email
           <input name="email" type="email" autoComplete="email" required />
@@ -32,6 +40,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </label>
         <input name="next" type="hidden" value={params?.next ?? "/"} />
         <button className="primary-button" type="submit">
+          <LogIn size={16} aria-hidden="true" />
           Sign in
         </button>
       </form>

@@ -1,0 +1,67 @@
+name: Phase 0 verification
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-build-placeholder
+      NEXT_PUBLIC_APP_ENV: test
+      EXPO_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ci-build-placeholder
+      EXPO_PUBLIC_APP_ENV: test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test:unit
+      - run: pnpm test:typecheck
+      - run: pnpm build
+      - run: pnpm check:expo
+
+  database-and-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start local Supabase
+        run: pnpm exec supabase start
+      - name: Replay migrations and seed
+        run: pnpm exec supabase db reset
+      - name: Verify generated database types
+        run: pnpm db:types:check:local
+      - name: Audit database security
+        run: pnpm db:security:audit
+      - name: Verify backup and restore
+        run: pnpm db:backup:verify
+      - name: Database integration tests
+        run: pnpm test:integration
+      - name: Install Playwright
+        run: pnpm exec playwright install --with-deps chromium
+      - name: End-to-end and accessibility tests
+        run: pnpm test:e2e
+      - name: Stop local Supabase
+        if: always()
+        run: pnpm exec supabase stop

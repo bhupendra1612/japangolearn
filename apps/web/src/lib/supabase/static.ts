@@ -1,5 +1,6 @@
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@japangolearn/database";
+import { publicEnvironment } from "@/lib/environment";
 
 /**
  * Creates a Supabase client suitable for use at build time
@@ -7,7 +8,7 @@ import type { Database } from "@japangolearn/database";
  */
 export function createStaticClient() {
   return createSupabaseClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    publicEnvironment.supabaseUrl,
+    publicEnvironment.supabasePublicKey
   );
 }

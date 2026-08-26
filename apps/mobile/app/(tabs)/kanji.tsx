@@ -9,7 +9,6 @@ import {
   FlatList,
   ActivityIndicator,
   Modal,
-  Pressable,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -104,7 +103,13 @@ function KanjiDetailModal({
         {/* Header */}
         <LinearGradient colors={["#1A1035", "#0F0B1E"]} style={modal.header}>
           <View style={modal.headerTop}>
-            <TouchableOpacity onPress={onClose} style={modal.closeBtn} activeOpacity={0.7}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={modal.closeBtn}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Close kanji details"
+            >
               <Ionicons name="chevron-down" size={24} color={Colors.dark.text} />
             </TouchableOpacity>
 
@@ -116,6 +121,8 @@ function KanjiDetailModal({
               ]}
               onPress={() => safeSpeak(kanji.character)}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`Play pronunciation of ${kanji.character}`}
             >
               <Ionicons
                 name={speakingText === kanji.character ? "volume-high" : "volume-medium-outline"}
@@ -295,6 +302,8 @@ function KanjiDetailModal({
                     <Text style={modal.vocabHiragana}>{v.hiragana}</Text>
                     <TouchableOpacity
                       style={modal.vocabAudioBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Play pronunciation of ${v.word || v.hiragana}`}
                       onPress={() => safeSpeak(v.word || v.hiragana)}
                       hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                     >
@@ -335,6 +344,8 @@ function KanjiDetailModal({
                     <Text style={modal.exampleJp}>{e.jp}</Text>
                     <TouchableOpacity
                       style={modal.exampleAudioBtn}
+                      accessibilityRole="button"
+                      accessibilityLabel="Play pronunciation of this example"
                       onPress={() => safeSpeak(e.jp)}
                       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
@@ -427,6 +438,8 @@ function KanjiCard({
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <TouchableOpacity
               style={[styles.playBtn, isSpeaking && styles.playBtnActive]}
+              accessibilityRole="button"
+              accessibilityLabel="Play pronunciation"
               onPress={handleSpeak}
               hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
             >
@@ -575,7 +588,11 @@ export default function KanjiScreen() {
             onChangeText={onSearch}
           />
           {search.length > 0 && (
-            <TouchableOpacity onPress={() => onSearch("")}>
+            <TouchableOpacity
+              onPress={() => onSearch("")}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+            >
               <Ionicons name="close-circle" size={17} color={Colors.dark.textMuted} />
             </TouchableOpacity>
           )}

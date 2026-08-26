@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -45,15 +45,7 @@ export default function PracticeListScreen() {
   const [items, setItems] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (session?.user && id) {
-        loadData();
-      }
-    }, [session, id])
-  );
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
 
     // 1. Load list details
@@ -164,7 +156,15 @@ export default function PracticeListScreen() {
     }
 
     setLoading(false);
-  };
+  }, [id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (session?.user && id) {
+        void loadData();
+      }
+    }, [session?.user, id, loadData])
+  );
 
   const handleRemoveItem = (itemId: string) => {
     Alert.alert("Remove Item", "Remove this item from the list?", [
@@ -235,6 +235,9 @@ export default function PracticeListScreen() {
             onPress={startFlashcards}
             disabled={items.length === 0}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Study with flashcards"
+            accessibilityState={{ disabled: items.length === 0 }}
           >
             <LinearGradient
               colors={[Colors.primary[500], Colors.primary[600]]}
@@ -250,6 +253,9 @@ export default function PracticeListScreen() {
             onPress={startQuiz}
             disabled={items.length === 0}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Start quiz"
+            accessibilityState={{ disabled: items.length === 0 }}
           >
             <LinearGradient
               colors={[Colors.accent[500], Colors.accent[600]]}
@@ -314,6 +320,8 @@ export default function PracticeListScreen() {
                   style={s.removeBtn}
                   onPress={() => handleRemoveItem(item.id)}
                   hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove from list"
                 >
                   <Ionicons name="close" size={20} color={Colors.dark.textMuted} />
                 </TouchableOpacity>

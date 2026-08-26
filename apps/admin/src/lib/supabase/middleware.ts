@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { SUPABASE_PROJECT_URL, type Database } from "@japangolearn/database";
+import type { Database } from "@japangolearn/database";
 import { NextResponse, type NextRequest } from "next/server";
+import { publicEnvironment } from "@/lib/environment";
 
 const PUBLIC_PATHS = ["/login", "/auth/callback", "/forbidden"];
 
@@ -8,8 +9,8 @@ export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? SUPABASE_PROJECT_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    publicEnvironment.supabaseUrl,
+    publicEnvironment.supabasePublicKey,
     {
       cookies: {
         getAll() {

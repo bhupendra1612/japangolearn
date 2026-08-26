@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { SectionTable } from "@/components/section-table";
+import { SectionIcon } from "@/components/section-icons";
 import { getAllSectionResults } from "@/lib/admin-data";
 import { requireAdmin } from "@/lib/auth";
 
@@ -14,7 +16,7 @@ export default async function AdminHomePage() {
   );
 
   return (
-    <main className="stack">
+    <div className="stack">
       <section className="hero-panel">
         <div>
           <p className="eyebrow">Overview</p>
@@ -33,11 +35,18 @@ export default async function AdminHomePage() {
 
       <div className="cards-grid">
         {results.map((result) => (
-          <a className="stat-card" href={`/${result.section.key}`} key={result.section.key}>
-            <span>{result.section.label}</span>
-            <strong>{result.error ? "!" : (result.count ?? result.rows.length)}</strong>
-            <small>{result.error ?? result.section.table}</small>
-          </a>
+          <Link className="stat-card" href={`/${result.section.key}`} key={result.section.key}>
+            <div className="stat-card-top">
+              <span>{result.section.label}</span>
+              <span className="stat-icon">
+                <SectionIcon sectionKey={result.section.key} size={17} />
+              </span>
+            </div>
+            <strong>
+              {result.error ? "—" : (result.count ?? result.rows.length).toLocaleString("en-IN")}
+            </strong>
+            <small>{result.error ? "Failed to load" : result.section.table}</small>
+          </Link>
         ))}
       </div>
 
@@ -46,14 +55,14 @@ export default async function AdminHomePage() {
           <SectionTable key={result.section.key} result={result} compact />
         ))}
       </div>
-    </main>
+    </div>
   );
 }
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
     <div className="metric">
-      <strong>{value}</strong>
+      <strong>{value.toLocaleString("en-IN")}</strong>
       <span>{label}</span>
     </div>
   );

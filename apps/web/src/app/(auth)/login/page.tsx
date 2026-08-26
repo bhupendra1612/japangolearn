@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
-import { BookOpen, Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
+import { AuthBrandHeader } from "@/components/auth/auth-brand-header";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -40,18 +41,7 @@ export default function LoginPage() {
       <div className="absolute bottom-20 left-20 w-96 h-96 bg-accent-500/10 rounded-full blur-3xl" />
 
       <div className="relative w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2">
-            <div className="flex items-center justify-center w-12 h-12 rounded-2xl gradient-bg-primary text-white">
-              <BookOpen className="w-6 h-6" />
-            </div>
-            <span className="text-2xl font-bold gradient-text">JapanGoLearn</span>
-          </Link>
-          <p className="mt-3 text-gray-500 dark:text-gray-400">
-            Welcome back! Log in to continue learning.
-          </p>
-        </div>
+        <AuthBrandHeader title="Welcome Back" subtitle="Sign in to continue learning Japanese" />
 
         {/* Form Card */}
         <div className="p-8 rounded-2xl bg-white dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 shadow-xl neon-glow animate-scale-in">

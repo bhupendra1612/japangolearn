@@ -27,4 +27,15 @@ export function initMonitoring() {
   });
 }
 
+/**
+ * Report a handled error. Goes to Sentry when a DSN is configured, and always
+ * logs in development so failures are not silently swallowed.
+ */
+export function captureException(error: unknown, context?: Record<string, unknown>) {
+  if (__DEV__) {
+    console.error("[captureException]", error, context ?? {});
+  }
+  Sentry.captureException(error, context ? { extra: context } : undefined);
+}
+
 export { Sentry };

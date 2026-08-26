@@ -44,4 +44,8 @@ enable_signup = true
 [auth.email]
 enable_signup = true
 double_confirm_changes = true
-enable_confirmations = false
+# Matches production, where signup sends a 6-digit code. With this off the local
+# stack autoconfirms and returns a session immediately, so the signup e2e test
+# never reached the confirmation screen it asserts. Seeded test users are made
+# through the admin API with email_confirm: true, so they are unaffected.
+enable_confirmations = true

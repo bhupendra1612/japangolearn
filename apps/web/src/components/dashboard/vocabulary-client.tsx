@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { Search, Globe, ChevronDown, Volume2, CheckCircle2, XCircle, Brain } from "lucide-react";
 import { createXpAttemptKey } from "@japangolearn/content";
+import type { GradedAnswer } from "@japangolearn/core";
 import { trackWebEvent } from "@/lib/analytics";
 
 interface VocabWord {
@@ -97,6 +98,11 @@ export function VocabularyClient({ words }: { words: VocabWord[] }) {
   const [quizPool, setQuizPool] = useState<VocabWord[]>([]);
   const [quizAttemptKey, setQuizAttemptKey] = useState(() => createXpAttemptKey());
 
+  /* Per-item results for the whole session. A ref, not state: these are only
+     read when the quiz ends, and re-rendering on every answer would be waste. */
+  const answersRef = useRef<GradedAnswer[]>([]);
+  const questionShownAtRef = useRef<number>(Date.now());
+
   const topics = useMemo(() => {
     const set = new Set(words.map((w) => w.topic));
     return ["All", ...Array.from(set)];
@@ -162,6 +168,7 @@ export function VocabularyClient({ words }: { words: VocabWord[] }) {
     setQuizIndex(0);
     setQuizAnswer(null);
     setQuizAttemptKey(createXpAttemptKey());
+    answersRef.current = [];
     void trackWebEvent("learning.quiz_started", {
       activity_type: "vocabulary_quiz",
       question_count: shuffled.length,
@@ -178,6 +185,7 @@ export function VocabularyClient({ words }: { words: VocabWord[] }) {
     const target = pool[index];
     setQuizWord(target);
     setQuizAnswer(null);
+    questionShownAtRef.current = Date.now();
 
     // Generate 4 options (English meaning)
     const others = words.filter((w) => w.id !== target.id);
@@ -195,7 +203,19 @@ export function VocabularyClient({ words }: { words: VocabWord[] }) {
     const newCorrect = quizScore.correct + (isCorrect ? 1 : 0);
     const newTotal = quizScore.total + 1;
     setQuizScore({ correct: newCorrect, total: newTotal });
-    if (quizWord) speak(quizWord);
+
+    if (quizWord) {
+      answersRef.current.push({
+        itemType: "vocabulary",
+        itemId: String(quizWord.id),
+        isCorrect,
+        prompt: quizWord.kanji || quizWord.hiragana,
+        answer,
+        correctAnswer: quizWord.english,
+        responseMs: Date.now() - questionShownAtRef.current,
+      });
+      speak(quizWord);
+    }
 
     setTimeout(async () => {
       const next = quizIndex + 1;
@@ -209,6 +229,7 @@ export function VocabularyClient({ words }: { words: VocabWord[] }) {
             correctAnswers: newCorrect,
             totalQuestions: quizPool.length,
             attemptKey: quizAttemptKey,
+            answers: answersRef.current,
           });
           if (result.ok) {
             void trackWebEvent("learning.attempt_completed", {

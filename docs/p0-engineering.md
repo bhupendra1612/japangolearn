@@ -75,3 +75,21 @@ EXPO_PUBLIC_FEATURE_UNFINISHED_LEVELS=false
 
 AI practice is only visible when both AI and premium are enabled. N4-N1 learning
 paths remain hidden until unfinished levels are explicitly enabled.
+
+Marketplace visibility flags are also off by default. They are independent from
+server kill switches, which default to blocking teacher, media, enrollment,
+commerce, and payout commands. Neither kind of flag is authorization.
+
+## Marketplace API and environments
+
+`apps/api` is the shared Cloudflare Worker boundary for `/api/v1` marketplace
+routes. Runtime schemas and stable errors live in `packages/api-contracts`;
+provider-neutral interfaces and network-free fakes live in `packages/providers`.
+Every response carries a request ID and raw database/provider errors are not
+returned to clients.
+
+`packages/environment` validates web, admin, mobile, and API Supabase settings.
+Development, test, preview, and staging fail closed if configured with the
+production project. See `docs/phase-0-environments.md` for provisioning and
+promotion. `main` deploys to staging only; production requires a successful
+staging run ID and protected-environment approval.

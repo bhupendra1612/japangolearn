@@ -11,8 +11,10 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/lib/auth";
 import { Colors, BorderRadius } from "@/constants/theme";
+import { ONBOARDED_KEY } from "@/constants/storage";
 
 const { width, height } = Dimensions.get("window");
 
@@ -52,9 +54,21 @@ export default function OnboardingScreen() {
   const flatListRef = useRef<FlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
 
+  // Mark onboarding as seen only once the user actually leaves it, so quitting
+  // mid-carousel still shows it again on the next launch.
+  const markOnboarded = () => AsyncStorage.setItem(ONBOARDED_KEY, "true");
+
   const handleGuestMode = async () => {
+    await markOnboarded();
     await continueAsGuest();
-    router.replace("/(tabs)");
+    // Let app/index.tsx route once guest mode has been applied — "(tabs)" is
+    // only registered after the guard re-evaluates.
+    router.replace("/");
+  };
+
+  const goToAuth = async (pathname: "/(auth)/login" | "/(auth)/signup") => {
+    await markOnboarded();
+    router.push(pathname);
   };
 
   const handleNext = () => {
@@ -133,7 +147,7 @@ export default function OnboardingScreen() {
           <View style={styles.ctaButtons}>
             <TouchableOpacity
               style={styles.primaryBtn}
-              onPress={() => router.push("/(auth)/signup")}
+              onPress={() => void goToAuth("/(auth)/signup")}
               activeOpacity={0.85}
             >
               <LinearGradient
@@ -148,7 +162,7 @@ export default function OnboardingScreen() {
 
             <TouchableOpacity
               style={styles.secondaryBtn}
-              onPress={() => router.push("/(auth)/login")}
+              onPress={() => void goToAuth("/(auth)/login")}
               activeOpacity={0.8}
             >
               <Text style={styles.secondaryBtnText}>Already have an account? Sign In</Text>

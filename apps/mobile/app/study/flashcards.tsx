@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useCallback, useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -41,11 +41,7 @@ export default function FlashcardsScreen() {
   const slideAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
-  useEffect(() => {
-    if (listId) loadCards();
-  }, [listId]);
-
-  const loadCards = async () => {
+  const loadCards = useCallback(async () => {
     setLoading(true);
     const { data: listItems } = await supabase
       .from("practice_list_items")
@@ -97,7 +93,11 @@ export default function FlashcardsScreen() {
       setCards(mergedCards.sort(() => Math.random() - 0.5));
     }
     setLoading(false);
-  };
+  }, [listId]);
+
+  useEffect(() => {
+    if (listId) void loadCards();
+  }, [listId, loadCards]);
 
   const flipCard = () => {
     if (isFlipped) {

@@ -3,12 +3,34 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { X, LayoutDashboard, Route, BarChart3, Trophy, Bot, User } from "lucide-react";
+import {
+  X,
+  LayoutDashboard,
+  Route,
+  BarChart3,
+  Trophy,
+  Bot,
+  Bookmark,
+  Brain,
+  BookOpen,
+  BookText,
+  PenLine,
+  Search,
+  User,
+} from "lucide-react";
 import { featureFlags } from "@/lib/feature-flags";
 
+/* The three study activities were previously unreachable from the mobile
+   drawer, leaving them accessible only through the dashboard quest cards. */
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+  { label: "Review", icon: Brain, href: "/dashboard/review" },
+  { label: "Search", icon: Search, href: "/dashboard/search" },
+  { label: "Saved", icon: Bookmark, href: "/dashboard/saved" },
   { label: "Learning Path", icon: Route, href: "/dashboard/levels" },
+  { label: "Vocabulary", icon: BookOpen, href: "/dashboard/vocabulary" },
+  { label: "Writing", icon: PenLine, href: "/dashboard/writing" },
+  { label: "Grammar", icon: BookText, href: "/dashboard/grammar" },
   { label: "Analytics", icon: BarChart3, href: "/dashboard/analytics" },
   { label: "Achievements", icon: Trophy, href: "/dashboard/achievements" },
   { label: "AI Practice", icon: Bot, href: "/dashboard/ai-practice", premium: true },

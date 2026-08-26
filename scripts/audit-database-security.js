@@ -74,7 +74,11 @@ async function main() {
               'user_level_progress',
               'user_kana_progress',
               'user_kanji_progress',
-              'user_streaks'
+              'user_streaks',
+              'user_roles',
+              'course_orders',
+              'course_entitlements',
+              'marketplace_audit_log'
             )
         `,
         sql`

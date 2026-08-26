@@ -1,7 +1,3 @@
-export const SUPABASE_PROJECT_REF = "teylstfbjtutssnfmhhu";
-
-export const SUPABASE_PROJECT_URL = "https://teylstfbjtutssnfmhhu.supabase.co";
-
 export const DATABASE_TABLES = [
   "profiles",
   "jlpt_levels",
@@ -27,11 +23,38 @@ export const DATABASE_TABLES = [
   "xp_ledger",
   "mastery_records",
   "daily_quest_completions",
+  "user_roles",
+  "teacher_profiles",
+  "course_categories",
+  "courses",
+  "course_sections",
+  "video_assets",
+  "course_lessons",
+  "course_orders",
+  "course_entitlements",
 ] as const;
 
 export type DatabaseTable = (typeof DATABASE_TABLES)[number];
 
-export type { Database, Json } from "./supabase.types";
+export type { Json } from "./supabase.types";
+export type { Database as GeneratedDatabase } from "./supabase.types";
+export type {
+  CourseCategoryRow,
+  CourseEntitlementRow,
+  CourseLessonRow,
+  CourseLevel,
+  CourseOrderRow,
+  CoursePricingType,
+  CourseRow,
+  CourseSectionRow,
+  CourseStatus,
+  Database,
+  MarketplaceRole,
+  TeacherProfileRow,
+  TeacherStatus,
+  UserRoleRow,
+  VideoAssetRow,
+} from "./marketplace.types";
 export * from "./repositories";
 
 export type JlptLevel = "N5" | "N4" | "N3" | "N2" | "N1";

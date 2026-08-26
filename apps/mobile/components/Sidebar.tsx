@@ -61,13 +61,14 @@ const NAV_ITEMS = [
   (item) => item.route !== "/(tabs)/ai" || (featureFlags.aiPractice && featureFlags.premium)
 );
 
+// There is no separate settings screen — Profile carries the settings section.
+// A second entry pointing at the same route only looked like a broken link.
 const SETTING_ITEMS = [
-  { icon: "person-circle-outline" as const, label: "Profile", route: "/(tabs)/profile" },
-  { icon: "settings-outline" as const, label: "Settings", route: "/(tabs)/profile" },
+  { icon: "person-circle-outline" as const, label: "Profile & Settings", route: "/(tabs)/profile" },
 ];
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
-  const { session, profile, isGuest, signOut, exitGuestMode } = useAuth();
+  const { session, profile, signOut } = useAuth();
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
   const [lockedFeature, setLockedFeature] = useState<{ label: string; route: string } | null>(null);
@@ -126,13 +127,17 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const handleSignOut = async () => {
     onClose();
     await signOut();
-    router.replace("/onboarding");
+    // Same destination as the Profile screen's sign out: app/index.tsx routes
+    // signed-out users to login. Sending them to /onboarding instead stranded
+    // them on the carousel, whose only exit is guest mode.
+    router.replace("/");
   };
 
   const handleLogin = () => {
     onClose();
-    if (isGuest) exitGuestMode();
-    router.replace("/(auth)/login");
+    // Stay in guest mode until the sign-in actually succeeds; clearing it here
+    // unmounts "(tabs)" from under us and the navigation gets dropped.
+    router.push("/(auth)/login");
   };
 
   if (!isOpen && !lockedFeature) return null;
@@ -158,10 +163,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               <View style={styles.header}>
                 <View style={styles.logoRow}>
                   <View style={styles.logoBox}>
-                    <Text style={styles.logoEmoji}>🇯🇵</Text>
+                    <Image
+                      source={require("@/assets/logo.png")}
+                      style={styles.logoImage}
+                      resizeMode="contain"
+                    />
                   </View>
                   <View>
-                    <Text style={styles.appName}>EasyJapanese</Text>
+                    <Text style={styles.appName}>JapanGoLearn</Text>
                     <Text style={styles.appTagline}>学ぼう日本語</Text>
                   </View>
                 </View>
@@ -286,7 +295,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     </LinearGradient>
                   </TouchableOpacity>
                 )}
-                <Text style={styles.version}>EasyJapanese v1.0</Text>
+                <Text style={styles.version}>JapanGoLearn v1.0</Text>
               </View>
             </ScrollView>
           </Animated.View>
@@ -332,11 +341,12 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: Colors.primary[700],
+    overflow: "hidden",
+    backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
   },
-  logoEmoji: { fontSize: 24 },
+  logoImage: { width: "100%", height: "100%" },
   appName: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, color: Colors.dark.text },
   appTagline: { fontSize: FontSize.xs, color: Colors.dark.textMuted, marginTop: 2 },
   userCard: {

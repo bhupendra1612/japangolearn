@@ -53,9 +53,9 @@ export const metadata: Metadata = {
   publisher: "JapanGoLearn",
   applicationName: "JapanGoLearn",
   category: "Education",
-  alternates: {
-    canonical: siteUrl,
-  },
+  // No default canonical here on purpose. A root-level canonical is inherited by
+  // every route that does not set its own, which silently pointed those pages at
+  // the home page and made them unindexable. Each route declares its own.
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "32x32" },
@@ -155,101 +155,9 @@ const websiteSchema = {
   },
 };
 
-const courseListSchema = {
-  "@context": "https://schema.org",
-  "@type": "ItemList",
-  name: "JLPT Japanese Language Courses",
-  description: "Structured Japanese courses from beginner N5 to advanced N1",
-  url: `${siteUrl}/dashboard/levels`,
-  numberOfItems: 5,
-  itemListElement: [
-    {
-      "@type": "ListItem",
-      position: 1,
-      item: {
-        "@type": "Course",
-        name: "JLPT N5 Japanese — Beginner",
-        description:
-          "Learn Hiragana, Katakana, and 100 essential Kanji. Master basic Japanese grammar and vocabulary for everyday situations.",
-        provider: { "@id": `${siteUrl}/#organization` },
-        url: `${siteUrl}/dashboard/levels`,
-        educationalLevel: "Beginner",
-        inLanguage: "en",
-        teaches: "Japanese Language — JLPT N5",
-        isAccessibleForFree: true,
-        courseMode: "online",
-      },
-    },
-    {
-      "@type": "ListItem",
-      position: 2,
-      item: {
-        "@type": "Course",
-        name: "JLPT N4 Japanese — Elementary",
-        description:
-          "Expand to 300 Kanji and basic conversational grammar. Suitable for simple daily conversations.",
-        provider: { "@id": `${siteUrl}/#organization` },
-        url: `${siteUrl}/dashboard/levels`,
-        educationalLevel: "Elementary",
-        inLanguage: "en",
-        teaches: "Japanese Language — JLPT N4",
-        isAccessibleForFree: true,
-        courseMode: "online",
-      },
-    },
-    {
-      "@type": "ListItem",
-      position: 3,
-      item: {
-        "@type": "Course",
-        name: "JLPT N3 Japanese — Intermediate",
-        description:
-          "Master 650 Kanji and conversational Japanese. Understand everyday topics and situations.",
-        provider: { "@id": `${siteUrl}/#organization` },
-        url: `${siteUrl}/dashboard/levels`,
-        educationalLevel: "Intermediate",
-        inLanguage: "en",
-        teaches: "Japanese Language — JLPT N3",
-        isAccessibleForFree: true,
-        courseMode: "online",
-      },
-    },
-    {
-      "@type": "ListItem",
-      position: 4,
-      item: {
-        "@type": "Course",
-        name: "JLPT N2 Japanese — Upper-Intermediate",
-        description:
-          "Learn 1000 Kanji and read Japanese news and articles. Suitable for most professional environments.",
-        provider: { "@id": `${siteUrl}/#organization` },
-        url: `${siteUrl}/dashboard/levels`,
-        educationalLevel: "Upper-Intermediate",
-        inLanguage: "en",
-        teaches: "Japanese Language — JLPT N2",
-        isAccessibleForFree: true,
-        courseMode: "online",
-      },
-    },
-    {
-      "@type": "ListItem",
-      position: 5,
-      item: {
-        "@type": "Course",
-        name: "JLPT N1 Japanese — Advanced",
-        description:
-          "Achieve native-level mastery with 2000+ Kanji. Understand complex texts and nuanced expressions.",
-        provider: { "@id": `${siteUrl}/#organization` },
-        url: `${siteUrl}/dashboard/levels`,
-        educationalLevel: "Advanced",
-        inLanguage: "en",
-        teaches: "Japanese Language — JLPT N1",
-        isAccessibleForFree: true,
-        courseMode: "online",
-      },
-    },
-  ],
-};
+// Course/ItemList structured data lives on the home page, where it is built from
+// the levels that actually have content. Emitting it from the root layout put it
+// on every route (including /privacy) and hard-coded five levels as available.
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -263,10 +171,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(courseListSchema) }}
         />
       </head>
       {/*

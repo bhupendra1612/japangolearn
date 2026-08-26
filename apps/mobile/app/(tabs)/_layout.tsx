@@ -49,6 +49,8 @@ export default function TabLayout() {
       onPress={() => setSidebarOpen(true)}
       style={styles.menuBtn}
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      accessibilityRole="button"
+      accessibilityLabel="Open menu"
     >
       <Ionicons name="menu" size={26} color={Colors.dark.text} />
     </TouchableOpacity>

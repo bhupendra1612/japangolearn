@@ -276,6 +276,8 @@ export default function QuizScreen() {
               <Text style={s.questionText}>{questions[currentIndex]?.front}</Text>
               <TouchableOpacity
                 style={s.audioBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Play pronunciation"
                 onPress={() =>
                   Speech.speak(questions[currentIndex]?.audioText || "", { language: "ja-JP" })
                 }

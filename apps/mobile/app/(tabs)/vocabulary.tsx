@@ -582,6 +582,8 @@ export default function VocabularyScreen() {
           {/* Speak button */}
           <TouchableOpacity
             style={[s.speakBtn, isSpeaking && s.speakBtnActive]}
+            accessibilityRole="button"
+            accessibilityLabel={`Play pronunciation of ${word.kanji || word.hiragana}`}
             onPress={(e) => {
               e.stopPropagation();
               speakWord(word);
@@ -794,6 +796,9 @@ export default function VocabularyScreen() {
             onPress={() => navigateWord(-1)}
             disabled={!canPrev}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Previous word"
+            accessibilityState={{ disabled: !canPrev }}
           >
             <Ionicons
               name="chevron-back"
@@ -898,7 +903,12 @@ export default function VocabularyScreen() {
       <View style={s.quizContainer}>
         {/* Quiz header */}
         <View style={s.quizHeader}>
-          <TouchableOpacity onPress={() => setMode("browse")} activeOpacity={0.7}>
+          <TouchableOpacity
+            onPress={() => setMode("browse")}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Exit quiz"
+          >
             <Ionicons name="close" size={24} color={Colors.dark.textMuted} />
           </TouchableOpacity>
           <View style={s.quizProgressWrap}>
@@ -964,6 +974,19 @@ export default function VocabularyScreen() {
                 onPress={() => handleQuizAnswer(opt)}
                 disabled={answered}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: answered }}
+                // After answering, right and wrong are shown only by a coloured
+                // icon, which a screen-reader user cannot perceive. Say it.
+                accessibilityLabel={
+                  answered
+                    ? isCorrectOpt
+                      ? `${opt}, correct answer`
+                      : isSelectedOpt
+                        ? `${opt}, your answer, incorrect`
+                        : opt
+                    : opt
+                }
               >
                 {answered && isCorrectOpt && (
                   <Ionicons name="checkmark-circle" size={22} color="#10B981" />

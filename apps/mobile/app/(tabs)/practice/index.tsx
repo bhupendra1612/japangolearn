@@ -208,6 +208,8 @@ export default function PracticeHubScreen() {
                     style={s.deleteBtn}
                     onPress={() => handleDeleteList(item.id, item.is_smart_list)}
                     hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete list ${item.title}`}
                   >
                     <Ionicons name="trash-outline" size={20} color={Colors.dark.textMuted} />
                   </TouchableOpacity>

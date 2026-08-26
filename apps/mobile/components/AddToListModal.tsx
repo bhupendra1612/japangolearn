@@ -200,6 +200,9 @@ export function AddToListModal({
                   onPress={() => handleAddToList(item.id)}
                   activeOpacity={0.7}
                   disabled={savingToList !== null}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Add to list ${item.title}`}
+                  accessibilityState={{ disabled: savingToList !== null }}
                 >
                   <View style={[s.listIconBox, item.is_smart_list && s.smartListIconBox]}>
                     <Ionicons

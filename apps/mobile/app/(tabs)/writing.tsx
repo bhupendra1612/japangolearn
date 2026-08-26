@@ -490,7 +490,13 @@ export default function WritingScreen() {
           <Text style={s.detailCounter}>
             {selectedIndex + 1} / {total}
           </Text>
-          <TouchableOpacity onPress={startQuiz} style={s.topQuizBtn} activeOpacity={0.7}>
+          <TouchableOpacity
+            onPress={startQuiz}
+            style={s.topQuizBtn}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Start quiz"
+          >
             <Ionicons name="help-circle-outline" size={20} color={Colors.primary[400]} />
           </TouchableOpacity>
         </View>
@@ -640,6 +646,9 @@ export default function WritingScreen() {
             onPress={() => navigateKana(-1)}
             disabled={!canPrev}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Previous character"
+            accessibilityState={{ disabled: !canPrev }}
           >
             <Ionicons
               name="chevron-back"
@@ -731,7 +740,12 @@ export default function WritingScreen() {
       <View style={s.quizContainer}>
         {/* Quiz header */}
         <View style={s.quizHeader}>
-          <TouchableOpacity onPress={() => setMode("grid")} activeOpacity={0.7}>
+          <TouchableOpacity
+            onPress={() => setMode("grid")}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Exit quiz"
+          >
             <Ionicons name="close" size={24} color={Colors.dark.textMuted} />
           </TouchableOpacity>
           <View style={s.quizProgressWrap}>
@@ -795,6 +809,19 @@ export default function WritingScreen() {
                 onPress={() => handleQuizAnswer(opt)}
                 disabled={answered}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: answered }}
+                // After answering, right and wrong are shown only by a coloured
+                // icon, which a screen-reader user cannot perceive. Say it.
+                accessibilityLabel={
+                  answered
+                    ? isCorrectOpt
+                      ? `${opt}, correct answer`
+                      : isSelectedOpt
+                        ? `${opt}, your answer, incorrect`
+                        : opt
+                    : opt
+                }
               >
                 {answered && isCorrectOpt && (
                   <Ionicons name="checkmark-circle" size={22} color="#10B981" />

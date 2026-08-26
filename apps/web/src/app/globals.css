@@ -303,6 +303,30 @@ body {
   animation-delay: 0.6s;
 }
 
+/*
+ * Staggered children are laid out at opacity: 0 and only become visible because
+ * the animation fills forwards. Anywhere animations are suppressed — a reduced
+ * motion preference, a browser extension, a print stylesheet — that content
+ * would stay permanently invisible, so the preference has to restore it rather
+ * than only stop the movement.
+ *
+ * This also makes the axe scan deterministic. It previously sampled the page
+ * mid-stagger and measured contrast against half-faded text, so the cards with
+ * the longest delays failed or passed depending on how fast the runner was.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .stagger-children > * {
+    opacity: 1;
+    animation: none;
+  }
+
+  .animate-slide-up,
+  .animate-scale-in,
+  .animate-shimmer {
+    animation: none;
+  }
+}
+
 /* ============================================
    Card Styles
    ============================================ */

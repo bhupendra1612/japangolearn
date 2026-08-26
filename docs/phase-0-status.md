@@ -19,6 +19,10 @@ owner authorized one live resource set and a direct production API deployment.
 - [x] ESLint uses `--max-warnings=0`; the 30 existing mobile warnings are fixed.
 - [x] API/environment/provider tests and Cloudflare dry-run/type gates are included in Turbo and CI.
 - [x] Repository staging/promotion workflows remain available for later hardening.
+      Cloudflare Staging is `workflow_dispatch` only as of 2026-08-26: with a single
+      Supabase project its deploy job always fails `env:validate`, so the push trigger
+      mailed a red run on every merge to `main` and never once succeeded. Restore the
+      trigger together with a dedicated staging Supabase project.
 - [x] Existing database replay, security, backup, integration, E2E, and accessibility gates remain required.
 
 ## Verification result

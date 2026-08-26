@@ -1,9 +1,18 @@
 name: Cloudflare Staging
 
+# Manual only, until a dedicated staging Supabase project exists.
+#
+# The deploy job runs as APP_ENV=staging but reads its Supabase secrets from the
+# `staging` GitHub environment. There is only one Supabase project, so those
+# secrets name the production ref and `pnpm env:validate` fails closed with
+# "staging must not connect to the production Supabase project". That guard is
+# correct — it is what stops a staging deploy writing to production data — so
+# the trigger is removed rather than the check weakened.
+#
+# On `push: main` this failed on every merge and mailed a red run each time,
+# while never having succeeded once. Re-add the push trigger when a real staging
+# project is configured; see the waiver in docs/saas-phase-progress.md.
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:

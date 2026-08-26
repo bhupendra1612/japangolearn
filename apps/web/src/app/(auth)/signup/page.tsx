@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { Mail, Lock, User, Eye, EyeOff, Loader2, Sparkles } from "lucide-react";
-import { DEFAULT_JLPT_LEVEL } from "@japangolearn/content";
+import { DEFAULT_JLPT_LEVEL, MIN_PASSWORD_LENGTH } from "@japangolearn/content";
 import { AuthBrandHeader } from "@/components/auth/auth-brand-header";
 import { JlptLevelSelect } from "@/components/auth/jlpt-level-select";
 
@@ -267,9 +267,9 @@ export default function SignupPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  minLength={6}
+                  minLength={MIN_PASSWORD_LENGTH}
                   className="w-full pl-11 pr-11 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm"
-                  placeholder="Min. 6 characters"
+                  placeholder={`Min. ${MIN_PASSWORD_LENGTH} characters`}
                 />
                 <button
                   type="button"

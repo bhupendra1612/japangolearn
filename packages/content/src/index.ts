@@ -87,3 +87,15 @@ export function isJlptLevelAvailable(level: string): boolean {
 }
 
 export const DEFAULT_JLPT_LEVEL: JlptLevel = "N5";
+
+/**
+ * Minimum password length, enforced on the client so a rejection is explained
+ * before the request is sent.
+ *
+ * This must not be lower than the minimum configured in Supabase Auth, or the
+ * client waves a password through and the server rejects it with a message the
+ * user never asked for. Keep the dashboard setting and this constant equal.
+ */
+export const MIN_PASSWORD_LENGTH = 8;
+
+export const PASSWORD_TOO_SHORT_MESSAGE = `Password must be at least ${MIN_PASSWORD_LENGTH} characters`;

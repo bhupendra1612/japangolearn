@@ -19,7 +19,11 @@ import { useAuth } from "@/lib/auth";
 import { router } from "expo-router";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getXpLevelProgress } from "@japangolearn/content";
+import {
+  getXpLevelProgress,
+  MIN_PASSWORD_LENGTH,
+  PASSWORD_TOO_SHORT_MESSAGE,
+} from "@japangolearn/content";
 import { JLPT_SIGNUP_LEVELS } from "@/constants/jlpt";
 
 const AVATAR_SIZE = 100;
@@ -180,8 +184,8 @@ export default function ProfileScreen() {
   };
 
   const handleChangePassword = async () => {
-    if (newPassword.length < 6) {
-      showFeedback("Password must be at least 6 characters", true);
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      showFeedback(PASSWORD_TOO_SHORT_MESSAGE, true);
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -576,8 +580,8 @@ export default function ProfileScreen() {
         <View style={s.fieldGroup}>
           <Text style={s.fieldLabel}>JLPT Level</Text>
           <Text style={s.fieldHint}>
-            JapanGoLearn currently covers N5. Later levels are listed so you can see what is
-            coming, and unlock as their content is published.
+            JapanGoLearn currently covers N5. Later levels are listed so you can see what is coming,
+            and unlock as their content is published.
           </Text>
           <View style={s.jlptRow}>
             {JLPT_LEVELS.map((lvl) => {
@@ -740,7 +744,7 @@ export default function ProfileScreen() {
             })}
           </View>
           <Text style={s.fieldHint}>
-            {newPassword.length < 6
+            {newPassword.length < MIN_PASSWORD_LENGTH
               ? "Too short"
               : newPassword.length < 8
                 ? "Fair"

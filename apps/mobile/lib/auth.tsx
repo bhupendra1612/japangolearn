@@ -6,6 +6,7 @@ import type { Profile, ProfileUpdate } from "@japangolearn/database";
 import { decode } from "base64-arraybuffer";
 import { captureException } from "@/lib/monitoring";
 import { GUEST_KEY } from "@/constants/storage";
+import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT_MESSAGE } from "@japangolearn/content";
 import { DEFAULT_JLPT_LEVEL } from "@/constants/jlpt";
 
 type ProfileUpdateData = Pick<ProfileUpdate, "display_name" | "current_jlpt_level">;
@@ -243,8 +244,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updatePassword = async (newPassword: string) => {
     if (!session?.user) return { error: { message: "Not authenticated" } };
-    if (newPassword.length < 6)
-      return { error: { message: "Password must be at least 6 characters" } };
+    if (newPassword.length < MIN_PASSWORD_LENGTH)
+      return { error: { message: PASSWORD_TOO_SHORT_MESSAGE } };
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     return { error };
   };

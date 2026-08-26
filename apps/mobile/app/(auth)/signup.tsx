@@ -21,6 +21,7 @@ import { getSafeRedirectTo, setPendingRedirect } from "@/lib/auth-navigation";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { PRIVACY_URL, TERMS_URL } from "@/constants/links";
 import { DEFAULT_JLPT_LEVEL, JLPT_SIGNUP_LEVELS } from "@/constants/jlpt";
+import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT_MESSAGE } from "@japangolearn/content";
 
 export default function SignupScreen() {
   const { signUp, verifySignupOtp, resendSignupOtp } = useAuth();
@@ -69,19 +70,18 @@ export default function SignupScreen() {
       setError("Please fill in all fields");
       return;
     }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(PASSWORD_TOO_SHORT_MESSAGE);
       return;
     }
     setLoading(true);
     setError("");
     setMessage("");
-    const { error: err, hasSession, resumedSignup } = await signUp(
-      email,
-      password,
-      name,
-      jlptLevel
-    );
+    const {
+      error: err,
+      hasSession,
+      resumedSignup,
+    } = await signUp(email, password, name, jlptLevel);
     if (err) {
       setLoading(false);
       setError(err.message);
@@ -227,125 +227,125 @@ export default function SignupScreen() {
             </TouchableOpacity>
           </View>
         ) : (
-        <View style={styles.form}>
-          {error ? (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : null}
-          {message ? (
-            <View style={styles.messageBox}>
-              <Text style={styles.messageText}>{message}</Text>
-            </View>
-          ) : null}
+          <View style={styles.form}>
+            {error ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+            {message ? (
+              <View style={styles.messageBox}>
+                <Text style={styles.messageText}>{message}</Text>
+              </View>
+            ) : null}
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Display Name</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Your name"
-              placeholderTextColor={Colors.dark.textMuted}
-              value={name}
-              onChangeText={setName}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="your@email.com"
-              placeholderTextColor={Colors.dark.textMuted}
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              autoCorrect={false}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Password</Text>
-            <View style={styles.passwordWrap}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Display Name</Text>
               <TextInput
-                style={styles.passwordInput}
-                placeholder="Min. 6 characters"
+                style={styles.input}
+                placeholder="Your name"
                 placeholderTextColor={Colors.dark.textMuted}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
+                value={name}
+                onChangeText={setName}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="your@email.com"
+                placeholderTextColor={Colors.dark.textMuted}
+                value={email}
+                onChangeText={setEmail}
                 autoCapitalize="none"
+                keyboardType="email-address"
                 autoCorrect={false}
               />
-              <TouchableOpacity
-                onPress={() => setShowPassword((v) => !v)}
-                style={styles.eyeBtn}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityRole="button"
-                accessibilityLabel={showPassword ? "Hide password" : "Show password"}
-              >
-                <Ionicons
-                  name={showPassword ? "eye-off-outline" : "eye-outline"}
-                  size={20}
-                  color={Colors.dark.textMuted}
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.passwordWrap}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder={`Min. ${MIN_PASSWORD_LENGTH} characters`}
+                  placeholderTextColor={Colors.dark.textMuted}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
                 />
+                <TouchableOpacity
+                  onPress={() => setShowPassword((v) => !v)}
+                  style={styles.eyeBtn}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                >
+                  <Ionicons
+                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                    size={20}
+                    color={Colors.dark.textMuted}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Your Japanese Level</Text>
+              <TouchableOpacity
+                style={styles.select}
+                onPress={() => setLevelPickerOpen(true)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`Japanese level: ${selectedLevel.label}. Tap to change.`}
+              >
+                <View style={styles.levelBadgeActive}>
+                  <Text style={styles.levelBadgeTextActive}>{selectedLevel.value}</Text>
+                </View>
+                <View style={styles.levelTextWrap}>
+                  <Text style={styles.selectValue}>{selectedLevel.label}</Text>
+                  <Text style={styles.levelDesc}>{selectedLevel.desc}</Text>
+                </View>
+                <Ionicons name="chevron-down" size={20} color={Colors.dark.textMuted} />
               </TouchableOpacity>
             </View>
-          </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Your Japanese Level</Text>
             <TouchableOpacity
-              style={styles.select}
-              onPress={() => setLevelPickerOpen(true)}
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleSignup}
+              disabled={loading}
               activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityLabel={`Japanese level: ${selectedLevel.label}. Tap to change.`}
             >
-              <View style={styles.levelBadgeActive}>
-                <Text style={styles.levelBadgeTextActive}>{selectedLevel.value}</Text>
-              </View>
-              <View style={styles.levelTextWrap}>
-                <Text style={styles.selectValue}>{selectedLevel.label}</Text>
-                <Text style={styles.levelDesc}>{selectedLevel.desc}</Text>
-              </View>
-              <Ionicons name="chevron-down" size={20} color={Colors.dark.textMuted} />
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Create Account</Text>
+              )}
             </TouchableOpacity>
-          </View>
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleSignup}
-            disabled={loading}
-            activeOpacity={0.8}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Create Account</Text>
-            )}
-          </TouchableOpacity>
-
-          <Text style={styles.consentText}>
-            By creating an account, you agree to our{" "}
-            <Text
-              style={styles.consentLink}
-              onPress={() => openUrl(TERMS_URL)}
-              accessibilityRole="link"
-            >
-              Terms &amp; Conditions
-            </Text>{" "}
-            and{" "}
-            <Text
-              style={styles.consentLink}
-              onPress={() => openUrl(PRIVACY_URL)}
-              accessibilityRole="link"
-            >
-              Privacy Policy
+            <Text style={styles.consentText}>
+              By creating an account, you agree to our{" "}
+              <Text
+                style={styles.consentLink}
+                onPress={() => openUrl(TERMS_URL)}
+                accessibilityRole="link"
+              >
+                Terms &amp; Conditions
+              </Text>{" "}
+              and{" "}
+              <Text
+                style={styles.consentLink}
+                onPress={() => openUrl(PRIVACY_URL)}
+                accessibilityRole="link"
+              >
+                Privacy Policy
+              </Text>
+              .
             </Text>
-            .
-          </Text>
-        </View>
+          </View>
         )}
 
         {!awaitingOtp && (

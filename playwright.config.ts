@@ -38,6 +38,11 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:3000",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    // Entry animations start content at opacity: 0. Without this the axe scan
+    // races the stagger and measures contrast on half-faded text, which failed
+    // or passed depending on runner speed. Learners see the settled page, so
+    // that is the state worth asserting.
+    contextOptions: { reducedMotion: "reduce" },
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [

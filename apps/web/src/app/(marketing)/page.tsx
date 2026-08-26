@@ -282,7 +282,7 @@ export default async function HomePage() {
                     className={`mt-auto rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${
                       ready
                         ? "bg-emerald-500/15 text-emerald-300"
-                        : "bg-white/5 text-gray-500 border border-white/10"
+                        : "bg-white/5 text-gray-400 border border-white/10"
                     }`}
                   >
                     {ready

@@ -61,5 +61,7 @@ test("admin authorization rejects learners and accepts admins", async ({ browser
   await administrator.getByLabel("Password", { exact: true }).fill(users.admin.password);
   await administrator.getByRole("button", { name: "Sign in" }).click();
   await expect(administrator).toHaveURL("http://127.0.0.1:3001/");
-  await expect(administrator.getByRole("heading", { name: "Admin Console" })).toBeVisible();
+  // The header shows the active nav item's label, so the root route reads
+  // "Overview". The "Admin console" fallback is unreachable from any real page.
+  await expect(administrator.getByRole("heading", { name: "Overview" })).toBeVisible();
 });

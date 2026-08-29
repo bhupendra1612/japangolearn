@@ -840,7 +840,14 @@ export default function WritingScreen() {
 
   // ═══════════════════ RENDER ═══════════════════
   return (
-    <View style={[s.container, { paddingBottom: insets.bottom, paddingTop: insets.top }]}>
+    /*
+     * No paddingBottom. The tab bar is a laid-out bar, not an overlay, and its
+     * own style already adds the bottom safe-area inset — so padding the screen
+     * by it again reserved that height twice and left a dead band of background
+     * above the tab bar, covering the last row of cards. It sat on every mode
+     * because this container wraps the grid, the detail view and the quiz.
+     */
+    <View style={[s.container, { paddingTop: insets.top }]}>
       {mode === "grid" && renderGrid()}
       {mode === "detail" && renderDetail()}
       {mode === "quiz" && renderQuiz()}
@@ -926,7 +933,7 @@ const s = StyleSheet.create({
   toggleRow: {
     flexDirection: "row",
     paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
     gap: Spacing.sm,
   },
   toggleBtn: {
@@ -959,7 +966,18 @@ const s = StyleSheet.create({
   hindiBtnText: { fontSize: 18, fontWeight: FontWeight.extrabold, color: Colors.dark.textMuted },
 
   // ── Filter Chips ──
-  chipScroll: { maxHeight: 44, marginBottom: Spacing.xs },
+  /*
+   * No maxHeight. It used to be capped at 44 while the content measures 40 —
+   * a 32px chip plus 4px padding top and bottom — so there were four pixels of
+   * slack. Anything that pushed past it (a larger system font scale, a taller
+   * line box for the Japanese row labels) overflowed, and a React Native View
+   * on Android does not clip by default: the excess drew on top of the script
+   * toggle above and the first group heading below instead of being hidden.
+   *
+   * flexShrink: 0 stops the surrounding flex column squeezing the row when the
+   * grid below is long.
+   */
+  chipScroll: { flexShrink: 0, marginBottom: Spacing.sm },
   chipRow: { paddingHorizontal: Spacing.lg, paddingVertical: 4, gap: 6, alignItems: "center" },
   chip: {
     flexDirection: "row",

@@ -1007,7 +1007,9 @@ export default function VocabularyScreen() {
 
   // ═══════════════════ RENDER ═══════════════════
   return (
-    <View style={[s.container, { paddingBottom: insets.bottom, paddingTop: insets.top }]}>
+    /* See writing.tsx: the tab bar already applies the bottom inset, so adding
+     * it here too left a dead band of background over the last row of cards. */
+    <View style={[s.container, { paddingTop: insets.top }]}>
       {mode === "browse" && renderBrowse()}
       {mode === "detail" && renderDetail()}
       {mode === "quiz" && renderQuiz()}

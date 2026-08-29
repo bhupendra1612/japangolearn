@@ -83,17 +83,15 @@ export default function DashboardHome() {
   const [showPracticePrompt, setShowPracticePrompt] = useState(false);
   const [dailyGoal, setDailyGoal] = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
-  const [achievementCount, setAchievementCount] = useState(0);
-  const [weekActivity, setWeekActivity] = useState<Record<string, number>>({});
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const fetchData = useCallback(async () => {
     if (!user) return;
     const today = new Date().toISOString().split("T")[0];
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 6);
 
-    const [goalRes, actRes, achieveRes, weekRes] = await Promise.all([
+    // The achievement count and the week's activity moved to Profile with the
+    // sections that displayed them, so Home no longer pays for those queries.
+    const [goalRes, actRes] = await Promise.all([
       supabase
         .from("daily_goals")
         .select("*")
@@ -106,33 +104,17 @@ export default function DashboardHome() {
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(10),
-      supabase.from("user_achievements").select("id").eq("user_id", user.id),
-      supabase
-        .from("activity_log")
-        .select("created_at")
-        .eq("user_id", user.id)
-        .gte("created_at", weekAgo.toISOString()),
     ]);
 
     // Home still renders without this data — the greeting, daily kanji and
     // quick actions do not depend on it — so a failure degrades to zeros rather
     // than an error screen. It must still be reported, or a broken dashboard
     // looks like a user with no activity.
-    const failure = [goalRes, actRes, achieveRes, weekRes].find((result) => result.error)?.error;
+    const failure = [goalRes, actRes].find((result) => result.error)?.error;
     if (failure) captureException(failure, { screen: "home" });
 
     if (goalRes.data) setDailyGoal(goalRes.data);
     if (actRes.data) setActivities(actRes.data);
-    if (achieveRes.data) setAchievementCount(achieveRes.data.length);
-
-    if (weekRes.data) {
-      const map: Record<string, number> = {};
-      weekRes.data.forEach((a: any) => {
-        const date = new Date(a.created_at).toISOString().split("T")[0];
-        map[date] = (map[date] || 0) + 1;
-      });
-      setWeekActivity(map);
-    }
   }, [user]);
 
   useEffect(() => {
@@ -158,21 +140,6 @@ export default function DashboardHome() {
   const greeting = getGreeting();
   const todayKanji = DAILY_KANJI[new Date().getDay()];
   const quote = MOTIVATIONAL_QUOTES[new Date().getDate() % MOTIVATIONAL_QUOTES.length];
-
-  // Week days for streak calendar
-  const weekDays = Array.from({ length: 7 }).map((_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    const dateStr = d.toISOString().split("T")[0];
-    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    return {
-      date: dateStr,
-      dayName: dayNames[d.getDay()],
-      dayNum: d.getDate(),
-      isToday: i === 6,
-      count: weekActivity[dateStr] || 0,
-    };
-  });
 
   const quickActions = [
     { emoji: "📖", label: "Vocab", color: Colors.primary[600], tab: "vocabulary" },
@@ -207,12 +174,17 @@ export default function DashboardHome() {
             <Text style={s.heroDecoL}>学</Text>
             <Text style={s.heroDecoR}>道</Text>
 
-            {/* Avatar + Greeting */}
+            {/*
+             * One compact row instead of the old greeting block plus the stats
+             * grid below it. Streak and XP stay on Home deliberately — they are
+             * the reason someone opens the app on day nine — but as a strip
+             * rather than four cards, so study content starts above the fold.
+             * The full breakdown lives on Profile.
+             */}
             <View style={s.heroTop}>
               <View style={s.heroGreetingCol}>
                 <Text style={s.greeting}>{greeting.jp} 👋</Text>
                 <Text style={s.heroName}>{displayName}</Text>
-                <Text style={s.heroSubtitle}>Continue your Japanese journey</Text>
               </View>
               {profile?.avatar_url ? (
                 <View style={s.avatarWrap}>
@@ -231,6 +203,26 @@ export default function DashboardHome() {
                   </View>
                 </View>
               )}
+            </View>
+
+            <View style={s.heroStrip}>
+              <View style={s.heroStripItem}>
+                <Text style={s.heroStripIcon}>🔥</Text>
+                <Text style={s.heroStripValue}>{streak}</Text>
+                <Text style={s.heroStripLabel}>day streak</Text>
+              </View>
+              <View style={s.heroStripDivider} />
+              <View style={s.heroStripItem}>
+                <Text style={s.heroStripIcon}>⭐</Text>
+                <Text style={s.heroStripValue}>{xp.toLocaleString()}</Text>
+                <Text style={s.heroStripLabel}>XP</Text>
+              </View>
+              <View style={s.heroStripDivider} />
+              <View style={s.heroStripItem}>
+                <Text style={s.heroStripIcon}>🎯</Text>
+                <Text style={s.heroStripValue}>{jlptLevel}</Text>
+                <Text style={s.heroStripLabel}>level</Text>
+              </View>
             </View>
 
             {/* Daily Progress */}
@@ -252,87 +244,6 @@ export default function DashboardHome() {
               {dailyProgress >= 1 && <Text style={s.dailyComplete}>Daily goal complete! 🎉</Text>}
             </View>
           </LinearGradient>
-        </View>
-
-        {/* ═══ Stats Grid ═══ */}
-        <View style={s.statsGrid}>
-          {[
-            { icon: "⭐", label: "Total XP", value: xp.toLocaleString(), color: Colors.gold[500] },
-            { icon: "🔥", label: "Streak", value: `${streak}d`, color: "#F97316" },
-            { icon: "🎯", label: "JLPT", value: jlptLevel, color: Colors.primary[400] },
-            { icon: "🏆", label: "Badges", value: `${achievementCount}`, color: "#10B981" },
-          ].map((stat) => (
-            <View key={stat.label} style={s.statCard}>
-              <View style={[s.statIconBg, { backgroundColor: stat.color + "18" }]}>
-                <Text style={s.statIcon}>{stat.icon}</Text>
-              </View>
-              <Text style={[s.statValue, { color: stat.color }]}>{stat.value}</Text>
-              <Text style={s.statLabel}>{stat.label}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* ═══ Level Progress ═══ */}
-        <View style={s.card}>
-          <View style={s.cardHeader}>
-            <View style={[s.cardIconBg, { backgroundColor: Colors.gold[500] + "18" }]}>
-              <Text style={s.cardIconEmoji}>📊</Text>
-            </View>
-            <Text style={s.cardTitle}>Level Progress</Text>
-            <View style={s.levelPill}>
-              <Text style={s.levelPillText}>Lv.{xpLevel.level}</Text>
-            </View>
-          </View>
-          <View style={s.levelTrack}>
-            <LinearGradient
-              colors={[Colors.gold[400], Colors.gold[600]]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={[s.levelFill, { width: `${Math.round(xpLevel.progress * 100)}%` as any }]}
-            />
-          </View>
-          <View style={s.levelLabels}>
-            <Text style={s.levelLabelLeft}>
-              {xpLevel.current} / {xpLevel.needed} XP to next level
-            </Text>
-            <Text style={s.levelLabelRight}>{Math.round(xpLevel.progress * 100)}%</Text>
-          </View>
-        </View>
-
-        {/* ═══ Week Streak ═══ */}
-        <View style={s.card}>
-          <View style={s.cardHeader}>
-            <View style={[s.cardIconBg, { backgroundColor: "#F9731618" }]}>
-              <Text style={s.cardIconEmoji}>🔥</Text>
-            </View>
-            <Text style={s.cardTitle}>This Week</Text>
-            <Text style={s.cardBadgeText}>{streak} day streak</Text>
-          </View>
-          <View style={s.weekRow}>
-            {weekDays.map((day) => {
-              const active = day.count > 0;
-              const intensity =
-                day.count >= 5 ? 1 : day.count >= 2 ? 0.7 : day.count >= 1 ? 0.45 : 0;
-              return (
-                <View key={day.date} style={s.weekCol}>
-                  <Text style={s.weekDayName}>{day.dayName}</Text>
-                  <View
-                    style={[
-                      s.weekDot,
-                      active && {
-                        backgroundColor: `rgba(16,185,129,${intensity})`,
-                        borderColor: "#10B981",
-                      },
-                      day.isToday && s.weekDotToday,
-                    ]}
-                  >
-                    <Text style={[s.weekDotNum, active && { color: "#fff" }]}>{day.dayNum}</Text>
-                  </View>
-                  {active && <Text style={s.weekCount}>{day.count}</Text>}
-                </View>
-              );
-            })}
-          </View>
         </View>
 
         {/* ═══ My Vocab Practice ═══ */}
@@ -518,8 +429,8 @@ const s = StyleSheet.create({
   heroTop: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: Spacing.xl,
+    alignItems: "center",
+    marginBottom: Spacing.lg,
   },
   heroGreetingCol: { flex: 1, marginRight: Spacing.lg },
   greeting: {
@@ -528,14 +439,44 @@ const s = StyleSheet.create({
     marginBottom: 4,
   },
   heroName: {
-    fontSize: FontSize["3xl"],
+    fontSize: FontSize["2xl"],
     fontWeight: FontWeight.bold,
     color: "#fff",
-    marginBottom: 4,
   },
-  heroSubtitle: {
-    fontSize: FontSize.sm,
-    color: "rgba(255,255,255,0.5)",
+
+  // ── Hero stat strip ──
+  // Replaces the four-card stats grid: the same numbers in one row, roughly a
+  // third of the height, so the first study card sits above the fold.
+  heroStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderRadius: BorderRadius.lg,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.lg,
+  },
+  heroStripItem: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+  },
+  heroStripIcon: { fontSize: 13 },
+  heroStripValue: {
+    fontSize: FontSize.base,
+    fontWeight: FontWeight.bold,
+    color: "#fff",
+  },
+  heroStripLabel: {
+    fontSize: 10,
+    color: "rgba(255,255,255,0.6)",
+    fontWeight: FontWeight.semibold,
+  },
+  heroStripDivider: {
+    width: 1,
+    height: 18,
+    backgroundColor: "rgba(255,255,255,0.15)",
   },
 
   // Avatar
@@ -604,33 +545,6 @@ const s = StyleSheet.create({
     textAlign: "center",
   },
 
-  // ── Stats Grid ──
-  statsGrid: {
-    flexDirection: "row",
-    gap: Spacing.sm,
-    marginBottom: Spacing.lg,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: Colors.dark.card,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-  },
-  statIconBg: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  statIcon: { fontSize: 16 },
-  statValue: { fontSize: FontSize.lg, fontWeight: FontWeight.bold, marginBottom: 2 },
-  statLabel: { fontSize: 10, color: Colors.dark.textMuted, fontWeight: FontWeight.semibold },
-
   // ── Card (shared) ──
   card: {
     backgroundColor: Colors.dark.card,
@@ -665,52 +579,6 @@ const s = StyleSheet.create({
     color: Colors.dark.textMuted,
     fontWeight: FontWeight.semibold,
   },
-
-  // ── Level Progress ──
-  levelPill: {
-    backgroundColor: Colors.gold[500] + "20",
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: Colors.gold[500] + "40",
-  },
-  levelPillText: { fontSize: 11, fontWeight: FontWeight.extrabold, color: Colors.gold[400] },
-  levelTrack: {
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: Colors.dark.surface,
-    overflow: "hidden",
-    marginBottom: Spacing.sm,
-  },
-  levelFill: { height: "100%", borderRadius: 5 },
-  levelLabels: { flexDirection: "row", justifyContent: "space-between" },
-  levelLabelLeft: { fontSize: FontSize.xs, color: Colors.dark.textMuted },
-  levelLabelRight: { fontSize: FontSize.xs, color: Colors.gold[400], fontWeight: FontWeight.bold },
-
-  // ── Week Streak ──
-  weekRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  weekCol: { alignItems: "center", flex: 1, gap: 4 },
-  weekDayName: { fontSize: 10, color: Colors.dark.textMuted, fontWeight: FontWeight.semibold },
-  weekDot: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: Colors.dark.surface,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: Colors.dark.border,
-  },
-  weekDotToday: {
-    borderColor: Colors.primary[500],
-    borderWidth: 2,
-  },
-  weekDotNum: { fontSize: 12, fontWeight: FontWeight.bold, color: Colors.dark.textMuted },
-  weekCount: { fontSize: 9, color: "#10B981", fontWeight: FontWeight.bold },
 
   // ── Kanji of the Day ──
   kanjiRow: {

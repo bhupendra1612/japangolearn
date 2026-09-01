@@ -3,6 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
+  FlatList,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
@@ -15,10 +16,6 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import DraggableFlatList, {
-  ScaleDecorator,
-  type RenderItemParams,
-} from "react-native-draggable-flatlist";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
@@ -39,6 +36,10 @@ export default function PracticeHubScreen() {
   const [creating, setCreating] = useState(false);
   const [newListTitle, setNewListTitle] = useState("");
   const [savingNew, setSavingNew] = useState(false);
+  // When on, each row shows up/down controls instead of open/delete so the list
+  // can be reordered by tapping. A tap-based control rather than a drag gesture,
+  // because gesture/reanimated libraries do not run in Expo Go.
+  const [reordering, setReordering] = useState(false);
 
   const loadData = useCallback(async () => {
     const userId = session?.user.id;
@@ -167,12 +168,19 @@ export default function PracticeHubScreen() {
     if (failure) captureException(failure, { screen: "practice", action: "reorder" });
   }, []);
 
-  const handleReorder = useCallback(
-    (ordered: PracticeList[]) => {
-      // Reflect the new order immediately, with each row's sort_order updated so
-      // a second drag diffs against the right baseline before the reload.
-      setLists(ordered.map((list, index) => ({ ...list, sort_order: index + 1 })));
-      void persistOrder(ordered);
+  const moveList = useCallback(
+    (index: number, direction: -1 | 1) => {
+      const target = index + direction;
+      setLists((prev) => {
+        if (target < 0 || target >= prev.length) return prev;
+        const next = [...prev];
+        [next[index], next[target]] = [next[target], next[index]];
+        // Renumber so a further move diffs against the right baseline before the
+        // next reload, and persist the swap.
+        const renumbered = next.map((list, i) => ({ ...list, sort_order: i + 1 }));
+        void persistOrder(renumbered);
+        return renumbered;
+      });
     },
     [persistOrder]
   );
@@ -231,27 +239,16 @@ export default function PracticeHubScreen() {
     </View>
   );
 
-  const renderDraggableItem = ({ item, drag, isActive }: RenderItemParams<PracticeList>) => (
-    <ScaleDecorator>
+  const renderListItem = ({ item, index }: { item: PracticeList; index: number }) => (
+    <View style={s.listCard}>
       <TouchableOpacity
-        style={[s.listCard, isActive && s.listCardActive]}
+        style={s.listCardMain}
         onPress={() => router.push(`/(tabs)/practice/${item.id}`)}
-        // Long-pressing anywhere on the row starts a drag, as well as the handle.
-        onLongPress={drag}
-        delayLongPress={220}
-        disabled={isActive}
+        disabled={reordering}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={`Open list ${item.title}`}
       >
-        <TouchableOpacity
-          onPressIn={drag}
-          hitSlop={12}
-          style={s.dragHandle}
-          accessibilityRole="button"
-          accessibilityLabel={`Reorder ${item.title}`}
-        >
-          <Ionicons name="reorder-three" size={22} color={Colors.dark.textMuted} />
-        </TouchableOpacity>
-
         <View style={[s.listIconBox, item.is_smart_list && s.smartListIconBox]}>
           <Ionicons
             name={item.is_smart_list ? "flame" : "list"}
@@ -264,27 +261,58 @@ export default function PracticeHubScreen() {
           <Text style={[s.listName, item.is_smart_list && s.smartListName]}>{item.title}</Text>
           <Text style={s.listCount}>{item.item_count} items</Text>
         </View>
-
-        {!item.is_smart_list ? (
-          <TouchableOpacity
-            style={s.deleteBtn}
-            onPress={() => handleDeleteList(item.id, item.is_smart_list)}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel={`Delete list ${item.title}`}
-          >
-            <Ionicons name="trash-outline" size={20} color={Colors.dark.textMuted} />
-          </TouchableOpacity>
-        ) : (
-          <Ionicons
-            name="chevron-forward"
-            size={20}
-            color={Colors.dark.textMuted}
-            style={{ marginRight: 10 }}
-          />
-        )}
       </TouchableOpacity>
-    </ScaleDecorator>
+
+      {reordering ? (
+        <View style={s.moveControls}>
+          <TouchableOpacity
+            style={[s.moveBtn, index === 0 && s.moveBtnDisabled]}
+            onPress={() => moveList(index, -1)}
+            disabled={index === 0}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Move ${item.title} up`}
+          >
+            <Ionicons
+              name="chevron-up"
+              size={22}
+              color={index === 0 ? Colors.dark.border : Colors.primary[300]}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.moveBtn, index === lists.length - 1 && s.moveBtnDisabled]}
+            onPress={() => moveList(index, 1)}
+            disabled={index === lists.length - 1}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Move ${item.title} down`}
+          >
+            <Ionicons
+              name="chevron-down"
+              size={22}
+              color={index === lists.length - 1 ? Colors.dark.border : Colors.primary[300]}
+            />
+          </TouchableOpacity>
+        </View>
+      ) : !item.is_smart_list ? (
+        <TouchableOpacity
+          style={s.deleteBtn}
+          onPress={() => handleDeleteList(item.id, item.is_smart_list)}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={`Delete list ${item.title}`}
+        >
+          <Ionicons name="trash-outline" size={20} color={Colors.dark.textMuted} />
+        </TouchableOpacity>
+      ) : (
+        <Ionicons
+          name="chevron-forward"
+          size={20}
+          color={Colors.dark.textMuted}
+          style={{ marginRight: 10 }}
+        />
+      )}
+    </View>
   );
 
   return (
@@ -294,19 +322,41 @@ export default function PracticeHubScreen() {
       <View style={s.content}>
         <View style={s.listHeaderRow}>
           <Text style={s.sectionTitle}>My Study Lists</Text>
-          <TouchableOpacity
-            style={s.newListBtn}
-            onPress={() => {
-              setNewListTitle("");
-              setCreating(true);
-            }}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Create a new practice list"
-          >
-            <Ionicons name="add" size={18} color={Colors.primary[300]} />
-            <Text style={s.newListBtnText}>New List</Text>
-          </TouchableOpacity>
+          <View style={s.headerActions}>
+            {lists.length > 1 ? (
+              <TouchableOpacity
+                style={[s.headerBtn, reordering && s.headerBtnActive]}
+                onPress={() => setReordering((v) => !v)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={reordering ? "Finish reordering" : "Reorder lists"}
+              >
+                <Ionicons
+                  name={reordering ? "checkmark" : "swap-vertical"}
+                  size={18}
+                  color={reordering ? "#fff" : Colors.primary[300]}
+                />
+                <Text style={[s.headerBtnText, reordering && { color: "#fff" }]}>
+                  {reordering ? "Done" : "Reorder"}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+            {!reordering ? (
+              <TouchableOpacity
+                style={s.headerBtn}
+                onPress={() => {
+                  setNewListTitle("");
+                  setCreating(true);
+                }}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Create a new practice list"
+              >
+                <Ionicons name="add" size={18} color={Colors.primary[300]} />
+                <Text style={s.headerBtnText}>New List</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
 
         {loading ? (
@@ -319,17 +369,15 @@ export default function PracticeHubScreen() {
             message="We could not load your practice lists."
           />
         ) : (
-          <DraggableFlatList
+          <FlatList
             data={lists}
             keyExtractor={(item) => item.id}
-            onDragEnd={({ data }) => handleReorder(data)}
-            activationDistance={12}
             contentContainerStyle={s.listContent}
             showsVerticalScrollIndicator={false}
-            renderItem={renderDraggableItem}
+            renderItem={renderListItem}
             ListHeaderComponent={
-              lists.length > 1 ? (
-                <Text style={s.reorderHint}>Hold and drag to reorder your lists</Text>
+              reordering && lists.length > 1 ? (
+                <Text style={s.reorderHint}>Use the arrows to change the order</Text>
               ) : null
             }
             ListEmptyComponent={
@@ -469,7 +517,12 @@ const s = StyleSheet.create({
     fontWeight: FontWeight.bold,
     color: Colors.dark.text,
   },
-  newListBtn: {
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  headerBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
@@ -480,7 +533,11 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
-  newListBtnText: {
+  headerBtnActive: {
+    backgroundColor: Colors.primary[500],
+    borderColor: Colors.primary[500],
+  },
+  headerBtnText: {
     color: Colors.primary[300],
     fontWeight: FontWeight.bold,
     fontSize: FontSize.sm,
@@ -572,19 +629,26 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.dark.border,
   },
-  // While a row is being dragged, lift it visually above the rest.
-  listCardActive: {
-    borderColor: Colors.primary[500],
-    backgroundColor: Colors.dark.surface,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
+  listCardMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
   },
-  dragHandle: {
-    paddingRight: Spacing.sm,
-    paddingVertical: Spacing.xs,
+  moveControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  moveBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Colors.primary[500] + "14",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  moveBtnDisabled: {
+    backgroundColor: "transparent",
   },
   listIconBox: {
     width: 48,

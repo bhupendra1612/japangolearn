@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
@@ -60,17 +59,12 @@ function RootLayout() {
   }, []);
 
   return (
-    // Required by react-native-gesture-handler, which powers the draggable
-    // practice-list reordering. Wraps the whole tree so any gesture-based UI
-    // works wherever it is used.
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <ErrorBoundary>
-        <AuthProvider>
-          <StatusBar style="light" />
-          <RootNavigator />
-        </AuthProvider>
-      </ErrorBoundary>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <AuthProvider>
+        <StatusBar style="light" />
+        <RootNavigator />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

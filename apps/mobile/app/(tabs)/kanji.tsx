@@ -16,8 +16,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Speech from "expo-speech";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import StrokeWriter from "@/components/StrokeWriter";
+import { AddToListModal } from "@/components/AddToListModal";
+import { AuthPromptModal } from "@/components/AuthPromptModal";
 import type { Kanji as KanjiRow } from "@japangolearn/database";
 
 // ─── Types ─────────────────────────────────────────────
@@ -72,8 +75,16 @@ function KanjiDetailModal({
   showHindi: boolean;
   onSelectRelated?: (k: string) => void;
 }) {
+  const { session } = useAuth();
   const [tab, setTab] = useState<"info" | "vocab" | "examples">("info");
   const [speakingText, setSpeakingText] = useState<string | null>(null);
+  const [showAddList, setShowAddList] = useState(false);
+  const [showListAuthPrompt, setShowListAuthPrompt] = useState(false);
+
+  const openAddToList = () => {
+    if (session) setShowAddList(true);
+    else setShowListAuthPrompt(true);
+  };
 
   const safeSpeak = useCallback(
     (text: string) => {
@@ -138,6 +149,17 @@ function KanjiDetailModal({
               >
                 Play
               </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={modal.headerAddBtn}
+              onPress={openAddToList}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`Add ${kanji.character} to a practice list`}
+            >
+              <Ionicons name="add" size={18} color={Colors.primary[300]} />
+              <Text style={modal.headerAddText}>List</Text>
             </TouchableOpacity>
 
             <Text style={modal.jlptBadge}>{kanji.jlpt_level}</Text>
@@ -371,6 +393,22 @@ function KanjiDetailModal({
 
           <View style={{ height: 40 }} />
         </ScrollView>
+
+        {/* Rendered inside the sheet so the bottom-sheet overlay sits above it */}
+        <AddToListModal
+          visible={showAddList}
+          onClose={() => setShowAddList(false)}
+          itemType="kanji"
+          itemId={kanji.id}
+          itemTitle={kanji.character}
+        />
+        <AuthPromptModal
+          visible={showListAuthPrompt}
+          feature="practice lists"
+          redirectTo="/(tabs)/kanji"
+          description="Sign in to add kanji to practice lists and track your progress."
+          onClose={() => setShowListAuthPrompt(false)}
+        />
       </View>
     </Modal>
   );
@@ -850,6 +888,22 @@ const modal = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.08)",
     justifyContent: "center",
     alignItems: "center",
+  },
+  headerAddBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: Colors.primary[500] + "1A",
+    borderWidth: 1,
+    borderColor: Colors.primary[500] + "40",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  headerAddText: {
+    color: Colors.primary[300],
+    fontWeight: FontWeight.bold,
+    fontSize: FontSize.sm,
   },
   jlptBadge: {
     fontSize: FontSize.sm,

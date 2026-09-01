@@ -12,6 +12,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Speech from "expo-speech";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
@@ -24,13 +25,26 @@ type ListItem = {
   item_id: number;
   mastery_score: number;
   last_reviewed: string | null;
-  // Detail data joined from other tables
-  content?: string; // e.g. kanji or hiragana for vocab, character for kana
-  subContent?: string; // romaji or meaning
+  // Detail data joined from other tables, so a whole list can be revised
+  // without opening each item.
+  primary: string; // the Japanese: kanji, kana character, or grammar pattern
+  reading?: string; // hiragana reading, only when it differs from `primary`
+  romaji?: string;
+  romajiHindi?: string; // Hindi transliteration of the reading, if any
+  english?: string; // meaning
+  meaningHindi?: string; // short Hindi meaning, if any
+  speakText?: string; // what the audio button pronounces (a reading, not kanji)
   kanaType?: string; // "hiragana" | "katakana", only set for kana items
 };
 
 const PRACTICE_ITEM_TYPES: readonly PracticeItemType[] = ["vocabulary", "kana", "kanji", "grammar"];
+
+const ITEM_EMOJI: Record<PracticeItemType, string> = {
+  vocabulary: "📖",
+  kana: "✍️",
+  kanji: "漢",
+  grammar: "📝",
+};
 
 function isPracticeItemType(value: string): value is PracticeItemType {
   return PRACTICE_ITEM_TYPES.includes(value as PracticeItemType);
@@ -45,6 +59,22 @@ export default function PracticeListScreen() {
   const [list, setList] = useState<PracticeList | null>(null);
   const [items, setItems] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  // The row whose audio is currently playing, so its button can show a
+  // playing state. Only one plays at a time.
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
+
+  const speakItem = useCallback((item: ListItem) => {
+    if (!item.speakText) return;
+    Speech.stop();
+    setSpeakingId(item.id);
+    Speech.speak(item.speakText, {
+      language: "ja-JP",
+      pitch: 1.0,
+      rate: 0.8,
+      onDone: () => setSpeakingId(null),
+      onError: () => setSpeakingId(null),
+    });
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -86,27 +116,44 @@ export default function PracticeListScreen() {
         .filter((item) => item.item_type === "grammar")
         .map((item) => item.item_id);
 
-      const details = new Map<string, { content: string; subContent: string; kanaType?: string }>();
+      type Detail = Omit<
+        ListItem,
+        "id" | "item_type" | "item_id" | "mastery_score" | "last_reviewed"
+      >;
+      const details = new Map<string, Detail>();
 
       if (vocabIds.length > 0) {
         const { data: vocabData } = await supabase
           .from("vocabulary")
-          .select("*")
+          .select("id, kanji, hiragana, romaji, romaji_hindi, english")
           .in("id", vocabIds);
         vocabData?.forEach((item) =>
           details.set(`vocabulary:${item.id}`, {
-            content: item.kanji || item.hiragana,
-            subContent: item.english,
+            primary: item.kanji || item.hiragana,
+            // Only show the reading line when the headword is kanji; for a
+            // kana-only word it would just repeat `primary`.
+            reading: item.kanji ? item.hiragana : undefined,
+            romaji: item.romaji,
+            romajiHindi: item.romaji_hindi ?? undefined,
+            english: item.english,
+            // Speak the reading, never the kanji — a kanji read alone is
+            // routinely mispronounced.
+            speakText: item.hiragana,
           })
         );
       }
 
       if (kanaIds.length > 0) {
-        const { data: kanaData } = await supabase.from("kana").select("*").in("id", kanaIds);
+        const { data: kanaData } = await supabase
+          .from("kana")
+          .select("id, character, romaji, romaji_hindi, type")
+          .in("id", kanaIds);
         kanaData?.forEach((item) =>
           details.set(`kana:${item.id}`, {
-            content: item.character,
-            subContent: item.romaji,
+            primary: item.character,
+            romaji: item.romaji,
+            romajiHindi: item.romaji_hindi ?? undefined,
+            speakText: item.character,
             // Carried through so opening the character can switch the Writing
             // tab to the right syllabary first; it only loads one at a time.
             kanaType: item.type,
@@ -117,12 +164,16 @@ export default function PracticeListScreen() {
       if (kanjiIds.length > 0) {
         const { data: kanjiData } = await supabase
           .from("kanji")
-          .select("id, character, meaning_en")
+          .select("id, character, hiragana, romaji, meaning_en, meaning_hi")
           .in("id", kanjiIds);
         kanjiData?.forEach((item) =>
           details.set(`kanji:${item.id}`, {
-            content: item.character,
-            subContent: item.meaning_en.join(", "),
+            primary: item.character,
+            reading: item.hiragana ?? undefined,
+            romaji: item.romaji ?? undefined,
+            english: item.meaning_en.join(", "),
+            meaningHindi: item.meaning_hi?.length ? item.meaning_hi.join(", ") : undefined,
+            speakText: item.hiragana || item.character,
           })
         );
       }
@@ -134,8 +185,9 @@ export default function PracticeListScreen() {
           .in("id", grammarIds);
         grammarData?.forEach((item) =>
           details.set(`grammar:${item.id}`, {
-            content: item.pattern,
-            subContent: item.meaning,
+            primary: item.pattern,
+            english: item.meaning,
+            speakText: item.pattern,
           })
         );
       }
@@ -149,8 +201,13 @@ export default function PracticeListScreen() {
           item_id: item.item_id,
           mastery_score: item.mastery_score,
           last_reviewed: item.last_reviewed,
-          content: detail?.content ?? "",
-          subContent: detail?.subContent ?? "",
+          primary: detail?.primary ?? "",
+          reading: detail?.reading,
+          romaji: detail?.romaji,
+          romajiHindi: detail?.romajiHindi,
+          english: detail?.english,
+          meaningHindi: detail?.meaningHindi,
+          speakText: detail?.speakText,
           kanaType: detail?.kanaType,
         };
       });
@@ -168,6 +225,12 @@ export default function PracticeListScreen() {
       if (session?.user && id) {
         void loadData();
       }
+      // Stop any playing pronunciation when the screen loses focus, so audio
+      // does not carry on after the user has left the list.
+      return () => {
+        Speech.stop();
+        setSpeakingId(null);
+      };
     }, [session?.user, id, loadData])
   );
 
@@ -327,36 +390,70 @@ export default function PracticeListScreen() {
                 onPress={() => openItemDetail(item)}
                 activeOpacity={0.7}
                 accessibilityRole="button"
-                accessibilityLabel={`${item.content}, ${item.subContent}. Open details`}
+                accessibilityLabel={`${item.primary}${item.english ? `, ${item.english}` : ""}. Open details`}
               >
                 <View style={s.itemTypeBox}>
-                  <Text style={s.itemTypeEmoji}>
-                    {item.item_type === "vocabulary" ? "📖" : "✍️"}
-                  </Text>
+                  <Text style={s.itemTypeEmoji}>{ITEM_EMOJI[item.item_type]}</Text>
                 </View>
 
                 <View style={s.itemInfo}>
-                  <Text style={s.itemContent}>{item.content}</Text>
-                  <Text style={s.itemSubContent} numberOfLines={1}>
-                    {item.subContent}
-                  </Text>
+                  <View style={s.itemPrimaryRow}>
+                    <Text style={s.itemPrimary}>{item.primary}</Text>
+                    {item.reading ? <Text style={s.itemReading}>{item.reading}</Text> : null}
+                  </View>
+
+                  {item.romaji ? (
+                    <Text style={s.itemRomaji} numberOfLines={1}>
+                      {item.romaji}
+                      {item.romajiHindi ? `  ·  ${item.romajiHindi}` : ""}
+                    </Text>
+                  ) : null}
+
+                  {item.english ? (
+                    <Text style={s.itemEnglish} numberOfLines={2}>
+                      {item.english}
+                    </Text>
+                  ) : null}
+
+                  {item.meaningHindi ? (
+                    <Text style={s.itemHindi} numberOfLines={1}>
+                      🇮🇳 {item.meaningHindi}
+                    </Text>
+                  ) : null}
+
+                  {/* Mastery bar */}
+                  <View style={s.masteryRow}>
+                    <View style={s.masteryTrack}>
+                      <View
+                        style={[
+                          s.masteryFill,
+                          {
+                            width: `${Math.max(5, item.mastery_score)}%`,
+                            backgroundColor: getMasteryColor(item.mastery_score),
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={s.masteryText}>{Math.round(item.mastery_score)}%</Text>
+                  </View>
                 </View>
 
-                {/* Mastery Bar */}
-                <View style={s.masteryWrapper}>
-                  <View style={s.masteryTrack}>
-                    <View
-                      style={[
-                        s.masteryFill,
-                        {
-                          width: `${Math.max(5, item.mastery_score)}%`,
-                          backgroundColor: getMasteryColor(item.mastery_score),
-                        },
-                      ]}
+                {/* Audio */}
+                {item.speakText ? (
+                  <TouchableOpacity
+                    style={[s.audioBtn, speakingId === item.id && s.audioBtnActive]}
+                    onPress={() => speakItem(item)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Play pronunciation of ${item.reading || item.primary}`}
+                  >
+                    <Ionicons
+                      name={speakingId === item.id ? "volume-high" : "volume-medium-outline"}
+                      size={20}
+                      color={speakingId === item.id ? "#fff" : Colors.primary[400]}
                     />
-                  </View>
-                  <Text style={s.masteryText}>{Math.round(item.mastery_score)}%</Text>
-                </View>
+                  </TouchableOpacity>
+                ) : null}
 
                 <TouchableOpacity
                   style={s.removeBtn}
@@ -365,7 +462,7 @@ export default function PracticeListScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Remove from list"
                 >
-                  <Ionicons name="close" size={20} color={Colors.dark.textMuted} />
+                  <Ionicons name="close" size={18} color={Colors.dark.textMuted} />
                 </TouchableOpacity>
               </TouchableOpacity>
             )}
@@ -488,6 +585,8 @@ const s = StyleSheet.create({
     alignItems: "center",
     backgroundColor: Colors.dark.card,
     padding: Spacing.md,
+    // Room at the top-right for the absolutely positioned remove button.
+    paddingRight: Spacing["2xl"],
     borderRadius: BorderRadius.xl,
     borderWidth: 1,
     borderColor: Colors.dark.border,
@@ -500,36 +599,57 @@ const s = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: Spacing.md,
+    alignSelf: "flex-start",
   },
   itemTypeEmoji: {
     fontSize: 20,
   },
   itemInfo: {
     flex: 1,
+    gap: 2,
   },
-  itemContent: {
-    fontSize: FontSize.lg,
+  itemPrimaryRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
+  },
+  itemPrimary: {
+    fontSize: FontSize.xl,
     fontWeight: FontWeight.bold,
     color: Colors.dark.text,
-    marginBottom: 2,
   },
-  itemSubContent: {
+  itemReading: {
+    fontSize: FontSize.base,
+    color: Colors.primary[300],
+    fontWeight: FontWeight.semibold,
+  },
+  itemRomaji: {
     fontSize: FontSize.sm,
     color: Colors.dark.textMuted,
     fontWeight: FontWeight.medium,
   },
-  masteryWrapper: {
-    alignItems: "flex-end",
-    width: 60,
-    marginRight: Spacing.md,
+  itemEnglish: {
+    fontSize: FontSize.sm,
+    color: Colors.dark.textSecondary,
+  },
+  itemHindi: {
+    fontSize: FontSize.sm,
+    color: Colors.accent[300],
+  },
+  masteryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginTop: 4,
   },
   masteryTrack: {
-    width: "100%",
+    flex: 1,
+    maxWidth: 120,
     height: 6,
     backgroundColor: Colors.dark.surface,
     borderRadius: 3,
     overflow: "hidden",
-    marginBottom: 4,
   },
   masteryFill: {
     height: "100%",
@@ -540,8 +660,27 @@ const s = StyleSheet.create({
     fontWeight: "bold",
     color: Colors.dark.textMuted,
   },
+  audioBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.primary[500] + "1A",
+    borderWidth: 1,
+    borderColor: Colors.primary[500] + "40",
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: Spacing.sm,
+    alignSelf: "center",
+  },
+  audioBtnActive: {
+    backgroundColor: Colors.primary[500],
+    borderColor: Colors.primary[500],
+  },
   removeBtn: {
-    padding: Spacing.sm,
+    position: "absolute",
+    top: Spacing.sm,
+    right: Spacing.sm,
+    padding: 4,
   },
   emptyBox: {
     alignItems: "center",

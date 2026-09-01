@@ -27,6 +27,7 @@ type ListItem = {
   // Detail data joined from other tables
   content?: string; // e.g. kanji or hiragana for vocab, character for kana
   subContent?: string; // romaji or meaning
+  kanaType?: string; // "hiragana" | "katakana", only set for kana items
 };
 
 const PRACTICE_ITEM_TYPES: readonly PracticeItemType[] = ["vocabulary", "kana", "kanji", "grammar"];
@@ -85,7 +86,7 @@ export default function PracticeListScreen() {
         .filter((item) => item.item_type === "grammar")
         .map((item) => item.item_id);
 
-      const details = new Map<string, { content: string; subContent: string }>();
+      const details = new Map<string, { content: string; subContent: string; kanaType?: string }>();
 
       if (vocabIds.length > 0) {
         const { data: vocabData } = await supabase
@@ -106,6 +107,9 @@ export default function PracticeListScreen() {
           details.set(`kana:${item.id}`, {
             content: item.character,
             subContent: item.romaji,
+            // Carried through so opening the character can switch the Writing
+            // tab to the right syllabary first; it only loads one at a time.
+            kanaType: item.type,
           })
         );
       }
@@ -147,6 +151,7 @@ export default function PracticeListScreen() {
           last_reviewed: item.last_reviewed,
           content: detail?.content ?? "",
           subContent: detail?.subContent ?? "",
+          kanaType: detail?.kanaType,
         };
       });
 
@@ -193,6 +198,33 @@ export default function PracticeListScreen() {
     router.push({
       pathname: "/study/quiz",
       params: { listId: id },
+    });
+  };
+
+  /*
+   * Each content tab shows its own detail view from local state rather than a
+   * route, so there is no /vocabulary/:id to link to. Handing the tab a
+   * focusItemId is what lets a list row open the same full detail a learner
+   * gets by tapping the word in its own tab.
+   */
+  const DETAIL_ROUTES: Record<PracticeItemType, string> = {
+    vocabulary: "/(tabs)/vocabulary",
+    kana: "/(tabs)/writing",
+    kanji: "/(tabs)/kanji",
+    grammar: "/(tabs)/grammar",
+  };
+
+  const openItemDetail = (item: ListItem) => {
+    router.push({
+      pathname: DETAIL_ROUTES[item.item_type] as never,
+      params: {
+        focusItemId: String(item.item_id),
+        // Tabs stay mounted, so pushing the same word twice would hand the
+        // target identical params and its effect would never re-run — the
+        // second tap would do nothing. This makes every tap distinct.
+        focusNonce: String(Date.now()),
+        ...(item.kanaType ? { focusKanaType: item.kanaType } : {}),
+      },
     });
   };
 
@@ -286,7 +318,13 @@ export default function PracticeListScreen() {
             contentContainerStyle={s.listContent}
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => (
-              <View style={s.itemCard}>
+              <TouchableOpacity
+                style={s.itemCard}
+                onPress={() => openItemDetail(item)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.content}, ${item.subContent}. Open details`}
+              >
                 <View style={s.itemTypeBox}>
                   <Text style={s.itemTypeEmoji}>
                     {item.item_type === "vocabulary" ? "📖" : "✍️"}
@@ -325,7 +363,7 @@ export default function PracticeListScreen() {
                 >
                   <Ionicons name="close" size={20} color={Colors.dark.textMuted} />
                 </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
             )}
             ListEmptyComponent={
               <View style={s.emptyBox}>

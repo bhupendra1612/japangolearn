@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
+import { useLocalSearchParams } from "expo-router";
 import {
   View,
   Text,
@@ -67,6 +68,26 @@ export default function GrammarScreen() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [offline, setOffline] = useState(false);
   const [servedFrom, setServedFrom] = useState<number | null>(null);
+
+  // Set when another screen wants a specific pattern opened. Grammar shows its
+  // detail by expanding the row in place, so this just expands the right one.
+  const { focusItemId, focusNonce } = useLocalSearchParams<{
+    focusItemId?: string;
+    focusNonce?: string;
+  }>();
+  // The nonce makes repeat taps on the same item distinct; without it the
+  // params would be identical and this screen, still mounted, would ignore them.
+  const focusKey = focusNonce ?? focusItemId ?? null;
+  const consumedFocusRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!focusItemId || patterns.length === 0) return;
+    if (consumedFocusRef.current === focusKey) return;
+
+    consumedFocusRef.current = focusKey;
+    const match = patterns.find((pattern) => String(pattern.id) === focusItemId);
+    if (match) setExpandedId(match.id);
+  }, [focusItemId, focusKey, patterns]);
 
   const fetchPatterns = useCallback(async () => {
     setLoading(true);

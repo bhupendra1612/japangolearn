@@ -11,6 +11,7 @@ import {
   Animated,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Speech from "expo-speech";
@@ -114,6 +115,17 @@ function getIcon(topic: string, wordIcon: string | null): string {
 export default function VocabularyScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
+  // Set when another screen — a practice list, say — wants a specific word
+  // opened. The detail view is local state rather than a route, so this is how
+  // it is reachable from outside.
+  const { focusItemId, focusNonce } = useLocalSearchParams<{
+    focusItemId?: string;
+    focusNonce?: string;
+  }>();
+  // The nonce makes repeat taps on the same item distinct; without it the
+  // params would be identical and this screen, still mounted, would ignore them.
+  const focusKey = focusNonce ?? focusItemId ?? null;
+  const consumedFocusRef = useRef<string | null>(null);
   const [words, setWords] = useState<Word[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -287,6 +299,36 @@ export default function VocabularyScreen() {
     },
     [speakWord, cardAnim]
   );
+
+  /*
+   * Opens the word named by ?focusItemId once the list has loaded. The index is
+   * taken from `filtered` because that is what the prev/next arrows walk, so a
+   * word opened this way still steps through its neighbours correctly.
+   *
+   * If the active category or search hides the word, the filters are cleared
+   * and this runs again against the full list — otherwise arriving from a
+   * practice list would silently do nothing whenever a filter happened to be
+   * set.
+   */
+  useEffect(() => {
+    if (!focusItemId || words.length === 0) return;
+    if (consumedFocusRef.current === focusKey) return;
+
+    const index = filtered.findIndex((word) => String(word.id) === focusItemId);
+    if (index >= 0) {
+      consumedFocusRef.current = focusKey;
+      openDetail(filtered[index], index);
+      return;
+    }
+
+    if (words.some((word) => String(word.id) === focusItemId)) {
+      setSelectedCategory("All");
+      setSearch("");
+    } else {
+      // Not in this level's vocabulary at all; stop retrying on every render.
+      consumedFocusRef.current = focusKey;
+    }
+  }, [focusItemId, focusKey, words, filtered, openDetail]);
 
   const navigateWord = useCallback(
     (direction: 1 | -1) => {

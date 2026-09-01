@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import * as Speech from "expo-speech";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "@/lib/supabase";
@@ -96,6 +97,18 @@ function formatGroup(group: string): string {
 export default function WritingScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
+  // Set when another screen wants a specific character opened. The type comes
+  // with it because the grid only ever loads one syllabary at a time, so a
+  // katakana id would not be found while hiragana is showing.
+  const { focusItemId, focusKanaType, focusNonce } = useLocalSearchParams<{
+    focusItemId?: string;
+    focusKanaType?: string;
+    focusNonce?: string;
+  }>();
+  // The nonce makes repeat taps on the same item distinct; without it the
+  // params would be identical and this screen, still mounted, would ignore them.
+  const focusKey = focusNonce ?? focusItemId ?? null;
+  const consumedFocusRef = useRef<string | null>(null);
   const [kanaList, setKanaList] = useState<Kana[]>([]);
   const [loadFailed, setLoadFailed] = useState(false);
   const [offline, setOffline] = useState(false);
@@ -235,6 +248,40 @@ export default function WritingScreen() {
     },
     [speakKana, cardAnim]
   );
+
+  /*
+   * Opens the character named by ?focusItemId once its syllabary has loaded,
+   * switching syllabary and clearing the group filter first if either would
+   * otherwise hide it. Index comes from `filtered` so the prev/next arrows keep
+   * working on a character opened this way.
+   */
+  useEffect(() => {
+    if (!focusItemId) return;
+    if (consumedFocusRef.current === focusKey) return;
+
+    if (
+      (focusKanaType === "hiragana" || focusKanaType === "katakana") &&
+      focusKanaType !== kanaType
+    ) {
+      setKanaType(focusKanaType);
+      return;
+    }
+
+    if (kanaList.length === 0) return;
+
+    const index = filtered.findIndex((kana) => String(kana.id) === focusItemId);
+    if (index >= 0) {
+      consumedFocusRef.current = focusKey;
+      openDetail(filtered[index], index);
+      return;
+    }
+
+    if (kanaList.some((kana) => String(kana.id) === focusItemId)) {
+      setActiveGroup("All");
+    } else {
+      consumedFocusRef.current = focusKey;
+    }
+  }, [focusItemId, focusKey, focusKanaType, kanaType, kanaList, filtered, openDetail]);
 
   const navigateKana = useCallback(
     (direction: 1 | -1) => {

@@ -7,6 +7,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -29,6 +33,9 @@ export default function PracticeHubScreen() {
   const [streak, setStreak] = useState({ current: 0, longest: 0 });
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newListTitle, setNewListTitle] = useState("");
+  const [savingNew, setSavingNew] = useState(false);
 
   const loadData = useCallback(async () => {
     const userId = session?.user.id;
@@ -104,6 +111,38 @@ export default function PracticeHubScreen() {
     }, [loadData])
   );
 
+  const handleCreateList = async () => {
+    const userId = session?.user.id;
+    const title = newListTitle.trim();
+    if (!userId || !title || savingNew) return;
+    setSavingNew(true);
+
+    // A blank list, ready to have items added to it later. is_smart_list stays
+    // false so it behaves like any user list (deletable, shown after the smart
+    // list).
+    const { data, error } = await supabase
+      .from("practice_lists")
+      .insert({ user_id: userId, title, is_smart_list: false })
+      .select("id, title, is_smart_list")
+      .single();
+
+    setSavingNew(false);
+    if (error || !data) {
+      captureException(error ?? new Error("create list returned no row"), {
+        screen: "practice",
+        action: "create_list",
+      });
+      Alert.alert("Could not create list", "Please try again.");
+      return;
+    }
+
+    setLists((prev) => [...prev, { ...data, item_count: 0 }]);
+    setNewListTitle("");
+    setCreating(false);
+    // Open the new list so the user can start adding to it right away.
+    router.push(`/(tabs)/practice/${data.id}`);
+  };
+
   const handleDeleteList = (listId: string, isSmartList: boolean) => {
     if (isSmartList) {
       Alert.alert("Cannot Delete", "The 'Needs Practice' auto-generated list cannot be deleted.");
@@ -165,6 +204,19 @@ export default function PracticeHubScreen() {
       <View style={s.content}>
         <View style={s.listHeaderRow}>
           <Text style={s.sectionTitle}>My Study Lists</Text>
+          <TouchableOpacity
+            style={s.newListBtn}
+            onPress={() => {
+              setNewListTitle("");
+              setCreating(true);
+            }}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Create a new practice list"
+          >
+            <Ionicons name="add" size={18} color={Colors.primary[300]} />
+            <Text style={s.newListBtnText}>New List</Text>
+          </TouchableOpacity>
         </View>
 
         {loading ? (
@@ -235,6 +287,61 @@ export default function PracticeHubScreen() {
           />
         )}
       </View>
+
+      <Modal
+        visible={creating}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCreating(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={s.createOverlay}
+        >
+          <TouchableOpacity
+            style={s.createBackdrop}
+            activeOpacity={1}
+            onPress={() => setCreating(false)}
+          />
+          <View style={s.createCard}>
+            <Text style={s.createTitle}>New practice list</Text>
+            <TextInput
+              style={s.createInput}
+              placeholder="List name (e.g. Kitchen verbs)"
+              placeholderTextColor={Colors.dark.textMuted}
+              value={newListTitle}
+              onChangeText={setNewListTitle}
+              autoFocus
+              maxLength={40}
+              returnKeyType="done"
+              onSubmitEditing={() => void handleCreateList()}
+            />
+            <View style={s.createActions}>
+              <TouchableOpacity
+                style={s.createCancelBtn}
+                onPress={() => setCreating(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
+              >
+                <Text style={s.createCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.createConfirmBtn, !newListTitle.trim() && { opacity: 0.5 }]}
+                onPress={() => void handleCreateList()}
+                disabled={!newListTitle.trim() || savingNew}
+                accessibilityRole="button"
+                accessibilityLabel="Create list"
+              >
+                {savingNew ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={s.createConfirmText}>Create</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -304,6 +411,86 @@ const s = StyleSheet.create({
     fontSize: FontSize.xl,
     fontWeight: FontWeight.bold,
     color: Colors.dark.text,
+  },
+  newListBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.primary[500] + "1A",
+    borderWidth: 1,
+    borderColor: Colors.primary[500] + "40",
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  newListBtnText: {
+    color: Colors.primary[300],
+    fontWeight: FontWeight.bold,
+    fontSize: FontSize.sm,
+  },
+  createOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: Spacing.xl,
+  },
+  createBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.6)",
+  },
+  createCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: Colors.dark.card,
+    borderRadius: BorderRadius["2xl"],
+    padding: Spacing.xl,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  createTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.bold,
+    color: Colors.dark.text,
+    marginBottom: Spacing.lg,
+  },
+  createInput: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    color: Colors.dark.text,
+    fontSize: FontSize.base,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  createActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: Spacing.sm,
+  },
+  createCancelBtn: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  createCancelText: {
+    color: Colors.dark.textMuted,
+    fontWeight: FontWeight.semibold,
+    fontSize: FontSize.base,
+  },
+  createConfirmBtn: {
+    backgroundColor: Colors.primary[500],
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    minWidth: 96,
+    alignItems: "center",
+  },
+  createConfirmText: {
+    color: "#fff",
+    fontWeight: FontWeight.bold,
+    fontSize: FontSize.base,
   },
   centerBox: {
     flex: 1,

@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import { useLocalSearchParams } from "expo-router";
 import {
   View,
   Text,
@@ -496,9 +497,30 @@ export default function KanjiScreen() {
   const [selected, setSelected] = useState<Kanji | null>(null);
   const [showHindi, setShowHindi] = useState(true);
 
+  // Set when another screen wants a specific character's detail modal opened.
+  const { focusItemId, focusNonce } = useLocalSearchParams<{
+    focusItemId?: string;
+    focusNonce?: string;
+  }>();
+  // The nonce makes repeat taps on the same item distinct; without it the
+  // params would be identical and this screen, still mounted, would ignore them.
+  const focusKey = focusNonce ?? focusItemId ?? null;
+  const consumedFocusRef = useRef<string | null>(null);
+
   useEffect(() => {
     fetchKanji();
   }, []);
+
+  useEffect(() => {
+    if (!focusItemId || kanji.length === 0) return;
+    if (consumedFocusRef.current === focusKey) return;
+
+    consumedFocusRef.current = focusKey;
+    const match = kanji.find((entry) => String(entry.id) === focusItemId);
+    // The modal reads from `selected`, so it does not care about the search or
+    // tag filters the grid behind it is using.
+    if (match) setSelected(match);
+  }, [focusItemId, focusKey, kanji]);
 
   const fetchKanji = async () => {
     setLoading(true);

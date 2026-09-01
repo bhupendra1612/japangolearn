@@ -87,7 +87,7 @@ export async function loadPracticeStudyItems(
       ? supabase.from("vocabulary").select("id, kanji, hiragana, english").in("id", vocabularyIds)
       : Promise.resolve({ data: [], error: null }),
     kanaIds.length
-      ? supabase.from("kana").select("id, character, romaji").in("id", kanaIds)
+      ? supabase.from("kana").select("id, character, romaji, type").in("id", kanaIds)
       : Promise.resolve({ data: [], error: null }),
     kanjiIds.length
       ? supabase.from("kanji").select("id, character, hiragana, meaning_en").in("id", kanjiIds)

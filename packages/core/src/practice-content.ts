@@ -19,6 +19,7 @@ export type PracticeContentRows = {
     id: number;
     character: string;
     romaji: string;
+    type: string;
   }[];
   kanji: readonly {
     id: number;
@@ -42,6 +43,7 @@ export type PracticeStudyItem = {
   back: string;
   correctAnswer: string;
   audioText: string;
+  kanaType?: "hiragana" | "katakana";
   masteryScore: number;
   lastReviewed: string | null;
 };
@@ -90,6 +92,7 @@ export function buildPracticeStudyItems(
       back: answer,
       correctAnswer: answer,
       audioText: front,
+      kanaType: row.type === "hiragana" || row.type === "katakana" ? row.type : undefined,
     });
   }
 

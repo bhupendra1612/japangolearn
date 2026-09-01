@@ -168,6 +168,7 @@ export type PracticeList = {
   is_smart_list: boolean;
   created_at?: string;
   item_count?: number;
+  sort_order?: number;
 };
 
 export type PracticeItemType = "vocabulary" | "kana" | "kanji" | "grammar";

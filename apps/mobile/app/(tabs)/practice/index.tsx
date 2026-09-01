@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
@@ -16,6 +15,10 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import DraggableFlatList, {
+  ScaleDecorator,
+  type RenderItemParams,
+} from "react-native-draggable-flatlist";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
@@ -61,9 +64,9 @@ export default function PracticeHubScreen() {
     // 1. Get lists
     let { data: listsData, error: listsError } = await supabase
       .from("practice_lists")
-      .select("id, title, is_smart_list")
+      .select("id, title, is_smart_list, sort_order")
       .eq("user_id", userId)
-      .order("is_smart_list", { ascending: false })
+      .order("sort_order", { ascending: true })
       .order("created_at", { ascending: false });
 
     if (listsError) {
@@ -120,10 +123,13 @@ export default function PracticeHubScreen() {
     // A blank list, ready to have items added to it later. is_smart_list stays
     // false so it behaves like any user list (deletable, shown after the smart
     // list).
+    // Place the new list after the ones that exist so it does not jump to the
+    // top of the user's chosen order.
+    const nextOrder = lists.reduce((max, l) => Math.max(max, l.sort_order ?? 0), 0) + 1;
     const { data, error } = await supabase
       .from("practice_lists")
-      .insert({ user_id: userId, title, is_smart_list: false })
-      .select("id, title, is_smart_list")
+      .insert({ user_id: userId, title, is_smart_list: false, sort_order: nextOrder })
+      .select("id, title, is_smart_list, sort_order")
       .single();
 
     setSavingNew(false);
@@ -142,6 +148,34 @@ export default function PracticeHubScreen() {
     // Open the new list so the user can start adding to it right away.
     router.push(`/(tabs)/practice/${data.id}`);
   };
+
+  const persistOrder = useCallback(async (ordered: PracticeList[]) => {
+    // Write only the rows whose position actually changed, 1-based to match the
+    // migration's backfill. A failed write is reported but not surfaced — the
+    // next load re-reads the stored order, so the UI stays consistent.
+    const changed = ordered
+      .map((list, index) => ({ id: list.id, sortOrder: index + 1, prev: list.sort_order }))
+      .filter((row) => row.prev !== row.sortOrder);
+    if (changed.length === 0) return;
+
+    const results = await Promise.all(
+      changed.map((row) =>
+        supabase.from("practice_lists").update({ sort_order: row.sortOrder }).eq("id", row.id)
+      )
+    );
+    const failure = results.find((r) => r.error)?.error;
+    if (failure) captureException(failure, { screen: "practice", action: "reorder" });
+  }, []);
+
+  const handleReorder = useCallback(
+    (ordered: PracticeList[]) => {
+      // Reflect the new order immediately, with each row's sort_order updated so
+      // a second drag diffs against the right baseline before the reload.
+      setLists(ordered.map((list, index) => ({ ...list, sort_order: index + 1 })));
+      void persistOrder(ordered);
+    },
+    [persistOrder]
+  );
 
   const handleDeleteList = (listId: string, isSmartList: boolean) => {
     if (isSmartList) {
@@ -197,6 +231,62 @@ export default function PracticeHubScreen() {
     </View>
   );
 
+  const renderDraggableItem = ({ item, drag, isActive }: RenderItemParams<PracticeList>) => (
+    <ScaleDecorator>
+      <TouchableOpacity
+        style={[s.listCard, isActive && s.listCardActive]}
+        onPress={() => router.push(`/(tabs)/practice/${item.id}`)}
+        // Long-pressing anywhere on the row starts a drag, as well as the handle.
+        onLongPress={drag}
+        delayLongPress={220}
+        disabled={isActive}
+        activeOpacity={0.7}
+      >
+        <TouchableOpacity
+          onPressIn={drag}
+          hitSlop={12}
+          style={s.dragHandle}
+          accessibilityRole="button"
+          accessibilityLabel={`Reorder ${item.title}`}
+        >
+          <Ionicons name="reorder-three" size={22} color={Colors.dark.textMuted} />
+        </TouchableOpacity>
+
+        <View style={[s.listIconBox, item.is_smart_list && s.smartListIconBox]}>
+          <Ionicons
+            name={item.is_smart_list ? "flame" : "list"}
+            size={24}
+            color={item.is_smart_list ? "#EF4444" : Colors.primary[300]}
+          />
+        </View>
+
+        <View style={s.listInfo}>
+          <Text style={[s.listName, item.is_smart_list && s.smartListName]}>{item.title}</Text>
+          <Text style={s.listCount}>{item.item_count} items</Text>
+        </View>
+
+        {!item.is_smart_list ? (
+          <TouchableOpacity
+            style={s.deleteBtn}
+            onPress={() => handleDeleteList(item.id, item.is_smart_list)}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={`Delete list ${item.title}`}
+          >
+            <Ionicons name="trash-outline" size={20} color={Colors.dark.textMuted} />
+          </TouchableOpacity>
+        ) : (
+          <Ionicons
+            name="chevron-forward"
+            size={20}
+            color={Colors.dark.textMuted}
+            style={{ marginRight: 10 }}
+          />
+        )}
+      </TouchableOpacity>
+    </ScaleDecorator>
+  );
+
   return (
     <View style={[s.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {renderHeader()}
@@ -229,52 +319,19 @@ export default function PracticeHubScreen() {
             message="We could not load your practice lists."
           />
         ) : (
-          <FlatList
+          <DraggableFlatList
             data={lists}
             keyExtractor={(item) => item.id}
+            onDragEnd={({ data }) => handleReorder(data)}
+            activationDistance={12}
             contentContainerStyle={s.listContent}
             showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={s.listCard}
-                onPress={() => router.push(`/(tabs)/practice/${item.id}`)}
-                activeOpacity={0.7}
-              >
-                <View style={[s.listIconBox, item.is_smart_list && s.smartListIconBox]}>
-                  <Ionicons
-                    name={item.is_smart_list ? "flame" : "list"}
-                    size={24}
-                    color={item.is_smart_list ? "#EF4444" : Colors.primary[300]}
-                  />
-                </View>
-
-                <View style={s.listInfo}>
-                  <Text style={[s.listName, item.is_smart_list && s.smartListName]}>
-                    {item.title}
-                  </Text>
-                  <Text style={s.listCount}>{item.item_count} items</Text>
-                </View>
-
-                {!item.is_smart_list ? (
-                  <TouchableOpacity
-                    style={s.deleteBtn}
-                    onPress={() => handleDeleteList(item.id, item.is_smart_list)}
-                    hitSlop={10}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Delete list ${item.title}`}
-                  >
-                    <Ionicons name="trash-outline" size={20} color={Colors.dark.textMuted} />
-                  </TouchableOpacity>
-                ) : (
-                  <Ionicons
-                    name="chevron-forward"
-                    size={20}
-                    color={Colors.dark.textMuted}
-                    style={{ marginRight: 10 }}
-                  />
-                )}
-              </TouchableOpacity>
-            )}
+            renderItem={renderDraggableItem}
+            ListHeaderComponent={
+              lists.length > 1 ? (
+                <Text style={s.reorderHint}>Hold and drag to reorder your lists</Text>
+              ) : null
+            }
             ListEmptyComponent={
               <View style={s.emptyBox}>
                 <Ionicons name="document-text-outline" size={48} color={Colors.dark.border} />
@@ -501,6 +558,11 @@ const s = StyleSheet.create({
     paddingBottom: Spacing["4xl"],
     gap: Spacing.md,
   },
+  reorderHint: {
+    fontSize: FontSize.xs,
+    color: Colors.dark.textMuted,
+    marginBottom: Spacing.md,
+  },
   listCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -509,6 +571,20 @@ const s = StyleSheet.create({
     borderRadius: BorderRadius.xl,
     borderWidth: 1,
     borderColor: Colors.dark.border,
+  },
+  // While a row is being dragged, lift it visually above the rest.
+  listCardActive: {
+    borderColor: Colors.primary[500],
+    backgroundColor: Colors.dark.surface,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  dragHandle: {
+    paddingRight: Spacing.sm,
+    paddingVertical: Spacing.xs,
   },
   listIconBox: {
     width: 48,

@@ -118,9 +118,10 @@ export default function VocabularyScreen() {
   // Set when another screen — a practice list, say — wants a specific word
   // opened. The detail view is local state rather than a route, so this is how
   // it is reachable from outside.
-  const { focusItemId, focusNonce } = useLocalSearchParams<{
+  const { focusItemId, focusNonce, fromListId } = useLocalSearchParams<{
     focusItemId?: string;
     focusNonce?: string;
+    fromListId?: string;
   }>();
   // The nonce makes repeat taps on the same item distinct; without it the
   // params would be identical and this screen, still mounted, would ignore them.
@@ -154,11 +155,15 @@ export default function VocabularyScreen() {
   // way the mode is reset so the tab does not reopen mid-detail next visit.
   const closeOverlay = useCallback(() => {
     setMode("browse");
-    if (openedViaFocusRef.current) {
+    // Opened from a practice list: return to that exact list. router.back() is
+    // not used because the list lives in the Practice tab's own navigator, and
+    // going "back" out of this tab is not reliable — navigating to the list's
+    // route by id always lands in the right place.
+    if (openedViaFocusRef.current && fromListId) {
       openedViaFocusRef.current = false;
-      if (router.canGoBack()) router.back();
+      router.navigate({ pathname: "/(tabs)/practice/[id]", params: { id: fromListId } });
     }
-  }, []);
+  }, [fromListId]);
 
   // Detail and quiz are local state, not routes, so Android's back button would
   // otherwise leave the screen entirely instead of returning to the list.

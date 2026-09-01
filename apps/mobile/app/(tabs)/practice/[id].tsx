@@ -223,6 +223,10 @@ export default function PracticeListScreen() {
         // target identical params and its effect would never re-run — the
         // second tap would do nothing. This makes every tap distinct.
         focusNonce: String(Date.now()),
+        // The id of this list, so the detail's back button can return straight
+        // here. Content tabs live in a different navigator, so router.back()
+        // from one is not reliable — the target navigates back by this id.
+        fromListId: String(id),
         ...(item.kanaType ? { focusKanaType: item.kanaType } : {}),
       },
     });

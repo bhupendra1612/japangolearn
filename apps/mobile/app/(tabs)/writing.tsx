@@ -100,10 +100,11 @@ export default function WritingScreen() {
   // Set when another screen wants a specific character opened. The type comes
   // with it because the grid only ever loads one syllabary at a time, so a
   // katakana id would not be found while hiragana is showing.
-  const { focusItemId, focusKanaType, focusNonce } = useLocalSearchParams<{
+  const { focusItemId, focusKanaType, focusNonce, fromListId } = useLocalSearchParams<{
     focusItemId?: string;
     focusKanaType?: string;
     focusNonce?: string;
+    fromListId?: string;
   }>();
   // The nonce makes repeat taps on the same item distinct; without it the
   // params would be identical and this screen, still mounted, would ignore them.
@@ -127,11 +128,13 @@ export default function WritingScreen() {
   // is ever focus-opened, so the quiz path always just returns to the grid.
   const closeOverlay = useCallback(() => {
     setMode("grid");
-    if (openedViaFocusRef.current) {
+    // Opened from a practice list: navigate back to that list by id. See
+    // vocabulary.tsx — router.back() across tab navigators is not reliable.
+    if (openedViaFocusRef.current && fromListId) {
       openedViaFocusRef.current = false;
-      if (router.canGoBack()) router.back();
+      router.navigate({ pathname: "/(tabs)/practice/[id]", params: { id: fromListId } });
     }
-  }, []);
+  }, [fromListId]);
 
   // Detail and quiz are local state, not routes, so Android's back button would
   // otherwise leave the screen entirely instead of returning to the grid.

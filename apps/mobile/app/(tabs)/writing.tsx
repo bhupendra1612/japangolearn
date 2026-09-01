@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import * as Speech from "expo-speech";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "@/lib/supabase";
@@ -109,6 +109,9 @@ export default function WritingScreen() {
   // params would be identical and this screen, still mounted, would ignore them.
   const focusKey = focusNonce ?? focusItemId ?? null;
   const consumedFocusRef = useRef<string | null>(null);
+  // See vocabulary.tsx: when the detail was opened from another screen, back
+  // pops that route instead of returning to this tab's grid.
+  const openedViaFocusRef = useRef(false);
   const [kanaList, setKanaList] = useState<Kana[]>([]);
   const [loadFailed, setLoadFailed] = useState(false);
   const [offline, setOffline] = useState(false);
@@ -119,12 +122,20 @@ export default function WritingScreen() {
   const [selectedKana, setSelectedKana] = useState<Kana | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
+  // Closing detail or quiz. Returns to the grid, unless the detail was opened
+  // from another screen, in which case it pops back to that screen. Only detail
+  // is ever focus-opened, so the quiz path always just returns to the grid.
+  const closeOverlay = useCallback(() => {
+    setMode("grid");
+    if (openedViaFocusRef.current) {
+      openedViaFocusRef.current = false;
+      if (router.canGoBack()) router.back();
+    }
+  }, []);
+
   // Detail and quiz are local state, not routes, so Android's back button would
   // otherwise leave the screen entirely instead of returning to the grid.
-  useAndroidBack(
-    mode !== "grid",
-    useCallback(() => setMode("grid"), [])
-  );
+  useAndroidBack(mode !== "grid", closeOverlay);
 
   // Custom List State
   const [showAddListModal, setShowAddListModal] = useState(false);
@@ -272,6 +283,7 @@ export default function WritingScreen() {
     const index = filtered.findIndex((kana) => String(kana.id) === focusItemId);
     if (index >= 0) {
       consumedFocusRef.current = focusKey;
+      openedViaFocusRef.current = true;
       openDetail(filtered[index], index);
       return;
     }
@@ -531,7 +543,7 @@ export default function WritingScreen() {
       >
         {/* Top bar */}
         <View style={s.detailTopBar}>
-          <TouchableOpacity onPress={() => setMode("grid")} style={s.backBtn} activeOpacity={0.7}>
+          <TouchableOpacity onPress={closeOverlay} style={s.backBtn} activeOpacity={0.7}>
             <Ionicons name="arrow-back" size={22} color={Colors.dark.text} />
           </TouchableOpacity>
           <Text style={s.detailCounter}>

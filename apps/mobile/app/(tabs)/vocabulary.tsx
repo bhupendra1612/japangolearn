@@ -11,7 +11,7 @@ import {
   Animated,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Speech from "expo-speech";
@@ -126,6 +126,11 @@ export default function VocabularyScreen() {
   // params would be identical and this screen, still mounted, would ignore them.
   const focusKey = focusNonce ?? focusItemId ?? null;
   const consumedFocusRef = useRef<string | null>(null);
+  // True while the detail view was opened by a link from another screen (e.g. a
+  // practice list). Back then has to pop that route rather than fall back to
+  // this tab's browse list, or the user lands on Vocabulary instead of where
+  // they came from.
+  const openedViaFocusRef = useRef(false);
   const [words, setWords] = useState<Word[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -143,12 +148,21 @@ export default function VocabularyScreen() {
   const [selectedWord, setSelectedWord] = useState<Word | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
+  // Closing the detail or quiz view. Normally that just returns to this tab's
+  // browse list. But when the detail was opened from another screen, the browse
+  // list is not where the user was, so pop back to that screen instead. Either
+  // way the mode is reset so the tab does not reopen mid-detail next visit.
+  const closeOverlay = useCallback(() => {
+    setMode("browse");
+    if (openedViaFocusRef.current) {
+      openedViaFocusRef.current = false;
+      if (router.canGoBack()) router.back();
+    }
+  }, []);
+
   // Detail and quiz are local state, not routes, so Android's back button would
   // otherwise leave the screen entirely instead of returning to the list.
-  useAndroidBack(
-    mode !== "browse",
-    useCallback(() => setMode("browse"), [])
-  );
+  useAndroidBack(mode !== "browse", closeOverlay);
 
   // Custom List State
   const [showAddListModal, setShowAddListModal] = useState(false);
@@ -266,7 +280,11 @@ export default function VocabularyScreen() {
   const speakWord = useCallback((word: Word) => {
     Speech.stop();
     setSpeakingWordId(word.id);
-    Speech.speak(word.kanji || word.hiragana, {
+    // Speak the hiragana reading, never the kanji. A kanji spoken in isolation
+    // is read with whichever reading the engine guesses, which for compounds is
+    // routinely wrong — お腹 (おなか) came out as お-はら. The hiragana column is
+    // the word's actual reading, so it is always pronounced correctly.
+    Speech.speak(word.hiragana, {
       language: "ja-JP",
       pitch: 1.0,
       rate: 0.8,
@@ -317,6 +335,7 @@ export default function VocabularyScreen() {
     const index = filtered.findIndex((word) => String(word.id) === focusItemId);
     if (index >= 0) {
       consumedFocusRef.current = focusKey;
+      openedViaFocusRef.current = true;
       openDetail(filtered[index], index);
       return;
     }
@@ -656,6 +675,13 @@ export default function VocabularyScreen() {
     const wordIcon = getIcon(selectedWord.topic, selectedWord.icon);
     const isSpeaking = speakingWordId === selectedWord.id;
     const displayChar = selectedWord.kanji || selectedWord.hiragana;
+    // Every character of the written word gets its own animated glyph. This
+    // previously drew only displayChar[0], so a two-character word like お腹
+    // animated the お and left the 腹 undrawn. Array.from keeps any character
+    // outside the basic plane intact. The tiles shrink as the word grows so a
+    // longer word still fits the card on one row.
+    const strokeChars = Array.from(displayChar);
+    const strokeSize = Math.max(56, Math.min(120, Math.floor(280 / strokeChars.length)));
 
     return (
       <Animated.ScrollView
@@ -665,7 +691,7 @@ export default function VocabularyScreen() {
       >
         {/* Top bar */}
         <View style={s.detailTopBar}>
-          <TouchableOpacity onPress={() => setMode("browse")} style={s.backBtn} activeOpacity={0.7}>
+          <TouchableOpacity onPress={closeOverlay} style={s.backBtn} activeOpacity={0.7}>
             <Ionicons name="arrow-back" size={22} color={Colors.dark.text} />
           </TouchableOpacity>
           <Text style={s.detailCounter}>
@@ -683,23 +709,17 @@ export default function VocabularyScreen() {
           {/* Watermark */}
           <Text style={s.detailWatermark}>{wordIcon}</Text>
 
-          {/* Main word display (Animated first character) */}
+          {/* Animated stroke order for the whole written word */}
           <View style={s.detailMainCharContainer}>
-            {selectedWord.kanji ? (
+            {strokeChars.map((ch, i) => (
               <StrokeWriter
-                character={selectedWord.kanji[0]}
-                size={120}
+                key={`${ch}-${i}`}
+                character={ch}
+                size={strokeSize}
                 color={color}
                 outlineColor={Colors.dark.surface}
               />
-            ) : (
-              <StrokeWriter
-                character={selectedWord.hiragana[0]}
-                size={120}
-                color={color}
-                outlineColor={Colors.dark.surface}
-              />
-            )}
+            ))}
           </View>
 
           {/* Full Japanese Word Below Animation */}
@@ -1378,9 +1398,12 @@ const s = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   detailMainCharContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "center",
-    height: 140,
+    gap: 4,
+    minHeight: 140,
     marginTop: Spacing.lg,
   },
   detailJapaneseFull: {

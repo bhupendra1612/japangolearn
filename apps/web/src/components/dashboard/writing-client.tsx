@@ -202,7 +202,6 @@ export function WritingClient({ kanaList }: { kanaList: Kana[] }) {
       speak(quizKana.character);
     }
     // Auto advance after delay
-    const newCorrect = quizScore.correct + (isCorrect ? 1 : 0);
     setTimeout(async () => {
       const next = quizIndex + 1;
       if (next < kanaList.length) {
@@ -215,8 +214,6 @@ export function WritingClient({ kanaList }: { kanaList: Kana[] }) {
           const { awardQuizXp } = await import("@/app/actions/gamification");
           await awardQuizXp({
             activityType: "writing_quiz",
-            correctAnswers: newCorrect,
-            totalQuestions: kanaList.length,
             attemptKey: quizAttemptKey,
             answers: answersRef.current,
           });

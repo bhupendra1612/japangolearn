@@ -188,8 +188,6 @@ export function GrammarClient({ patterns }: { patterns: GrammarPattern[] }) {
           const { awardQuizXp } = await import("@/app/actions/gamification");
           await awardQuizXp({
             activityType: "grammar_quiz",
-            correctAnswers: newCorrect,
-            totalQuestions: quizPool.length,
             attemptKey: quizAttemptKey,
             answers: answersRef.current,
           });

@@ -1,5 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { calculateQuizScore, calculateStreak, getXpLevelProgress } from "../src";
+import {
+  calculateQuizScore,
+  calculateStreak,
+  getXpLevelProgress,
+  toGradedAnswerPayload,
+} from "../src";
+
+describe("server-graded answer payloads", () => {
+  it("does not serialize client correctness fields", () => {
+    expect(
+      toGradedAnswerPayload([
+        {
+          itemType: "vocabulary",
+          itemId: "1",
+          isCorrect: false,
+          prompt: "食べる",
+          answer: "to eat",
+          correctAnswer: "client-controlled value",
+          responseMs: 125,
+        },
+      ])
+    ).toEqual([
+      {
+        item_type: "vocabulary",
+        item_id: "1",
+        answer: "to eat",
+        response_ms: 125,
+      },
+    ]);
+  });
+});
 
 describe("quiz scoring and XP", () => {
   it("awards the configured XP per correct answer", () => {

@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -17,9 +17,13 @@ import * as Speech from "expo-speech";
 import { supabase } from "@/lib/supabase";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { createXpAttemptKey } from "@japangolearn/content";
+import { toGradedAnswerPayload, type GradedAnswer } from "@japangolearn/core";
+import type { Json } from "@japangolearn/database";
 
 type QuizItem = {
   id: string;
+  itemType: "vocabulary" | "kana";
+  itemId: string;
   front: string; // kanji/kana
   back: string; // meaning/romaji
   audioText: string;
@@ -39,6 +43,8 @@ export default function QuizScreen() {
   const [loading, setLoading] = useState(true);
   const [score, setScore] = useState(0);
   const [quizAttemptKey, setQuizAttemptKey] = useState(() => createXpAttemptKey());
+  const answersRef = useRef<GradedAnswer[]>([]);
+  const questionShownAtRef = useRef<number>(Date.now());
 
   const generateOptions = useCallback((allQuestions: QuizItem[], correctIndex: number) => {
     if (allQuestions.length === 0) return;
@@ -59,6 +65,8 @@ export default function QuizScreen() {
   const loadQuiz = useCallback(async () => {
     setLoading(true);
     setQuizAttemptKey(createXpAttemptKey());
+    answersRef.current = [];
+    questionShownAtRef.current = Date.now();
     const { data: listItems } = await supabase
       .from("practice_list_items")
       .select("*")
@@ -83,26 +91,36 @@ export default function QuizScreen() {
         kanaData?.forEach((k) => kanaMap.set(k.id, k));
       }
 
-      const mergedCards = listItems.map((item) => {
+      const mergedCards = listItems.flatMap((item): QuizItem[] => {
         if (item.item_type === "vocabulary") {
           const v = vocabMap.get(item.item_id);
-          return {
-            id: item.id,
-            front: v?.kanji || v?.hiragana || "",
-            back: v?.english || "",
-            audioText: v?.kanji || v?.hiragana || "",
-            mastery_score: item.mastery_score,
-          };
-        } else {
-          const k = kanaMap.get(item.item_id);
-          return {
-            id: item.id,
-            front: k?.character || "",
-            back: k?.romaji || "",
-            audioText: k?.character || "",
-            mastery_score: item.mastery_score,
-          };
+          return [
+            {
+              id: item.id,
+              itemType: "vocabulary",
+              itemId: String(item.item_id),
+              front: v?.kanji || v?.hiragana || "",
+              back: v?.english || "",
+              audioText: v?.kanji || v?.hiragana || "",
+              mastery_score: item.mastery_score,
+            },
+          ];
         }
+        if (item.item_type === "kana") {
+          const k = kanaMap.get(item.item_id);
+          return [
+            {
+              id: item.id,
+              itemType: "kana",
+              itemId: String(item.item_id),
+              front: k?.character || "",
+              back: k?.romaji || "",
+              audioText: k?.character || "",
+              mastery_score: item.mastery_score,
+            },
+          ];
+        }
+        return [];
       });
 
       const shuffled = mergedCards.sort(() => Math.random() - 0.5).slice(0, 100);
@@ -131,6 +149,15 @@ export default function QuizScreen() {
 
     // Update Mastery in DB
     const currentQ = questions[currentIndex];
+    answersRef.current.push({
+      itemType: currentQ.itemType,
+      itemId: currentQ.itemId,
+      isCorrect: correct,
+      prompt: currentQ.front,
+      answer: opt,
+      correctAnswer: currentQ.back,
+      responseMs: Date.now() - questionShownAtRef.current,
+    });
     const scoreChange = correct ? 15 : -10;
     const newScore = Math.min(100, Math.max(0, currentQ.mastery_score + scoreChange));
 
@@ -152,17 +179,19 @@ export default function QuizScreen() {
       if (currentIndex + 1 < questions.length) {
         setCurrentIndex((prev) => prev + 1);
         generateOptions(questions, currentIndex + 1);
+        questionShownAtRef.current = Date.now();
       } else {
         // finished
-        const finalScore = score + (correct ? 1 : 0);
-        supabase
+        const payload = toGradedAnswerPayload(answersRef.current);
+        void supabase
           .rpc("award_xp", {
             p_activity_type: "practice_quiz",
-            p_correct_answers: finalScore,
-            p_total_questions: questions.length,
             p_attempt_key: quizAttemptKey,
+            p_answers: payload as unknown as Json,
           })
-          .then();
+          .then(({ error }) => {
+            if (error) console.error("Failed to record practice quiz", error);
+          });
         setCurrentIndex((prev) => prev + 1);
       }
     }, 1500);

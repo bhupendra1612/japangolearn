@@ -1673,10 +1673,8 @@ export type Database = {
       award_xp: {
         Args: {
           p_activity_type: string;
-          p_answers?: Json;
+          p_answers: Json;
           p_attempt_key: string;
-          p_correct_answers: number;
-          p_total_questions: number;
         };
         Returns: {
           attempt_id: string;

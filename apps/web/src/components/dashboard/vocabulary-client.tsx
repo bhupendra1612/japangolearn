@@ -226,8 +226,6 @@ export function VocabularyClient({ words }: { words: VocabWord[] }) {
           const { awardQuizXp } = await import("@/app/actions/gamification");
           const result = await awardQuizXp({
             activityType: "vocabulary_quiz",
-            correctAnswers: newCorrect,
-            totalQuestions: quizPool.length,
             attemptKey: quizAttemptKey,
             answers: answersRef.current,
           });

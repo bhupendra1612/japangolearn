@@ -16,14 +16,10 @@ type XpAward = Database["public"]["Functions"]["award_xp"]["Returns"][number];
 
 async function requestXpAward({
   activityType,
-  correctAnswers,
-  totalQuestions,
   attemptKey,
   answers,
 }: {
-  activityType: string;
-  correctAnswers: number;
-  totalQuestions: number;
+  activityType: QuizActivityType;
   attemptKey: string;
   answers: GradedAnswer[];
 }): Promise<Result<XpAward>> {
@@ -36,14 +32,10 @@ async function requestXpAward({
     return err({ code: "UNAUTHORIZED", message: "Unauthorized" });
   }
 
-  /* The database rejects a payload with more answers than questions, so a
-     client that over-reports is trimmed here rather than losing the attempt. */
-  const payload = toGradedAnswerPayload(answers).slice(0, totalQuestions);
+  const payload = toGradedAnswerPayload(answers);
 
   const { data, error } = await supabase.rpc("award_xp", {
     p_activity_type: activityType,
-    p_correct_answers: correctAnswers,
-    p_total_questions: totalQuestions,
     p_attempt_key: attemptKey,
     p_answers: payload as unknown as Json,
   });
@@ -68,23 +60,17 @@ async function requestXpAward({
 
 export async function awardQuizXp({
   activityType,
-  correctAnswers,
-  totalQuestions,
   attemptKey,
-  answers = [],
+  answers,
 }: {
   activityType: QuizActivityType;
-  correctAnswers: number;
-  totalQuestions: number;
   attemptKey: string;
-  /** Per-item results. Omitted by older clients; the attempt still records. */
-  answers?: GradedAnswer[];
+  /** Per-item answers are validated and graded by the database. */
+  answers: GradedAnswer[];
 }) {
   try {
     return await requestXpAward({
       activityType,
-      correctAnswers,
-      totalQuestions,
       attemptKey,
       answers,
     });

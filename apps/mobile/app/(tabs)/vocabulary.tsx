@@ -27,8 +27,9 @@ import { captureException } from "@/lib/monitoring";
 import { readCache, writeCache } from "@/lib/offline-cache";
 import { isOfflineError } from "@/lib/connectivity";
 import { OfflineNotice } from "@/components/OfflineNotice";
-import type { VocabularyWord } from "@japangolearn/database";
+import type { Json, VocabularyWord } from "@japangolearn/database";
 import { createXpAttemptKey } from "@japangolearn/content";
+import { toGradedAnswerPayload, type GradedAnswer } from "@japangolearn/core";
 
 // ─── Types ───
 type Word = VocabularyWord;
@@ -151,6 +152,8 @@ export default function VocabularyScreen() {
   const [quizScore, setQuizScore] = useState({ correct: 0, total: 0 });
   const [quizDone, setQuizDone] = useState(false);
   const [quizAttemptKey, setQuizAttemptKey] = useState(() => createXpAttemptKey());
+  const answersRef = useRef<GradedAnswer[]>([]);
+  const questionShownAtRef = useRef<number>(Date.now());
 
   // Animations
   const cardAnim = useRef(new Animated.Value(0)).current;
@@ -322,6 +325,7 @@ export default function VocabularyScreen() {
       );
       setQuizOptions(options);
       setQuizAnswer(null);
+      questionShownAtRef.current = Date.now();
     },
     [words]
   );
@@ -336,6 +340,7 @@ export default function VocabularyScreen() {
     setQuizAnswer(null);
     setQuizDone(false);
     setQuizAttemptKey(createXpAttemptKey());
+    answersRef.current = [];
     setupQuizQuestion(shuffled, 0);
     setMode("quiz");
     fadeAnim.setValue(0);
@@ -352,20 +357,34 @@ export default function VocabularyScreen() {
         correct: s.correct + (correct ? 1 : 0),
         total: s.total + 1,
       }));
-      if (current) speakWord(current);
+      if (current) {
+        answersRef.current.push({
+          itemType: "vocabulary",
+          itemId: String(current.id),
+          isCorrect: correct,
+          prompt: current.kanji || current.hiragana,
+          answer,
+          correctAnswer: current.english,
+          responseMs: Date.now() - questionShownAtRef.current,
+        });
+        speakWord(current);
+      }
 
       setTimeout(() => {
         const next = quizIndex + 1;
         setQuizIndex(next);
         if (next >= quizPool.length) {
-          const finalCorrect = quizScore.correct + (correct ? 1 : 0);
           if (session) {
-            void supabase.rpc("award_xp", {
-              p_activity_type: "vocabulary_quiz",
-              p_correct_answers: finalCorrect,
-              p_total_questions: quizPool.length,
-              p_attempt_key: quizAttemptKey,
-            });
+            const payload = toGradedAnswerPayload(answersRef.current);
+            void supabase
+              .rpc("award_xp", {
+                p_activity_type: "vocabulary_quiz",
+                p_attempt_key: quizAttemptKey,
+                p_answers: payload as unknown as Json,
+              })
+              .then(({ error }) => {
+                if (error) console.error("Failed to record vocabulary quiz", error);
+              });
           }
           setQuizDone(true);
         } else {
@@ -373,16 +392,7 @@ export default function VocabularyScreen() {
         }
       }, 1200);
     },
-    [
-      quizAnswer,
-      quizPool,
-      quizIndex,
-      quizAttemptKey,
-      quizScore.correct,
-      session,
-      speakWord,
-      setupQuizQuestion,
-    ]
+    [quizAnswer, quizPool, quizIndex, quizAttemptKey, session, speakWord, setupQuizQuestion]
   );
 
   // ═══════════════════ BROWSE MODE ═══════════════════

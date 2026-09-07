@@ -33,8 +33,10 @@ gate instead of silently skipping production drift verification.
   migrate.
 
 Clients cannot write attempts, XP, events, or daily quest completion directly. The
-`award_xp` RPC validates the score, creates the attempt, writes the ledger and event,
-updates streak projections, and handles retry idempotency by attempt key.
+`award_xp` RPC grades submitted answers against canonical content, derives the score,
+creates the attempt, writes the ledger and event, updates streak projections, and
+handles retry idempotency by attempt key. Client score totals and correctness flags are
+not accepted.
 
 ## Backups and restoration
 

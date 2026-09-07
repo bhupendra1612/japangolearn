@@ -43,9 +43,9 @@ evaluation.
   unique idempotency key.
 - `public.fulfill_course_order()` is executable only by `service_role` and grants a
   paid entitlement atomically with order finalization.
-- `public.award_xp()` is `SECURITY DEFINER`, has `search_path = ''`, validates the
-  authenticated user and score, applies a daily cap, and is idempotent by user and
-  attempt key.
+- `public.award_xp()` is `SECURITY DEFINER`, has `search_path = ''`, derives correctness
+  and question totals from canonical content, applies a daily cap, and is idempotent
+  by user and attempt key. Client score totals and correctness flags are not accepted.
 - `public.increment_streak()` remains temporarily for mobile compatibility. It is
   authenticated, fixed-search-path, and cannot select or mutate another user.
 - `public.track_analytics_event()` accepts only the documented taxonomy, limits

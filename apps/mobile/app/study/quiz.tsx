@@ -17,18 +17,15 @@ import * as Speech from "expo-speech";
 import { supabase } from "@/lib/supabase";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { createXpAttemptKey } from "@japangolearn/content";
-import { toGradedAnswerPayload, type GradedAnswer } from "@japangolearn/core";
+import {
+  toGradedAnswerPayload,
+  type GradedAnswer,
+  type PracticeStudyItem,
+} from "@japangolearn/core";
 import type { Json } from "@japangolearn/database";
+import { loadPracticeStudyItems } from "@/lib/practice-content";
 
-type QuizItem = {
-  id: string;
-  itemType: "vocabulary" | "kana";
-  itemId: string;
-  front: string; // kanji/kana
-  back: string; // meaning/romaji
-  audioText: string;
-  mastery_score: number;
-};
+type QuizItem = PracticeStudyItem;
 
 export default function QuizScreen() {
   const { listId } = useLocalSearchParams<{ listId: string }>();
@@ -67,66 +64,10 @@ export default function QuizScreen() {
     setQuizAttemptKey(createXpAttemptKey());
     answersRef.current = [];
     questionShownAtRef.current = Date.now();
-    const { data: listItems } = await supabase
-      .from("practice_list_items")
-      .select("*")
-      .eq("list_id", listId);
-
-    if (listItems && listItems.length > 0) {
-      const vocabIds = listItems.filter((i) => i.item_type === "vocabulary").map((i) => i.item_id);
-      const kanaIds = listItems.filter((i) => i.item_type === "kana").map((i) => i.item_id);
-
-      let vocabMap = new Map();
-      let kanaMap = new Map();
-
-      if (vocabIds.length > 0) {
-        const { data: vocabData } = await supabase
-          .from("vocabulary")
-          .select("*")
-          .in("id", vocabIds);
-        vocabData?.forEach((v) => vocabMap.set(v.id, v));
-      }
-      if (kanaIds.length > 0) {
-        const { data: kanaData } = await supabase.from("kana").select("*").in("id", kanaIds);
-        kanaData?.forEach((k) => kanaMap.set(k.id, k));
-      }
-
-      const mergedCards = listItems.flatMap((item): QuizItem[] => {
-        if (item.item_type === "vocabulary") {
-          const v = vocabMap.get(item.item_id);
-          return [
-            {
-              id: item.id,
-              itemType: "vocabulary",
-              itemId: String(item.item_id),
-              front: v?.kanji || v?.hiragana || "",
-              back: v?.english || "",
-              audioText: v?.kanji || v?.hiragana || "",
-              mastery_score: item.mastery_score,
-            },
-          ];
-        }
-        if (item.item_type === "kana") {
-          const k = kanaMap.get(item.item_id);
-          return [
-            {
-              id: item.id,
-              itemType: "kana",
-              itemId: String(item.item_id),
-              front: k?.character || "",
-              back: k?.romaji || "",
-              audioText: k?.character || "",
-              mastery_score: item.mastery_score,
-            },
-          ];
-        }
-        return [];
-      });
-
-      const shuffled = mergedCards.sort(() => Math.random() - 0.5).slice(0, 100);
-      setQuestions(shuffled);
-      generateOptions(shuffled, 0);
-    }
+    const studyItems = await loadPracticeStudyItems(supabase, listId);
+    const shuffled = [...studyItems].sort(() => Math.random() - 0.5).slice(0, 100);
+    setQuestions(shuffled);
+    generateOptions(shuffled, 0);
     setLoading(false);
   }, [generateOptions, listId]);
 
@@ -215,27 +156,22 @@ export default function QuizScreen() {
 
     // 2. Add item to smart list if not already there
     // We need original item_id and item_type. We have to fetch it because our QuizItem merged them.
-    const { data: originalItem } = await supabase
-      .from("practice_list_items")
-      .select("item_id, item_type")
-      .eq("id", item.id)
-      .single();
-
-    if (originalItem) {
+    const itemId = Number(item.itemId);
+    if (Number.isInteger(itemId)) {
       // Check if exists
       const { data: existing } = await supabase
         .from("practice_list_items")
         .select("id")
         .eq("list_id", smartList.id)
-        .eq("item_id", originalItem.item_id)
-        .eq("item_type", originalItem.item_type)
+        .eq("item_id", itemId)
+        .eq("item_type", item.itemType)
         .single();
 
       if (!existing) {
         await supabase.from("practice_list_items").insert({
           list_id: smartList.id,
-          item_id: originalItem.item_id,
-          item_type: originalItem.item_type,
+          item_id: itemId,
+          item_type: item.itemType,
         });
       }
     }

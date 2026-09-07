@@ -16,21 +16,17 @@ import * as Speech from "expo-speech";
 import { supabase } from "@/lib/supabase";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { createXpAttemptKey } from "@japangolearn/content";
-import { toGradedAnswerPayload, type GradedAnswer } from "@japangolearn/core";
+import {
+  toGradedAnswerPayload,
+  type GradedAnswer,
+  type PracticeStudyItem,
+} from "@japangolearn/core";
 import type { Json } from "@japangolearn/database";
+import { loadPracticeStudyItems } from "@/lib/practice-content";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
-type FlashcardItem = {
-  id: string; // practice_list_items id
-  itemType: "vocabulary" | "kana";
-  itemId: string;
-  front: string; // kanji or character
-  back: string; // romaji/meaning
-  correctAnswer: string;
-  audioText: string;
-  mastery_score: number;
-};
+type FlashcardItem = PracticeStudyItem;
 
 export default function FlashcardsScreen() {
   const { listId } = useLocalSearchParams<{ listId: string }>();
@@ -58,69 +54,8 @@ export default function FlashcardsScreen() {
     answersRef.current = [];
     attemptKeyRef.current = createXpAttemptKey();
     questionShownAtRef.current = Date.now();
-    const { data: listItems } = await supabase
-      .from("practice_list_items")
-      .select("*")
-      .eq("list_id", listId);
-
-    if (listItems && listItems.length > 0) {
-      const vocabIds = listItems.filter((i) => i.item_type === "vocabulary").map((i) => i.item_id);
-      const kanaIds = listItems.filter((i) => i.item_type === "kana").map((i) => i.item_id);
-
-      let vocabMap = new Map();
-      let kanaMap = new Map();
-
-      if (vocabIds.length > 0) {
-        const { data: vocabData } = await supabase
-          .from("vocabulary")
-          .select("*")
-          .in("id", vocabIds);
-        vocabData?.forEach((v) => vocabMap.set(v.id, v));
-      }
-      if (kanaIds.length > 0) {
-        const { data: kanaData } = await supabase.from("kana").select("*").in("id", kanaIds);
-        kanaData?.forEach((k) => kanaMap.set(k.id, k));
-      }
-
-      const mergedCards = listItems.flatMap((item): FlashcardItem[] => {
-        if (item.item_type === "vocabulary") {
-          const v = vocabMap.get(item.item_id);
-          if (!v) return [];
-          return [
-            {
-              id: item.id,
-              itemType: "vocabulary",
-              itemId: String(item.item_id),
-              front: v.kanji || v.hiragana,
-              back: `${v.hiragana}\n${v.english}`,
-              correctAnswer: v.english,
-              audioText: v.kanji || v.hiragana,
-              mastery_score: item.mastery_score,
-            },
-          ];
-        }
-        if (item.item_type === "kana") {
-          const k = kanaMap.get(item.item_id);
-          if (!k) return [];
-          return [
-            {
-              id: item.id,
-              itemType: "kana",
-              itemId: String(item.item_id),
-              front: k.character,
-              back: k.romaji,
-              correctAnswer: k.romaji,
-              audioText: k.character,
-              mastery_score: item.mastery_score,
-            },
-          ];
-        }
-        return [];
-      });
-
-      // Shuffle cards for practice
-      setCards(mergedCards.sort(() => Math.random() - 0.5).slice(0, 100));
-    }
+    const studyItems = await loadPracticeStudyItems(supabase, listId);
+    setCards([...studyItems].sort(() => Math.random() - 0.5).slice(0, 100));
     setLoading(false);
   }, [listId]);
 

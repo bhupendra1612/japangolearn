@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { useFocusEffect } from "@react-navigation/native";
 import type { PracticeItemType, PracticeList } from "@japangolearn/database";
+import { loadPracticeStudyItems } from "@/lib/practice-content";
 
 type ListItem = {
   id: string; // The practice_list_items id
@@ -29,11 +30,19 @@ type ListItem = {
   subContent?: string; // romaji or meaning
 };
 
-const PRACTICE_ITEM_TYPES: readonly PracticeItemType[] = ["vocabulary", "kana", "kanji", "grammar"];
+const ITEM_TYPE_EMOJI: Record<PracticeItemType, string> = {
+  vocabulary: "📖",
+  kana: "あ",
+  kanji: "漢",
+  grammar: "文",
+};
 
-function isPracticeItemType(value: string): value is PracticeItemType {
-  return PRACTICE_ITEM_TYPES.includes(value as PracticeItemType);
-}
+const ITEM_TYPE_LABEL: Record<PracticeItemType, string> = {
+  vocabulary: "Vocabulary",
+  kana: "Kana",
+  kanji: "Kanji",
+  grammar: "Grammar",
+};
 
 export default function PracticeListScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -59,101 +68,19 @@ export default function PracticeListScreen() {
       setList(listData);
     }
 
-    // 2. Load list items
-    const { data: listItems } = await supabase
-      .from("practice_list_items")
-      .select("*")
-      .eq("list_id", id)
-      .order("created_at", { ascending: false });
-
-    if (listItems && listItems.length > 0) {
-      // 3. Fetch details for items (vocab and kana)
-      const typedItems = listItems.filter(
-        (item): item is typeof item & { item_type: PracticeItemType } =>
-          isPracticeItemType(item.item_type)
-      );
-      const vocabIds = typedItems
-        .filter((item) => item.item_type === "vocabulary")
-        .map((item) => item.item_id);
-      const kanaIds = typedItems
-        .filter((item) => item.item_type === "kana")
-        .map((item) => item.item_id);
-      const kanjiIds = typedItems
-        .filter((item) => item.item_type === "kanji")
-        .map((item) => item.item_id);
-      const grammarIds = typedItems
-        .filter((item) => item.item_type === "grammar")
-        .map((item) => item.item_id);
-
-      const details = new Map<string, { content: string; subContent: string }>();
-
-      if (vocabIds.length > 0) {
-        const { data: vocabData } = await supabase
-          .from("vocabulary")
-          .select("*")
-          .in("id", vocabIds);
-        vocabData?.forEach((item) =>
-          details.set(`vocabulary:${item.id}`, {
-            content: item.kanji || item.hiragana,
-            subContent: item.english,
-          })
-        );
-      }
-
-      if (kanaIds.length > 0) {
-        const { data: kanaData } = await supabase.from("kana").select("*").in("id", kanaIds);
-        kanaData?.forEach((item) =>
-          details.set(`kana:${item.id}`, {
-            content: item.character,
-            subContent: item.romaji,
-          })
-        );
-      }
-
-      if (kanjiIds.length > 0) {
-        const { data: kanjiData } = await supabase
-          .from("kanji")
-          .select("id, character, meaning_en")
-          .in("id", kanjiIds);
-        kanjiData?.forEach((item) =>
-          details.set(`kanji:${item.id}`, {
-            content: item.character,
-            subContent: item.meaning_en.join(", "),
-          })
-        );
-      }
-
-      if (grammarIds.length > 0) {
-        const { data: grammarData } = await supabase
-          .from("grammar_patterns")
-          .select("id, pattern, meaning")
-          .in("id", grammarIds);
-        grammarData?.forEach((item) =>
-          details.set(`grammar:${item.id}`, {
-            content: item.pattern,
-            subContent: item.meaning,
-          })
-        );
-      }
-
-      // 4. Merge data
-      const mergedItems: ListItem[] = typedItems.map((item) => {
-        const detail = details.get(`${item.item_type}:${item.item_id}`);
-        return {
-          id: item.id,
-          item_type: item.item_type,
-          item_id: item.item_id,
-          mastery_score: item.mastery_score,
-          last_reviewed: item.last_reviewed,
-          content: detail?.content ?? "",
-          subContent: detail?.subContent ?? "",
-        };
-      });
-
-      setItems(mergedItems);
-    } else {
-      setItems([]);
-    }
+    // 2. Hydrate vocabulary, kana, kanji, and grammar through the shared loader.
+    const studyItems = await loadPracticeStudyItems(supabase, id);
+    setItems(
+      studyItems.map((item) => ({
+        id: item.listItemId,
+        item_type: item.itemType,
+        item_id: Number(item.itemId),
+        mastery_score: item.masteryScore,
+        last_reviewed: item.lastReviewed,
+        content: item.front,
+        subContent: item.back,
+      }))
+    );
 
     setLoading(false);
   }, [id]);
@@ -288,12 +215,11 @@ export default function PracticeListScreen() {
             renderItem={({ item }) => (
               <View style={s.itemCard}>
                 <View style={s.itemTypeBox}>
-                  <Text style={s.itemTypeEmoji}>
-                    {item.item_type === "vocabulary" ? "📖" : "✍️"}
-                  </Text>
+                  <Text style={s.itemTypeEmoji}>{ITEM_TYPE_EMOJI[item.item_type]}</Text>
                 </View>
 
                 <View style={s.itemInfo}>
+                  <Text style={s.itemTypeLabel}>{ITEM_TYPE_LABEL[item.item_type]}</Text>
                   <Text style={s.itemContent}>{item.content}</Text>
                   <Text style={s.itemSubContent} numberOfLines={1}>
                     {item.subContent}
@@ -332,7 +258,7 @@ export default function PracticeListScreen() {
                 <Ionicons name="folder-open-outline" size={48} color={Colors.dark.border} />
                 <Text style={s.emptyText}>This list is empty.</Text>
                 <Text style={s.emptySub}>
-                  Add words from the Vocabulary or Writing tabs to start practicing!
+                  Add vocabulary, kana, kanji, or grammar to start practicing!
                 </Text>
               </View>
             }
@@ -464,6 +390,13 @@ const s = StyleSheet.create({
   },
   itemInfo: {
     flex: 1,
+  },
+  itemTypeLabel: {
+    color: Colors.primary[300],
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.bold,
+    marginBottom: 2,
+    textTransform: "uppercase",
   },
   itemContent: {
     fontSize: FontSize.lg,

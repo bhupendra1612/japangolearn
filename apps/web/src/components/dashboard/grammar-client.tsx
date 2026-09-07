@@ -185,8 +185,8 @@ export function GrammarClient({ patterns }: { patterns: GrammarPattern[] }) {
       if (next >= quizPool.length) {
         setQuizPattern(null);
         try {
-          const { awardQuizXp } = await import("@/app/actions/gamification");
-          await awardQuizXp({
+          const { submitLearningAttempt } = await import("@/app/actions/gamification");
+          await submitLearningAttempt({
             activityType: "grammar_quiz",
             attemptKey: quizAttemptKey,
             answers: answersRef.current,

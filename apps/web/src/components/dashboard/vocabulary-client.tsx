@@ -223,8 +223,8 @@ export function VocabularyClient({ words }: { words: VocabWord[] }) {
       if (next >= quizPool.length) {
         setQuizWord(null);
         try {
-          const { awardQuizXp } = await import("@/app/actions/gamification");
-          const result = await awardQuizXp({
+          const { submitLearningAttempt } = await import("@/app/actions/gamification");
+          const result = await submitLearningAttempt({
             activityType: "vocabulary_quiz",
             attemptKey: quizAttemptKey,
             answers: answersRef.current,

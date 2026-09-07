@@ -377,7 +377,7 @@ export default function VocabularyScreen() {
           if (session) {
             const payload = toGradedAnswerPayload(answersRef.current);
             void supabase
-              .rpc("award_xp", {
+              .rpc("submit_learning_attempt", {
                 p_activity_type: "vocabulary_quiz",
                 p_attempt_key: quizAttemptKey,
                 p_answers: payload as unknown as Json,

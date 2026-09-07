@@ -13,7 +13,9 @@ import {
   Image,
   Modal,
   Pressable,
+  ScrollView,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Link, router, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/lib/auth";
@@ -24,6 +26,7 @@ import { DEFAULT_JLPT_LEVEL, JLPT_SIGNUP_LEVELS } from "@/constants/jlpt";
 import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT_MESSAGE } from "@japangolearn/content";
 
 export default function SignupScreen() {
+  const insets = useSafeAreaInsets();
   const { signUp, verifySignupOtp, resendSignupOtp } = useAuth();
   const params = useLocalSearchParams<{ redirectTo?: string | string[] }>();
   const redirectTo = getSafeRedirectTo(params.redirectTo);
@@ -138,229 +141,241 @@ export default function SignupScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      // Android already resizes the window for the keyboard, so asking this to
+      // shrink it a second time squeezed the centred content until the header
+      // was clipped off the top of the screen.
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Animated.View
-        style={[styles.inner, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <Image
-              source={require("@/assets/logo.png")}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
-          </View>
-          <Text style={styles.title}>
-            {awaitingOtp ? "Check Your Email" : "Start Your Journey"}
-          </Text>
-          <Text style={styles.subtitle}>
-            {awaitingOtp
-              ? "Enter the 6-digit code we sent you"
-              : "Create an account to learn Japanese"}
-          </Text>
-        </View>
-
-        {awaitingOtp ? (
-          <View style={styles.form}>
-            {error ? (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
-            {message ? (
-              <View style={styles.messageBox}>
-                <Text style={styles.messageText}>{message}</Text>
-              </View>
-            ) : null}
-
-            <TextInput
-              style={styles.otpInput}
-              value={otp}
-              onChangeText={(v) => setOtp(v.replace(/\D/g, "").slice(0, 6))}
-              placeholder="––––––"
-              placeholderTextColor={Colors.dark.textMuted}
-              keyboardType="number-pad"
-              maxLength={6}
-              autoFocus
-              // Lets Android/iOS offer the code straight from the notification.
-              textContentType="oneTimeCode"
-              autoComplete="one-time-code"
-              accessibilityLabel="6-digit verification code"
-            />
-
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleVerifyOtp}
-              disabled={loading}
-              activeOpacity={0.8}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Verify & Continue</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={handleResendOtp}
-              disabled={resendIn > 0}
-              activeOpacity={0.7}
-              style={styles.resendBtn}
-            >
-              <Text style={[styles.resendText, resendIn > 0 && styles.resendTextDisabled]}>
-                {resendIn > 0 ? `Resend code in ${resendIn}s` : "Didn't get it? Resend code"}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => {
-                setAwaitingOtp(false);
-                setOtp("");
-                setError("");
-                setMessage("");
-              }}
-              activeOpacity={0.7}
-              style={styles.resendBtn}
-            >
-              <Text style={styles.backText}>← Use a different email</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.form}>
-            {error ? (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
-            {message ? (
-              <View style={styles.messageBox}>
-                <Text style={styles.messageText}>{message}</Text>
-              </View>
-            ) : null}
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Display Name</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Your name"
-                placeholderTextColor={Colors.dark.textMuted}
-                value={name}
-                onChangeText={setName}
+        <Animated.View
+          style={[styles.inner, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+        >
+          <View style={styles.header}>
+            <View style={styles.logoContainer}>
+              <Image
+                source={require("@/assets/logo.png")}
+                style={styles.logoImage}
+                resizeMode="contain"
               />
             </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="your@email.com"
-                placeholderTextColor={Colors.dark.textMuted}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                autoCorrect={false}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.passwordWrap}>
-                <TextInput
-                  style={styles.passwordInput}
-                  placeholder={`Min. ${MIN_PASSWORD_LENGTH} characters`}
-                  placeholderTextColor={Colors.dark.textMuted}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                <TouchableOpacity
-                  onPress={() => setShowPassword((v) => !v)}
-                  style={styles.eyeBtn}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityRole="button"
-                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
-                >
-                  <Ionicons
-                    name={showPassword ? "eye-off-outline" : "eye-outline"}
-                    size={20}
-                    color={Colors.dark.textMuted}
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Your Japanese Level</Text>
-              <TouchableOpacity
-                style={styles.select}
-                onPress={() => setLevelPickerOpen(true)}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-                accessibilityLabel={`Japanese level: ${selectedLevel.label}. Tap to change.`}
-              >
-                <View style={styles.levelBadgeActive}>
-                  <Text style={styles.levelBadgeTextActive}>{selectedLevel.value}</Text>
-                </View>
-                <View style={styles.levelTextWrap}>
-                  <Text style={styles.selectValue}>{selectedLevel.label}</Text>
-                  <Text style={styles.levelDesc}>{selectedLevel.desc}</Text>
-                </View>
-                <Ionicons name="chevron-down" size={20} color={Colors.dark.textMuted} />
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
-              onPress={handleSignup}
-              disabled={loading}
-              activeOpacity={0.8}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Create Account</Text>
-              )}
-            </TouchableOpacity>
-
-            <Text style={styles.consentText}>
-              By creating an account, you agree to our{" "}
-              <Text
-                style={styles.consentLink}
-                onPress={() => openUrl(TERMS_URL)}
-                accessibilityRole="link"
-              >
-                Terms &amp; Conditions
-              </Text>{" "}
-              and{" "}
-              <Text
-                style={styles.consentLink}
-                onPress={() => openUrl(PRIVACY_URL)}
-                accessibilityRole="link"
-              >
-                Privacy Policy
-              </Text>
-              .
+            <Text style={styles.title}>
+              {awaitingOtp ? "Check Your Email" : "Start Your Journey"}
+            </Text>
+            <Text style={styles.subtitle}>
+              {awaitingOtp
+                ? "Enter the 6-digit code we sent you"
+                : "Create an account to learn Japanese"}
             </Text>
           </View>
-        )}
 
-        {!awaitingOtp && (
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account? </Text>
-            <Link href={{ pathname: "/(auth)/login", params: { redirectTo } } as never} asChild>
-              <TouchableOpacity>
-                <Text style={styles.footerLink}>Sign In</Text>
+          {awaitingOtp ? (
+            <View style={styles.form}>
+              {error ? (
+                <View style={styles.errorBox}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
+              {message ? (
+                <View style={styles.messageBox}>
+                  <Text style={styles.messageText}>{message}</Text>
+                </View>
+              ) : null}
+
+              <TextInput
+                style={styles.otpInput}
+                value={otp}
+                onChangeText={(v) => setOtp(v.replace(/\D/g, "").slice(0, 6))}
+                placeholder="––––––"
+                placeholderTextColor={Colors.dark.textMuted}
+                keyboardType="number-pad"
+                maxLength={6}
+                autoFocus
+                // Lets Android/iOS offer the code straight from the notification.
+                textContentType="oneTimeCode"
+                autoComplete="one-time-code"
+                accessibilityLabel="6-digit verification code"
+              />
+
+              <TouchableOpacity
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={handleVerifyOtp}
+                disabled={loading}
+                activeOpacity={0.8}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>Verify & Continue</Text>
+                )}
               </TouchableOpacity>
-            </Link>
-          </View>
-        )}
 
-        <Text style={styles.jp}>新しい冒険が始まる 🌸</Text>
-      </Animated.View>
+              <TouchableOpacity
+                onPress={handleResendOtp}
+                disabled={resendIn > 0}
+                activeOpacity={0.7}
+                style={styles.resendBtn}
+              >
+                <Text style={[styles.resendText, resendIn > 0 && styles.resendTextDisabled]}>
+                  {resendIn > 0 ? `Resend code in ${resendIn}s` : "Didn't get it? Resend code"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => {
+                  setAwaitingOtp(false);
+                  setOtp("");
+                  setError("");
+                  setMessage("");
+                }}
+                activeOpacity={0.7}
+                style={styles.resendBtn}
+              >
+                <Text style={styles.backText}>← Use a different email</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.form}>
+              {error ? (
+                <View style={styles.errorBox}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
+              {message ? (
+                <View style={styles.messageBox}>
+                  <Text style={styles.messageText}>{message}</Text>
+                </View>
+              ) : null}
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Display Name</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Your name"
+                  placeholderTextColor={Colors.dark.textMuted}
+                  value={name}
+                  onChangeText={setName}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="your@email.com"
+                  placeholderTextColor={Colors.dark.textMuted}
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  autoCorrect={false}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Password</Text>
+                <View style={styles.passwordWrap}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    placeholder={`Min. ${MIN_PASSWORD_LENGTH} characters`}
+                    placeholderTextColor={Colors.dark.textMuted}
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword((v) => !v)}
+                    style={styles.eyeBtn}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                  >
+                    <Ionicons
+                      name={showPassword ? "eye-off-outline" : "eye-outline"}
+                      size={20}
+                      color={Colors.dark.textMuted}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Your Japanese Level</Text>
+                <TouchableOpacity
+                  style={styles.select}
+                  onPress={() => setLevelPickerOpen(true)}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Japanese level: ${selectedLevel.label}. Tap to change.`}
+                >
+                  <View style={styles.levelBadgeActive}>
+                    <Text style={styles.levelBadgeTextActive}>{selectedLevel.value}</Text>
+                  </View>
+                  <View style={styles.levelTextWrap}>
+                    <Text style={styles.selectValue}>{selectedLevel.label}</Text>
+                    <Text style={styles.levelDesc}>{selectedLevel.desc}</Text>
+                  </View>
+                  <Ionicons name="chevron-down" size={20} color={Colors.dark.textMuted} />
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={handleSignup}
+                disabled={loading}
+                activeOpacity={0.8}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>Create Account</Text>
+                )}
+              </TouchableOpacity>
+
+              <Text style={styles.consentText}>
+                By creating an account, you agree to our{" "}
+                <Text
+                  style={styles.consentLink}
+                  onPress={() => openUrl(TERMS_URL)}
+                  accessibilityRole="link"
+                >
+                  Terms &amp; Conditions
+                </Text>{" "}
+                and{" "}
+                <Text
+                  style={styles.consentLink}
+                  onPress={() => openUrl(PRIVACY_URL)}
+                  accessibilityRole="link"
+                >
+                  Privacy Policy
+                </Text>
+                .
+              </Text>
+            </View>
+          )}
+
+          {!awaitingOtp && (
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Already have an account? </Text>
+              <Link href={{ pathname: "/(auth)/login", params: { redirectTo } } as never} asChild>
+                <TouchableOpacity>
+                  <Text style={styles.footerLink}>Sign In</Text>
+                </TouchableOpacity>
+              </Link>
+            </View>
+          )}
+
+          <Text style={styles.jp}>新しい冒険が始まる 🌸</Text>
+        </Animated.View>
+      </ScrollView>
 
       <Modal
         visible={levelPickerOpen}
@@ -426,7 +441,10 @@ export default function SignupScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.dark.bg },
-  inner: { flex: 1, justifyContent: "center", paddingHorizontal: Spacing["3xl"] },
+  // flexGrow keeps the form centred while it fits and lets it scroll once the
+  // keyboard leaves less room than the content needs.
+  scrollContent: { flexGrow: 1, justifyContent: "center" },
+  inner: { paddingHorizontal: Spacing["3xl"] },
   header: { alignItems: "center", marginBottom: Spacing["4xl"] },
   logoContainer: {
     width: 80,

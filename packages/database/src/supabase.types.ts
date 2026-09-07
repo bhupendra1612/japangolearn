@@ -1105,6 +1105,7 @@ export type Database = {
           created_at: string;
           id: string;
           is_smart_list: boolean;
+          sort_order: number;
           title: string;
           updated_at: string;
           user_id: string;
@@ -1113,6 +1114,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           is_smart_list?: boolean;
+          sort_order?: number;
           title: string;
           updated_at?: string;
           user_id: string;
@@ -1121,6 +1123,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           is_smart_list?: boolean;
+          sort_order?: number;
           title?: string;
           updated_at?: string;
           user_id?: string;

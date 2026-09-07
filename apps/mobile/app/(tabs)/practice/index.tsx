@@ -22,6 +22,7 @@ import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants
 import { useFocusEffect } from "@react-navigation/native";
 import { LoadError } from "@/components/LoadError";
 import { captureException } from "@/lib/monitoring";
+import { reorderPracticeLists, type PracticeListOrderChange } from "@japangolearn/core";
 import type { PracticeList } from "@japangolearn/database";
 
 export default function PracticeHubScreen() {
@@ -150,17 +151,12 @@ export default function PracticeHubScreen() {
     router.push(`/(tabs)/practice/${data.id}`);
   };
 
-  const persistOrder = useCallback(async (ordered: PracticeList[]) => {
-    // Write only the rows whose position actually changed, 1-based to match the
-    // migration's backfill. A failed write is reported but not surfaced — the
-    // next load re-reads the stored order, so the UI stays consistent.
-    const changed = ordered
-      .map((list, index) => ({ id: list.id, sortOrder: index + 1, prev: list.sort_order }))
-      .filter((row) => row.prev !== row.sortOrder);
-    if (changed.length === 0) return;
-
+  const persistOrder = useCallback(async (changes: PracticeListOrderChange[]) => {
+    // Write only rows whose position changed from the original order. A failed
+    // write is reported but not surfaced — the next load re-reads stored order.
+    if (changes.length === 0) return;
     const results = await Promise.all(
-      changed.map((row) =>
+      changes.map((row) =>
         supabase.from("practice_lists").update({ sort_order: row.sortOrder }).eq("id", row.id)
       )
     );
@@ -173,13 +169,9 @@ export default function PracticeHubScreen() {
       const target = index + direction;
       setLists((prev) => {
         if (target < 0 || target >= prev.length) return prev;
-        const next = [...prev];
-        [next[index], next[target]] = [next[target], next[index]];
-        // Renumber so a further move diffs against the right baseline before the
-        // next reload, and persist the swap.
-        const renumbered = next.map((list, i) => ({ ...list, sort_order: i + 1 }));
-        void persistOrder(renumbered);
-        return renumbered;
+        const { ordered, changes } = reorderPracticeLists(prev, index, direction);
+        void persistOrder(changes);
+        return ordered;
       });
     },
     [persistOrder]

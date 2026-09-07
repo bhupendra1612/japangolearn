@@ -147,7 +147,6 @@ export default function QuizScreen() {
       Speech.speak("Correct", { language: "en-US" }); // optional sound feedback
     }
 
-    // Update Mastery in DB
     const currentQ = questions[currentIndex];
     answersRef.current.push({
       itemType: currentQ.itemType,
@@ -158,15 +157,6 @@ export default function QuizScreen() {
       correctAnswer: currentQ.back,
       responseMs: Date.now() - questionShownAtRef.current,
     });
-    const scoreChange = correct ? 15 : -10;
-    const newScore = Math.min(100, Math.max(0, currentQ.mastery_score + scoreChange));
-
-    supabase
-      .from("practice_list_items")
-      .update({ mastery_score: newScore, last_reviewed: new Date().toISOString() })
-      .eq("id", currentQ.id)
-      .then();
-
     // Add to 'Needs Practice' if wrong
     if (!correct) {
       addToNeedsPractice(currentQ);
@@ -184,10 +174,11 @@ export default function QuizScreen() {
         // finished
         const payload = toGradedAnswerPayload(answersRef.current);
         void supabase
-          .rpc("award_xp", {
+          .rpc("submit_learning_attempt", {
             p_activity_type: "practice_quiz",
             p_attempt_key: quizAttemptKey,
             p_answers: payload as unknown as Json,
+            ...(listId ? { p_practice_list_id: listId } : {}),
           })
           .then(({ error }) => {
             if (error) console.error("Failed to record practice quiz", error);
@@ -245,7 +236,6 @@ export default function QuizScreen() {
           list_id: smartList.id,
           item_id: originalItem.item_id,
           item_type: originalItem.item_type,
-          mastery_score: 0,
         });
       }
     }

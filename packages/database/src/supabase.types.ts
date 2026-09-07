@@ -1857,6 +1857,21 @@ export type Database = {
         }[];
       };
       set_daily_xp_goal: { Args: { p_goal: number }; Returns: number };
+      submit_learning_attempt: {
+        Args: {
+          p_activity_type: string;
+          p_answers: Json;
+          p_attempt_key: string;
+          p_practice_list_id?: string;
+        };
+        Returns: {
+          attempt_id: string;
+          total_xp: number;
+          unlocked_ids: string[];
+          was_duplicate: boolean;
+          xp_awarded: number;
+        }[];
+      };
       submit_teacher_application: {
         Args: never;
         Returns: {

@@ -12,17 +12,20 @@ import {
 } from "@japangolearn/core";
 import type { Database, Json } from "@japangolearn/database";
 
-type XpAward = Database["public"]["Functions"]["award_xp"]["Returns"][number];
+type LearningAttempt =
+  Database["public"]["Functions"]["submit_learning_attempt"]["Returns"][number];
 
-async function requestXpAward({
+async function requestLearningAttempt({
   activityType,
   attemptKey,
   answers,
+  practiceListId,
 }: {
   activityType: QuizActivityType;
   attemptKey: string;
   answers: GradedAnswer[];
-}): Promise<Result<XpAward>> {
+  practiceListId?: string | null;
+}): Promise<Result<LearningAttempt>> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -34,10 +37,11 @@ async function requestXpAward({
 
   const payload = toGradedAnswerPayload(answers);
 
-  const { data, error } = await supabase.rpc("award_xp", {
+  const { data, error } = await supabase.rpc("submit_learning_attempt", {
     p_activity_type: activityType,
     p_attempt_key: attemptKey,
     p_answers: payload as unknown as Json,
+    ...(practiceListId ? { p_practice_list_id: practiceListId } : {}),
   });
 
   if (error) {
@@ -58,24 +62,27 @@ async function requestXpAward({
   return ok(award);
 }
 
-export async function awardQuizXp({
+export async function submitLearningAttempt({
   activityType,
   attemptKey,
   answers,
+  practiceListId,
 }: {
   activityType: QuizActivityType;
   attemptKey: string;
   /** Per-item answers are validated and graded by the database. */
   answers: GradedAnswer[];
+  practiceListId?: string | null;
 }) {
   try {
-    return await requestXpAward({
+    return await requestLearningAttempt({
       activityType,
       attemptKey,
       answers,
+      practiceListId,
     });
   } catch (error: unknown) {
-    console.error("Error awarding quiz XP:", error);
+    console.error("Error submitting learning attempt:", error);
     return err(errorFromUnknown(error));
   }
 }

@@ -15,13 +15,19 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Speech from "expo-speech";
 import { supabase } from "@/lib/supabase";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
+import { createXpAttemptKey } from "@japangolearn/content";
+import { toGradedAnswerPayload, type GradedAnswer } from "@japangolearn/core";
+import type { Json } from "@japangolearn/database";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
 type FlashcardItem = {
   id: string; // practice_list_items id
+  itemType: "vocabulary" | "kana";
+  itemId: string;
   front: string; // kanji or character
   back: string; // romaji/meaning
+  correctAnswer: string;
   audioText: string;
   mastery_score: number;
 };
@@ -35,14 +41,23 @@ export default function FlashcardsScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Animations
   const flipAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const answersRef = useRef<GradedAnswer[]>([]);
+  const attemptKeyRef = useRef(createXpAttemptKey());
+  const questionShownAtRef = useRef<number>(Date.now());
+  const scoringRef = useRef(false);
 
   const loadCards = useCallback(async () => {
     setLoading(true);
+    setSubmitError(null);
+    answersRef.current = [];
+    attemptKeyRef.current = createXpAttemptKey();
+    questionShownAtRef.current = Date.now();
     const { data: listItems } = await supabase
       .from("practice_list_items")
       .select("*")
@@ -67,30 +82,44 @@ export default function FlashcardsScreen() {
         kanaData?.forEach((k) => kanaMap.set(k.id, k));
       }
 
-      const mergedCards = listItems.map((item) => {
+      const mergedCards = listItems.flatMap((item): FlashcardItem[] => {
         if (item.item_type === "vocabulary") {
           const v = vocabMap.get(item.item_id);
-          return {
-            id: item.id,
-            front: v?.kanji || v?.hiragana || "",
-            back: `${v?.hiragana ? v.hiragana + "\n" : ""}${v?.english || ""}`,
-            audioText: v?.kanji || v?.hiragana || "",
-            mastery_score: item.mastery_score,
-          };
-        } else {
-          const k = kanaMap.get(item.item_id);
-          return {
-            id: item.id,
-            front: k?.character || "",
-            back: k?.romaji || "",
-            audioText: k?.character || "",
-            mastery_score: item.mastery_score,
-          };
+          if (!v) return [];
+          return [
+            {
+              id: item.id,
+              itemType: "vocabulary",
+              itemId: String(item.item_id),
+              front: v.kanji || v.hiragana,
+              back: `${v.hiragana}\n${v.english}`,
+              correctAnswer: v.english,
+              audioText: v.kanji || v.hiragana,
+              mastery_score: item.mastery_score,
+            },
+          ];
         }
+        if (item.item_type === "kana") {
+          const k = kanaMap.get(item.item_id);
+          if (!k) return [];
+          return [
+            {
+              id: item.id,
+              itemType: "kana",
+              itemId: String(item.item_id),
+              front: k.character,
+              back: k.romaji,
+              correctAnswer: k.romaji,
+              audioText: k.character,
+              mastery_score: item.mastery_score,
+            },
+          ];
+        }
+        return [];
       });
 
       // Shuffle cards for practice
-      setCards(mergedCards.sort(() => Math.random() - 0.5));
+      setCards(mergedCards.sort(() => Math.random() - 0.5).slice(0, 100));
     }
     setLoading(false);
   }, [listId]);
@@ -113,37 +142,41 @@ export default function FlashcardsScreen() {
   };
 
   const handleScore = async (performance: "again" | "hard" | "good" | "easy") => {
-    // 1. Calculate new mastery
     const currentCard = cards[currentIndex];
-    let scoreChange = 0;
-    switch (performance) {
-      case "again":
-        scoreChange = -20;
-        break;
-      case "hard":
-        scoreChange = 5;
-        break;
-      case "good":
-        scoreChange = 15;
-        break;
-      case "easy":
-        scoreChange = 25;
-        break;
+    if (!currentCard || scoringRef.current) return;
+    scoringRef.current = true;
+
+    const isCorrect = performance !== "again";
+    answersRef.current.push({
+      itemType: currentCard.itemType,
+      itemId: currentCard.itemId,
+      isCorrect,
+      prompt: currentCard.front,
+      answer: isCorrect ? currentCard.correctAnswer : "",
+      correctAnswer: currentCard.correctAnswer,
+      responseMs: Date.now() - questionShownAtRef.current,
+    });
+
+    if (currentIndex + 1 >= cards.length) {
+      const payload = toGradedAnswerPayload(answersRef.current);
+      try {
+        const { error } = await supabase.rpc("submit_learning_attempt", {
+          p_activity_type: "practice_quiz",
+          p_attempt_key: attemptKeyRef.current,
+          p_answers: payload as unknown as Json,
+          ...(listId ? { p_practice_list_id: listId } : {}),
+        });
+        if (error) {
+          setSubmitError("Your flashcard session could not be saved. Check your connection.");
+          console.error("Failed to record flashcard session", error);
+        }
+      } catch (error) {
+        setSubmitError("Your flashcard session could not be saved. Check your connection.");
+        console.error("Failed to record flashcard session", error);
+      }
     }
 
-    const newScore = Math.min(100, Math.max(0, currentCard.mastery_score + scoreChange));
-
-    // 2. Update DB
-    supabase
-      .from("practice_list_items")
-      .update({ mastery_score: newScore, last_reviewed: new Date().toISOString() })
-      .eq("id", currentCard.id)
-      .then();
-
-    // 3. Update streak logic (simple check: mark today as practiced)
-    supabase.rpc("increment_streak").then();
-
-    // 4. Next card animation
+    // Advance only after the final session has been submitted.
     Animated.parallel([
       Animated.timing(slideAnim, { toValue: -SCREEN_W, duration: 250, useNativeDriver: true }),
       Animated.timing(fadeAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
@@ -153,6 +186,8 @@ export default function FlashcardsScreen() {
       flipAnim.setValue(0);
       slideAnim.setValue(SCREEN_W);
       setCurrentIndex((prev) => prev + 1);
+      questionShownAtRef.current = Date.now();
+      scoringRef.current = false;
 
       // Slide in next card
       Animated.parallel([
@@ -177,6 +212,7 @@ export default function FlashcardsScreen() {
       <Text style={s.finishedEmoji}>🎉</Text>
       <Text style={s.finishedTitle}>Session Complete!</Text>
       <Text style={s.finishedSub}>You reviewed {cards.length} cards today.</Text>
+      {submitError && <Text style={s.submitError}>{submitError}</Text>}
       <TouchableOpacity style={s.doneBtn} onPress={() => router.back()}>
         <Text style={s.doneBtnText}>Back to List</Text>
       </TouchableOpacity>
@@ -422,6 +458,12 @@ const s = StyleSheet.create({
     fontSize: FontSize.base,
     color: Colors.dark.textMuted,
     marginBottom: Spacing["2xl"],
+  },
+  submitError: {
+    color: "#FCA5A5",
+    fontSize: FontSize.sm,
+    textAlign: "center",
+    marginBottom: Spacing.lg,
   },
   doneBtn: {
     backgroundColor: Colors.primary[500],

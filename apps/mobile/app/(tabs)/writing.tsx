@@ -25,7 +25,9 @@ import { captureException } from "@/lib/monitoring";
 import { readCache, writeCache } from "@/lib/offline-cache";
 import { isOfflineError } from "@/lib/connectivity";
 import { OfflineNotice } from "@/components/OfflineNotice";
-import type { Kana } from "@japangolearn/database";
+import type { Json, Kana } from "@japangolearn/database";
+import { createXpAttemptKey } from "@japangolearn/content";
+import { toGradedAnswerPayload, type GradedAnswer } from "@japangolearn/core";
 
 // ─── Types ───
 type ViewMode = "grid" | "detail" | "quiz";
@@ -128,6 +130,9 @@ export default function WritingScreen() {
   const [quizAnswer, setQuizAnswer] = useState<string | null>(null);
   const [quizScore, setQuizScore] = useState({ correct: 0, total: 0 });
   const [quizDone, setQuizDone] = useState(false);
+  const [quizAttemptKey, setQuizAttemptKey] = useState(() => createXpAttemptKey());
+  const answersRef = useRef<GradedAnswer[]>([]);
+  const questionShownAtRef = useRef<number>(Date.now());
 
   // Animations
   const cardAnim = useRef(new Animated.Value(0)).current;
@@ -271,6 +276,7 @@ export default function WritingScreen() {
       );
       setQuizOptions(options);
       setQuizAnswer(null);
+      questionShownAtRef.current = Date.now();
     },
     [kanaList]
   );
@@ -284,6 +290,8 @@ export default function WritingScreen() {
     setQuizScore({ correct: 0, total: 0 });
     setQuizAnswer(null);
     setQuizDone(false);
+    setQuizAttemptKey(createXpAttemptKey());
+    answersRef.current = [];
     setupQuizQuestion(pool, 0);
     setMode("quiz");
     fadeAnim.setValue(0);
@@ -300,19 +308,42 @@ export default function WritingScreen() {
         correct: s.correct + (correct ? 1 : 0),
         total: s.total + 1,
       }));
-      if (current) speakKana(current);
+      if (current) {
+        answersRef.current.push({
+          itemType: "kana",
+          itemId: String(current.id),
+          isCorrect: correct,
+          prompt: current.character,
+          answer,
+          correctAnswer: current.romaji,
+          responseMs: Date.now() - questionShownAtRef.current,
+        });
+        speakKana(current);
+      }
 
       setTimeout(() => {
         const next = quizIndex + 1;
         setQuizIndex(next);
         if (next >= quizPool.length) {
+          if (session) {
+            const payload = toGradedAnswerPayload(answersRef.current);
+            void supabase
+              .rpc("submit_learning_attempt", {
+                p_activity_type: "writing_quiz",
+                p_attempt_key: quizAttemptKey,
+                p_answers: payload as unknown as Json,
+              })
+              .then(({ error }) => {
+                if (error) console.error("Failed to record writing quiz", error);
+              });
+          }
           setQuizDone(true);
         } else {
           setupQuizQuestion(quizPool, next);
         }
       }, 1200);
     },
-    [quizAnswer, quizPool, quizIndex, speakKana, setupQuizQuestion]
+    [quizAnswer, quizPool, quizIndex, quizAttemptKey, session, speakKana, setupQuizQuestion]
   );
 
   // ═══════════════════ GRID MODE ═══════════════════

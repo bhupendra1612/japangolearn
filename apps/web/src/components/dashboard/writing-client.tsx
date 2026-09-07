@@ -211,8 +211,8 @@ export function WritingClient({ kanaList }: { kanaList: Kana[] }) {
         // Quiz complete — stay on results
         setQuizKana(null);
         try {
-          const { awardQuizXp } = await import("@/app/actions/gamification");
-          await awardQuizXp({
+          const { submitLearningAttempt } = await import("@/app/actions/gamification");
+          await submitLearningAttempt({
             activityType: "writing_quiz",
             attemptKey: quizAttemptKey,
             answers: answersRef.current,

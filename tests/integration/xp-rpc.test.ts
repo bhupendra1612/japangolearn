@@ -31,7 +31,7 @@ function localEnvironment() {
   };
 }
 
-describe("award_xp RPC authorization and idempotency", () => {
+describe("learning-attempt submission authorization and idempotency", () => {
   const environment = localEnvironment();
   const admin = createClient<Database>(environment.url, environment.serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -89,12 +89,12 @@ describe("award_xp RPC authorization and idempotency", () => {
         correct_answer: "client-controlled value",
       },
     ];
-    const first = await clientOne.rpc("award_xp", {
+    const first = await clientOne.rpc("submit_learning_attempt", {
       p_activity_type: "vocabulary_quiz",
       p_attempt_key: attemptKey,
       p_answers: answers,
     });
-    const retry = await clientOne.rpc("award_xp", {
+    const retry = await clientOne.rpc("submit_learning_attempt", {
       p_activity_type: "vocabulary_quiz",
       p_attempt_key: attemptKey,
       p_answers: answers,
@@ -142,7 +142,7 @@ describe("award_xp RPC authorization and idempotency", () => {
     expect(emptyAnswers.error).not.toBeNull();
 
     const attemptKey = `derived-${crypto.randomUUID()}`;
-    const result = await clientOne.rpc("award_xp", {
+    const result = await clientOne.rpc("submit_learning_attempt", {
       p_activity_type: "practice_quiz",
       p_attempt_key: attemptKey,
       p_answers: [
@@ -167,9 +167,71 @@ describe("award_xp RPC authorization and idempotency", () => {
     expect(attempt.data).toEqual({ correct_answers: 0, total_questions: 1 });
   });
 
+  it("updates canonical mastery and the selected practice-list projection together", async () => {
+    const list = await clientTwo
+      .from("practice_lists")
+      .insert({ user_id: userTwo.id, title: "Pipeline fixture", is_smart_list: false })
+      .select("id")
+      .single();
+    expect(list.error).toBeNull();
+    expect(list.data).not.toBeNull();
+
+    const item = await clientTwo
+      .from("practice_list_items")
+      .insert({
+        list_id: list.data!.id,
+        item_type: "vocabulary",
+        item_id: vocabularyFixture.id,
+      })
+      .select("id")
+      .single();
+    expect(item.error).toBeNull();
+    expect(item.data).not.toBeNull();
+
+    const directUpdate = await clientTwo
+      .from("practice_list_items")
+      .update({ mastery_score: 100 })
+      .eq("id", item.data!.id);
+    expect(directUpdate.error).not.toBeNull();
+
+    const result = await clientTwo.rpc("submit_learning_attempt", {
+      p_activity_type: "practice_quiz",
+      p_attempt_key: `pipeline-${crypto.randomUUID()}`,
+      p_answers: [
+        {
+          item_type: "vocabulary",
+          item_id: String(vocabularyFixture.id),
+          answer: vocabularyFixture.english,
+        },
+      ],
+      p_practice_list_id: list.data!.id,
+    });
+    expect(result.error).toBeNull();
+
+    const [mastery, projection] = await Promise.all([
+      clientTwo
+        .from("mastery_records")
+        .select("mastery_score, correct_count, incorrect_count")
+        .eq("user_id", userTwo.id)
+        .eq("item_type", "vocabulary")
+        .eq("item_id", String(vocabularyFixture.id))
+        .single(),
+      clientTwo
+        .from("practice_list_items")
+        .select("mastery_score, last_reviewed")
+        .eq("id", item.data!.id)
+        .single(),
+    ]);
+    expect(mastery.error).toBeNull();
+    expect(projection.error).toBeNull();
+    expect(mastery.data).toMatchObject({ mastery_score: 20, correct_count: 1, incorrect_count: 0 });
+    expect(Number(projection.data?.mastery_score)).toBe(Number(mastery.data?.mastery_score));
+    expect(projection.data?.last_reviewed).not.toBeNull();
+  });
+
   it("rejects anonymous calls and direct ledger writes", async () => {
     const anonymous = createClient<Database>(environment.url, environment.anonKey);
-    const rpc = await anonymous.rpc("award_xp", {
+    const rpc = await anonymous.rpc("submit_learning_attempt", {
       p_activity_type: "grammar_quiz",
       p_attempt_key: `anonymous-${crypto.randomUUID()}`,
       p_answers: [],
@@ -183,6 +245,9 @@ describe("award_xp RPC authorization and idempotency", () => {
       award_key: `tamper:${crypto.randomUUID()}`,
     });
     expect(directWrite.error).not.toBeNull();
+
+    const directStreak = await clientOne.rpc("increment_streak");
+    expect(directStreak.error).not.toBeNull();
   });
 
   it("does not expose one user's attempts to another user", async () => {

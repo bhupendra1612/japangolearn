@@ -21,8 +21,6 @@ export async function submitReviewSession({
 }) {
   const result = await awardQuizXp({
     activityType: "review_session",
-    correctAnswers: answers.filter((answer) => answer.isCorrect).length,
-    totalQuestions: answers.length,
     attemptKey,
     answers,
   });

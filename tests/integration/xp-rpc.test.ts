@@ -4,6 +4,7 @@ import type { Database } from "@japangolearn/database";
 import { execPnpmSync } from "../support/pnpm-process";
 
 type Credentials = { email: string; password: string; id: string };
+type VocabularyFixture = { id: number; english: string };
 
 function localEnvironment() {
   if (
@@ -37,6 +38,7 @@ describe("award_xp RPC authorization and idempotency", () => {
   });
   let userOne: Credentials;
   let userTwo: Credentials;
+  let vocabularyFixture!: VocabularyFixture;
   let clientOne: SupabaseClient<Database>;
   let clientTwo: SupabaseClient<Database>;
 
@@ -63,6 +65,12 @@ describe("award_xp RPC authorization and idempotency", () => {
     clientTwo = createClient<Database>(environment.url, environment.anonKey);
     await clientOne.auth.signInWithPassword(userOne);
     await clientTwo.auth.signInWithPassword(userTwo);
+
+    const vocabulary = await admin.from("vocabulary").select("id, english").limit(1).single();
+    if (vocabulary.error || !vocabulary.data) {
+      throw vocabulary.error ?? new Error("Unable to load a vocabulary fixture");
+    }
+    vocabularyFixture = vocabulary.data;
   });
 
   afterAll(async () => {
@@ -72,29 +80,36 @@ describe("award_xp RPC authorization and idempotency", () => {
 
   it("awards XP once for a retried attempt key", async () => {
     const attemptKey = `integration-${crypto.randomUUID()}`;
+    const answers = [
+      {
+        item_type: "vocabulary",
+        item_id: String(vocabularyFixture.id),
+        answer: vocabularyFixture.english,
+        is_correct: false,
+        correct_answer: "client-controlled value",
+      },
+    ];
     const first = await clientOne.rpc("award_xp", {
       p_activity_type: "vocabulary_quiz",
-      p_correct_answers: 4,
-      p_total_questions: 5,
       p_attempt_key: attemptKey,
+      p_answers: answers,
     });
     const retry = await clientOne.rpc("award_xp", {
       p_activity_type: "vocabulary_quiz",
-      p_correct_answers: 4,
-      p_total_questions: 5,
       p_attempt_key: attemptKey,
+      p_answers: answers,
     });
 
     expect(first.error).toBeNull();
     expect(retry.error).toBeNull();
-    expect(first.data?.[0]).toMatchObject({ xp_awarded: 20, was_duplicate: false });
-    expect(retry.data?.[0]).toMatchObject({ xp_awarded: 20, was_duplicate: true });
+    expect(first.data?.[0]).toMatchObject({ xp_awarded: 5, was_duplicate: false });
+    expect(retry.data?.[0]).toMatchObject({ xp_awarded: 5, was_duplicate: true });
 
     const ledger = await clientOne
       .from("xp_ledger")
       .select("amount")
       .eq("award_key", `quiz:${attemptKey}`);
-    expect(ledger.data).toEqual([{ amount: 20 }]);
+    expect(ledger.data).toEqual([{ amount: 5 }]);
 
     const quest = await clientOne
       .from("daily_quest_completions")
@@ -110,13 +125,54 @@ describe("award_xp RPC authorization and idempotency", () => {
     expect(questEvent.data).toEqual([{ event_name: "learning.daily_quest_completed" }]);
   });
 
+  it("rejects aggregate scores and derives correctness from the submitted answer", async () => {
+    const legacyCall = await clientOne.rpc("award_xp", {
+      p_activity_type: "vocabulary_quiz",
+      p_correct_answers: 1,
+      p_total_questions: 1,
+      p_attempt_key: `legacy-${crypto.randomUUID()}`,
+    } as never);
+    expect(legacyCall.error).not.toBeNull();
+
+    const emptyAnswers = await clientOne.rpc("award_xp", {
+      p_activity_type: "practice_quiz",
+      p_attempt_key: `empty-${crypto.randomUUID()}`,
+      p_answers: [],
+    });
+    expect(emptyAnswers.error).not.toBeNull();
+
+    const attemptKey = `derived-${crypto.randomUUID()}`;
+    const result = await clientOne.rpc("award_xp", {
+      p_activity_type: "practice_quiz",
+      p_attempt_key: attemptKey,
+      p_answers: [
+        {
+          item_type: "vocabulary",
+          item_id: String(vocabularyFixture.id),
+          answer: "definitely-not-the-answer",
+          is_correct: true,
+          correct_answer: vocabularyFixture.english,
+        },
+      ],
+    });
+
+    expect(result.error).toBeNull();
+    expect(result.data?.[0]).toMatchObject({ xp_awarded: 0, was_duplicate: false });
+
+    const attempt = await clientOne
+      .from("learning_attempts")
+      .select("correct_answers, total_questions")
+      .eq("id", result.data![0].attempt_id)
+      .single();
+    expect(attempt.data).toEqual({ correct_answers: 0, total_questions: 1 });
+  });
+
   it("rejects anonymous calls and direct ledger writes", async () => {
     const anonymous = createClient<Database>(environment.url, environment.anonKey);
     const rpc = await anonymous.rpc("award_xp", {
       p_activity_type: "grammar_quiz",
-      p_correct_answers: 1,
-      p_total_questions: 1,
       p_attempt_key: `anonymous-${crypto.randomUUID()}`,
+      p_answers: [],
     });
     expect(rpc.error).not.toBeNull();
 

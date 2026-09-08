@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "build": "tsc --noEmit",
-    "test": "vitest run --config ../../vitest.mobile.config.ts lib/offline-queue.test.ts",
+    "test": "vitest run --config ../../vitest.mobile.config.ts lib/offline-queue.test.ts lib/needs-practice.test.ts",
     "update:preview": "eas update --channel preview --environment preview",
     "update:production": "eas update --channel production --environment production"
   },

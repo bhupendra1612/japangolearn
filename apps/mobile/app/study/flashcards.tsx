@@ -14,15 +14,17 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Speech from "expo-speech";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { createXpAttemptKey } from "@japangolearn/content";
 import {
   toGradedAnswerPayload,
+  type OfflineJson,
   type GradedAnswer,
   type PracticeStudyItem,
 } from "@japangolearn/core";
-import type { Json } from "@japangolearn/database";
 import { loadPracticeStudyItems } from "@/lib/practice-content";
+import { submitLearningAttemptWithQueue } from "@/lib/offline-queue";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
@@ -32,6 +34,8 @@ export default function FlashcardsScreen() {
   const { listId } = useLocalSearchParams<{ listId: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { session } = useAuth();
+  const userId = session?.user.id;
 
   const [cards, setCards] = useState<FlashcardItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -49,19 +53,30 @@ export default function FlashcardsScreen() {
   const scoringRef = useRef(false);
 
   const loadCards = useCallback(async () => {
+    if (!userId) {
+      setCards([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    setCards([]);
     setSubmitError(null);
     answersRef.current = [];
     attemptKeyRef.current = createXpAttemptKey();
     questionShownAtRef.current = Date.now();
+    scoringRef.current = false;
     const studyItems = await loadPracticeStudyItems(supabase, listId);
+    const {
+      data: { session: currentSession },
+    } = await supabase.auth.getSession();
+    if (currentSession?.user.id !== userId) return;
     setCards([...studyItems].sort(() => Math.random() - 0.5).slice(0, 100));
     setLoading(false);
-  }, [listId]);
+  }, [listId, userId]);
 
   useEffect(() => {
-    if (listId) void loadCards();
-  }, [listId, loadCards]);
+    if (listId && userId) void loadCards();
+  }, [listId, loadCards, userId]);
 
   const flipCard = () => {
     if (isFlipped) {
@@ -77,9 +92,17 @@ export default function FlashcardsScreen() {
   };
 
   const handleScore = async (performance: "again" | "hard" | "good" | "easy") => {
+    if (!userId || scoringRef.current) return;
     const currentCard = cards[currentIndex];
-    if (!currentCard || scoringRef.current) return;
+    if (!currentCard) return;
     scoringRef.current = true;
+    const {
+      data: { session: currentSession },
+    } = await supabase.auth.getSession();
+    if (currentSession?.user.id !== userId) {
+      scoringRef.current = false;
+      return;
+    }
 
     const isCorrect = performance !== "again";
     answersRef.current.push({
@@ -95,17 +118,34 @@ export default function FlashcardsScreen() {
     if (currentIndex + 1 >= cards.length) {
       const payload = toGradedAnswerPayload(answersRef.current);
       try {
-        const { error } = await supabase.rpc("submit_learning_attempt", {
-          p_activity_type: "practice_quiz",
-          p_attempt_key: attemptKeyRef.current,
-          p_answers: payload as unknown as Json,
-          ...(listId ? { p_practice_list_id: listId } : {}),
+        const result = await submitLearningAttemptWithQueue(supabase, {
+          activityType: "practice_quiz",
+          attemptKey: attemptKeyRef.current,
+          answers: payload as unknown as OfflineJson,
+          practiceListId: listId,
+          expectedUserId: userId,
         });
-        if (error) {
+        const {
+          data: { session: currentSession },
+        } = await supabase.auth.getSession();
+        if (currentSession?.user.id !== userId) {
+          scoringRef.current = false;
+          return;
+        }
+        if (result.status === "failed") {
           setSubmitError("Your flashcard session could not be saved. Check your connection.");
-          console.error("Failed to record flashcard session", error);
+          console.error("Failed to record flashcard session", result.error);
+        } else if (result.status === "queued") {
+          setSubmitError("Saved on this device. It will sync when you are connected.");
         }
       } catch (error) {
+        const {
+          data: { session: currentSession },
+        } = await supabase.auth.getSession();
+        if (currentSession?.user.id !== userId) {
+          scoringRef.current = false;
+          return;
+        }
         setSubmitError("Your flashcard session could not be saved. Check your connection.");
         console.error("Failed to record flashcard session", error);
       }

@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { captureException } from "@/lib/monitoring";
+import { publicEnvironment } from "./environment";
 
 /**
  * A network-first, cache-fallback store for reference content.
@@ -16,7 +17,8 @@ import { captureException } from "@/lib/monitoring";
  * into an empty one.
  */
 
-const PREFIX = "cache:v1:";
+const PREFIX = `cache:v2:${encodeURIComponent(publicEnvironment.appEnv)}:${encodeURIComponent(publicEnvironment.supabaseUrl)}:`;
+const cacheWriteTails = new Map<string, Promise<unknown>>();
 
 type Envelope<T> = { savedAt: number; data: T };
 
@@ -36,7 +38,21 @@ export async function readCache<T>(key: string): Promise<CachedValue<T> | null> 
   }
 }
 
-export async function writeCache<T>(key: string, data: T): Promise<void> {
+function withCacheWriteLock<T>(key: string, operation: () => Promise<T>): Promise<T> {
+  const previous = cacheWriteTails.get(key) ?? Promise.resolve();
+  const current = previous.then(operation, operation);
+  const tail = current.then(
+    () => undefined,
+    () => undefined
+  );
+  cacheWriteTails.set(key, tail);
+  void tail.then(() => {
+    if (cacheWriteTails.get(key) === tail) cacheWriteTails.delete(key);
+  });
+  return current;
+}
+
+async function writeCacheValue<T>(key: string, data: T): Promise<void> {
   try {
     const envelope: Envelope<T> = { savedAt: Date.now(), data };
     await AsyncStorage.setItem(PREFIX + key, JSON.stringify(envelope));
@@ -44,6 +60,35 @@ export async function writeCache<T>(key: string, data: T): Promise<void> {
     // Running out of storage should not stop the user studying.
     captureException(error, { cacheKey: key, operation: "write" });
   }
+}
+
+export function writeCache<T>(key: string, data: T): Promise<void> {
+  return withCacheWriteLock(key, () => writeCacheValue(key, data));
+}
+
+export function updateCache<T>(
+  key: string,
+  update: (current: T | undefined) => T | undefined
+): Promise<void> {
+  return withCacheWriteLock(key, async () => {
+    try {
+      const cached = await readCache<T>(key);
+      const next = update(cached?.data);
+      if (next !== undefined) await writeCacheValue(key, next);
+    } catch (error) {
+      captureException(error, { cacheKey: key, operation: "update" });
+    }
+  });
+}
+
+export function removeCache(key: string): Promise<void> {
+  return withCacheWriteLock(key, async () => {
+    try {
+      await AsyncStorage.removeItem(PREFIX + key);
+    } catch (error) {
+      captureException(error, { cacheKey: key, operation: "remove" });
+    }
+  });
 }
 
 /** Human-friendly age for the "showing saved content" notice. */

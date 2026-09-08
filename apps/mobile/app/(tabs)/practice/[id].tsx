@@ -18,6 +18,9 @@ import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants
 import { useFocusEffect } from "@react-navigation/native";
 import type { PracticeItemType, PracticeList } from "@japangolearn/database";
 import { loadPracticeStudyItems } from "@/lib/practice-content";
+import { removePracticeListItemWithQueue } from "@/lib/offline-queue";
+import { readCache, updateCache, writeCache } from "@/lib/offline-cache";
+import type { PracticeStudyItem } from "@japangolearn/core";
 
 type ListItem = {
   id: string; // The practice_list_items id
@@ -49,27 +52,44 @@ export default function PracticeListScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { session } = useAuth();
+  const userId = session?.user.id;
 
   const [list, setList] = useState<PracticeList | null>(null);
   const [items, setItems] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
+    if (!userId) return;
     setLoading(true);
+    setList(null);
+    setItems([]);
+
+    const isStillCurrentUser = async () => {
+      const {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
+      return currentSession?.user.id === userId;
+    };
 
     // 1. Load list details
+    const listCacheKey = `practice-list:${userId}:${id}`;
     const { data: listData } = await supabase
       .from("practice_lists")
       .select("*")
       .eq("id", id)
       .single();
 
-    if (listData) {
+    if (listData && (await isStillCurrentUser())) {
       setList(listData);
+      void writeCache(listCacheKey, listData);
+    } else {
+      const cached = await readCache<PracticeList>(listCacheKey);
+      if (cached && (await isStillCurrentUser())) setList(cached.data);
     }
 
     // 2. Hydrate vocabulary, kana, kanji, and grammar through the shared loader.
     const studyItems = await loadPracticeStudyItems(supabase, id);
+    if (!(await isStillCurrentUser())) return;
     setItems(
       studyItems.map((item) => ({
         id: item.listItemId,
@@ -83,7 +103,7 @@ export default function PracticeListScreen() {
     );
 
     setLoading(false);
-  }, [id]);
+  }, [id, userId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -93,15 +113,43 @@ export default function PracticeListScreen() {
     }, [session?.user, id, loadData])
   );
 
-  const handleRemoveItem = (itemId: string) => {
+  const handleRemoveItem = (item: ListItem) => {
     Alert.alert("Remove Item", "Remove this item from the list?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",
         style: "destructive",
         onPress: async () => {
-          await supabase.from("practice_list_items").delete().eq("id", itemId);
-          setItems(items.filter((i) => i.id !== itemId));
+          if (!userId) return;
+          const result = await removePracticeListItemWithQueue(supabase, {
+            listId: id,
+            listItemId: item.id,
+            itemType: item.item_type,
+            itemId: item.item_id,
+            expectedUserId: userId,
+          });
+          if (result.status === "failed") {
+            Alert.alert("Could not remove item", "Please try again when you are connected.");
+            return;
+          }
+          setItems((previous) => previous.filter((previousItem) => previousItem.id !== item.id));
+          const cacheKey = `practice-study:${userId}:${id}`;
+          void updateCache<PracticeStudyItem[]>(cacheKey, (current) => {
+            if (!current) return undefined;
+            return current.filter((cachedItem) => cachedItem.listItemId !== item.id);
+          });
+          void updateCache<PracticeList[]>(`practice-lists:${userId}`, (current) => {
+            if (!current) return undefined;
+            return current.map((cachedList) =>
+              cachedList.id === id
+                ? { ...cachedList, item_count: Math.max(0, (cachedList.item_count ?? 1) - 1) }
+                : cachedList
+            );
+          });
+          void updateCache<PracticeList>(`practice-list:${userId}:${id}`, (current) => {
+            if (!current) return undefined;
+            return { ...current, item_count: Math.max(0, (current.item_count ?? 1) - 1) };
+          });
         },
       },
     ]);
@@ -244,7 +292,7 @@ export default function PracticeListScreen() {
 
                 <TouchableOpacity
                   style={s.removeBtn}
-                  onPress={() => handleRemoveItem(item.id)}
+                  onPress={() => handleRemoveItem(item)}
                   hitSlop={10}
                   accessibilityRole="button"
                   accessibilityLabel="Remove from list"

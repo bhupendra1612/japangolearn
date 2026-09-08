@@ -9,12 +9,16 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import type { PracticeItemType, PracticeList } from "@japangolearn/database";
+import type { PracticeStudyItem } from "@japangolearn/core";
+import { addPracticeListItemWithQueue, createPracticeListWithQueue } from "@/lib/offline-queue";
+import { readCache, updateCache, writeCache } from "@/lib/offline-cache";
 
 type AddToListModalProps = {
   visible: boolean;
@@ -22,6 +26,7 @@ type AddToListModalProps = {
   itemType: PracticeItemType;
   itemId: number;
   itemTitle: string; // To show in the UI what we are adding
+  studyItem?: PracticeStudyItem;
 };
 
 export function AddToListModal({
@@ -30,6 +35,7 @@ export function AddToListModal({
   itemType,
   itemId,
   itemTitle,
+  studyItem,
 }: AddToListModalProps) {
   const { session } = useAuth();
   const [lists, setLists] = useState<PracticeList[]>([]);
@@ -37,37 +43,68 @@ export function AddToListModal({
   const [isCreating, setIsCreating] = useState(false);
   const [newListTitle, setNewListTitle] = useState("");
   const [savingToList, setSavingToList] = useState<string | null>(null);
+  const pendingStudyItem = studyItem
+    ? {
+        ...studyItem,
+        listItemId: `pending:${itemType}:${itemId}`,
+        itemId: String(itemId),
+        masteryScore: 0,
+        lastReviewed: null,
+      }
+    : null;
 
   const loadLists = useCallback(async () => {
     const userId = session?.user.id;
     if (!userId) return;
     setLoading(true);
+    setLists([]);
     // Fetch user's lists, ensuring the smart list exists
-    let { data } = await supabase
+    const cacheKey = `practice-list-picker:${userId}`;
+    const isStillCurrentUser = async () => {
+      const {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
+      return currentSession?.user.id === userId;
+    };
+    let { data, error } = await supabase
       .from("practice_lists")
       .select("id, title, is_smart_list")
       .eq("user_id", userId)
       .order("is_smart_list", { ascending: false })
       .order("created_at", { ascending: false });
 
+    if (error) {
+      const cached = await readCache<PracticeList[]>(cacheKey);
+      if (cached && (await isStillCurrentUser())) setLists(cached.data);
+      setLoading(false);
+      return;
+    }
+
     if (!data || data.length === 0) {
       // Auto-create Needs Practice list
-      const { data: smartList } = await supabase
-        .from("practice_lists")
-        .insert({
-          user_id: userId,
-          title: "Needs Practice",
-          is_smart_list: true,
-        })
-        .select()
-        .single();
-
-      if (smartList) {
-        data = [smartList];
+      const result = await createPracticeListWithQueue(supabase, {
+        title: "Needs Practice",
+        isSmartList: true,
+        sortOrder: 1,
+        expectedUserId: userId,
+      });
+      if (result.status !== "failed" && result.data) {
+        if (!(await isStillCurrentUser())) {
+          setLoading(false);
+          return;
+        }
+        data = [result.data as PracticeList];
+        void updateCache<PracticeList[]>(`practice-lists:${userId}`, (current) => [
+          { ...(result.data as PracticeList), item_count: 0 },
+          ...(current ?? []).filter((list) => list.id !== result.data?.id),
+        ]);
       }
     }
 
-    if (data) setLists(data);
+    if (data && (await isStillCurrentUser())) {
+      setLists(data);
+      void writeCache(cacheKey, data);
+    }
     setLoading(false);
   }, [session?.user.id]);
 
@@ -81,19 +118,48 @@ export function AddToListModal({
     if (!newListTitle.trim() || !session?.user) return;
     setSavingToList("new");
 
-    const { data } = await supabase
-      .from("practice_lists")
-      .insert({
-        user_id: session.user.id,
-        title: newListTitle.trim(),
-        is_smart_list: false,
-      })
-      .select()
-      .single();
+    const result = await createPracticeListWithQueue(supabase, {
+      title: newListTitle.trim(),
+      sortOrder: lists.length + 1,
+      expectedUserId: session.user.id,
+    });
 
-    if (data) {
-      setLists([data, ...lists]);
-      await handleAddToList(data.id);
+    if (result.status === "failed" || !result.data) {
+      Alert.alert("Could not create list", "Please try again when you are connected.");
+    } else {
+      const createdList = result.data as PracticeList;
+      setLists((previous) => [createdList, ...previous]);
+      void updateCache<PracticeList[]>(`practice-list-picker:${session.user.id}`, (current) => [
+        createdList,
+        ...(current ?? lists).filter((list) => list.id !== createdList.id),
+      ]);
+      const addResult = await addPracticeListItemWithQueue(supabase, {
+        listId: createdList.id,
+        itemType,
+        itemId,
+        expectedUserId: session.user.id,
+      });
+      if (addResult.status === "failed") {
+        Alert.alert(
+          "Could not save item",
+          "The new list was created, but this item was not added."
+        );
+      } else {
+        void updateCache<PracticeList[]>(`practice-lists:${session.user.id}`, (current) => [
+          { ...createdList, item_count: 1 },
+          ...(current ?? []).filter((list) => list.id !== createdList.id),
+        ]);
+        void writeCache<PracticeList>(`practice-list:${session.user.id}:${createdList.id}`, {
+          ...createdList,
+          item_count: 1,
+        });
+        if (pendingStudyItem) {
+          void writeCache(`practice-study:${session.user.id}:${createdList.id}`, [
+            pendingStudyItem,
+          ]);
+        }
+        onClose();
+      }
     }
 
     setNewListTitle("");
@@ -102,28 +168,43 @@ export function AddToListModal({
   };
 
   const handleAddToList = async (listId: string) => {
-    if (savingToList) return;
+    const userId = session?.user.id;
+    if (savingToList || !userId) return;
     setSavingToList(listId);
 
-    // Check if it already exists
-    const { data: existing } = await supabase
-      .from("practice_list_items")
-      .select("id")
-      .eq("list_id", listId)
-      .eq("item_type", itemType)
-      .eq("item_id", itemId)
-      .single();
-
-    if (!existing) {
-      await supabase.from("practice_list_items").insert({
-        list_id: listId,
-        item_type: itemType,
-        item_id: itemId,
-      });
+    const result = await addPracticeListItemWithQueue(supabase, {
+      listId,
+      itemType,
+      itemId,
+      expectedUserId: userId,
+    });
+    if (result.status === "failed") {
+      Alert.alert("Could not save item", "Please try again when you are connected.");
+    } else {
+      const cachedStudy = await readCache<PracticeStudyItem[]>(
+        `practice-study:${userId}:${listId}`
+      );
+      const alreadyInCachedStudy = cachedStudy?.data.some(
+        (item) => item.itemType === itemType && Number(item.itemId) === itemId
+      );
+      if (pendingStudyItem && !alreadyInCachedStudy) {
+        void updateCache<PracticeStudyItem[]>(`practice-study:${userId}:${listId}`, (current) => [
+          ...(current ?? []),
+          pendingStudyItem,
+        ]);
+      }
+      if ((cachedStudy || pendingStudyItem) && !alreadyInCachedStudy) {
+        void updateCache<PracticeList[]>(`practice-lists:${userId}`, (current) => {
+          if (!current) return undefined;
+          return current.map((list) =>
+            list.id === listId ? { ...list, item_count: (list.item_count ?? 0) + 1 } : list
+          );
+        });
+      }
+      onClose();
     }
 
     setSavingToList(null);
-    onClose();
   };
 
   if (!visible || !session?.user) return null;

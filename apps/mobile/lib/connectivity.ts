@@ -12,6 +12,8 @@
  * down, and "something went wrong" is unhelpful when they are in a tunnel.
  */
 
+import { publicEnvironment } from "./environment";
+
 /** Fetch failed before the server replied — react-native, web, and undici wordings. */
 const OFFLINE_SIGNATURES = [
   "network request failed",
@@ -27,6 +29,9 @@ const OFFLINE_SIGNATURES = [
   "econnrefused",
   "enotfound",
   "etimedout",
+  "timed out",
+  "timeout",
+  "aborted",
   "socket hang up",
 ];
 
@@ -50,6 +55,59 @@ function messageOf(error: unknown): string {
  */
 export function isOfflineError(error: unknown): boolean {
   const message = messageOf(error).toLowerCase();
-  if (!message) return false;
-  return OFFLINE_SIGNATURES.some((signature) => message.includes(signature));
+  if (message && OFFLINE_SIGNATURES.some((signature) => message.includes(signature))) return true;
+  if (typeof error === "object" && error !== null && "status" in error) {
+    const status = (error as { status?: unknown }).status;
+    return typeof status === "number" && (status === 0 || status === 408 || status >= 500);
+  }
+  return false;
+}
+
+const CONNECTIVITY_CHECK_INTERVAL_MS = 30_000;
+const CONNECTIVITY_CHECK_TIMEOUT_MS = 5_000;
+
+/**
+ * Checks reachability without requiring a native network-information module.
+ * Any successful Supabase health response means queued writes can be retried.
+ */
+export async function checkConnectivity(): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), CONNECTIVITY_CHECK_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${publicEnvironment.supabaseUrl}/auth/v1/health`, {
+      method: "GET",
+      signal: controller.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Polls reachability and invokes the callback whenever the service is reachable.
+ * Rechecking while online also retries entries queued after a transient server
+ * failure. The caller can stop the monitor on unmount.
+ */
+export function subscribeToConnectivity(
+  onOnline: () => void,
+  intervalMs = CONNECTIVITY_CHECK_INTERVAL_MS
+): () => void {
+  let stopped = false;
+
+  const check = async () => {
+    const online = await checkConnectivity();
+    if (stopped) return;
+    if (online) onOnline();
+  };
+
+  void check();
+  const interval = setInterval(() => void check(), intervalMs);
+  return () => {
+    stopped = true;
+    clearInterval(interval);
+  };
 }

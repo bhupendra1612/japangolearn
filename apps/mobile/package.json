@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "build": "tsc --noEmit",
+    "test": "vitest run --config ../../vitest.mobile.config.ts lib/offline-queue.test.ts",
     "update:preview": "eas update --channel preview --environment preview",
     "update:production": "eas update --channel production --environment production"
   },
@@ -76,6 +77,7 @@
     "@types/react": "~19.1.10",
     "eslint": "9.39.1",
     "eslint-config-expo": "^10.0.0",
+    "vitest": "4.1.10",
     "typescript": "5.9.2"
   }
 }

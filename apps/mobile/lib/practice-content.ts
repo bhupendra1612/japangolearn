@@ -5,11 +5,46 @@ import {
   type PracticeStudyItem,
 } from "@japangolearn/core";
 import type { Database } from "@japangolearn/database";
+import { readCache, writeCache } from "@/lib/offline-cache";
+import { getOfflineQueueEntries } from "@/lib/offline-queue";
 
 export async function loadPracticeStudyItems(
   supabase: SupabaseClient<Database>,
   listId: string
 ): Promise<PracticeStudyItem[]> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const userId = session?.user.id;
+  if (!userId) return [];
+
+  const cacheKey = `practice-study:${userId}:${listId}`;
+  const pendingEntries = (await getOfflineQueueEntries(supabase)).filter(
+    (entry) => !entry.deadLettered
+  );
+  const pendingRemovalIds = new Set(
+    pendingEntries.flatMap((entry) =>
+      entry.operation.kind === "practice_list_item_remove" ? [entry.operation.listItemId] : []
+    )
+  );
+  const hasPendingAddition = pendingEntries.some(
+    (entry) =>
+      entry.operation.kind === "practice_list_item_add" && entry.operation.listId === listId
+  );
+  const applyPendingProjection = (items: PracticeStudyItem[]) =>
+    items.filter((item) => !pendingRemovalIds.has(item.listItemId));
+  const isStillCurrentUser = async () => {
+    const {
+      data: { session: currentSession },
+    } = await supabase.auth.getSession();
+    return currentSession?.user.id === userId;
+  };
+  const readSavedItems = async () => {
+    if (!(await isStillCurrentUser())) return [];
+    const cached = await readCache<PracticeStudyItem[]>(cacheKey);
+    return applyPendingProjection(cached?.data ?? []);
+  };
+
   const { data: listItems, error: listError } = await supabase
     .from("practice_list_items")
     .select("id, item_type, item_id, mastery_score, last_reviewed")
@@ -18,10 +53,21 @@ export async function loadPracticeStudyItems(
 
   if (listError) {
     console.error("Failed to load practice list items", listError);
-    return [];
+    return readSavedItems();
   }
 
-  if (!listItems?.length) return [];
+  if (!(await isStillCurrentUser())) return [];
+
+  if (!listItems?.length) {
+    const cached = hasPendingAddition ? await readCache<PracticeStudyItem[]>(cacheKey) : null;
+    if (cached?.data.length) {
+      const projected = applyPendingProjection(cached.data);
+      void writeCache(cacheKey, projected);
+      return projected;
+    }
+    void writeCache(cacheKey, []);
+    return [];
+  }
 
   const vocabularyIds = listItems
     .filter((item) => item.item_type === "vocabulary")
@@ -57,8 +103,10 @@ export async function loadPracticeStudyItems(
   ].filter(Boolean);
   if (contentErrors.length > 0) {
     console.error("Failed to hydrate practice list content", contentErrors[0]);
-    return [];
+    return readSavedItems();
   }
+
+  if (!(await isStillCurrentUser())) return [];
 
   const rows: PracticeContentRows = {
     vocabulary: vocabularyResult.data ?? [],
@@ -67,5 +115,19 @@ export async function loadPracticeStudyItems(
     grammar: grammarResult.data ?? [],
   };
 
-  return buildPracticeStudyItems(listItems, rows);
+  const studyItems = buildPracticeStudyItems(listItems, rows);
+  const cached = hasPendingAddition ? await readCache<PracticeStudyItem[]>(cacheKey) : null;
+  const cachedOnlyItems = cached?.data.filter(
+    (cachedItem) =>
+      !studyItems.some(
+        (studyItem) =>
+          studyItem.itemType === cachedItem.itemType && studyItem.itemId === cachedItem.itemId
+      )
+  );
+  const projected = applyPendingProjection([
+    ...studyItems,
+    ...(hasPendingAddition ? (cachedOnlyItems ?? []) : []),
+  ]);
+  void writeCache(cacheKey, projected);
+  return projected;
 }

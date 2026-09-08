@@ -31,7 +31,8 @@ import {
   submitLearningAttemptWithQueue,
 } from "@/lib/offline-queue";
 import { loadPracticeStudyItems } from "@/lib/practice-content";
-import { updateCache } from "@/lib/offline-cache";
+import { readCache, updateCache } from "@/lib/offline-cache";
+import { resolveNeedsPracticeList } from "@/lib/needs-practice";
 
 type QuizItem = PracticeStudyItem;
 
@@ -199,24 +200,33 @@ export default function QuizScreen() {
       let pending = needsPracticeListPromiseRef.current;
       if (!pending) {
         pending = (async () => {
-          const { data: existingList } = await supabase
+          const { data: existingList, error: lookupError } = await supabase
             .from("practice_lists")
             .select("id")
             .eq("user_id", user.id)
             .eq("is_smart_list", true)
             .single();
-          if (existingList) return existingList.id;
-
-          const result = await createPracticeListWithQueue(supabase, {
-            title: "Needs Practice",
-            isSmartList: true,
-            sortOrder: 1,
-            expectedUserId: user.id,
-          });
-          if (result.status !== "failed" && result.data) {
+          const cachedLists = await readCache<PracticeList[]>(`practice-lists:${user.id}`);
+          const cachedListId =
+            cachedLists?.data.find((cachedList) => cachedList.is_smart_list)?.id ?? null;
+          const resolved = await resolveNeedsPracticeList(
+            { id: existingList?.id, error: lookupError },
+            cachedListId,
+            async () => {
+              const result = await createPracticeListWithQueue(supabase, {
+                title: "Needs Practice",
+                isSmartList: true,
+                sortOrder: 1,
+                expectedUserId: user.id,
+              });
+              if (result.status === "failed" || !result.data) return null;
+              return result.data.id;
+            }
+          );
+          if (resolved.created) {
             createdNeedsPracticeList = true;
           }
-          return result.status === "failed" || !result.data ? null : result.data.id;
+          return resolved.id;
         })();
         needsPracticeListPromiseRef.current = pending;
       }

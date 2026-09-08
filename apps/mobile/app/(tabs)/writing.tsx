@@ -25,9 +25,10 @@ import { captureException } from "@/lib/monitoring";
 import { readCache, writeCache } from "@/lib/offline-cache";
 import { isOfflineError } from "@/lib/connectivity";
 import { OfflineNotice } from "@/components/OfflineNotice";
-import type { Json, Kana } from "@japangolearn/database";
+import type { Kana } from "@japangolearn/database";
 import { createXpAttemptKey } from "@japangolearn/content";
-import { toGradedAnswerPayload, type GradedAnswer } from "@japangolearn/core";
+import { toGradedAnswerPayload, type GradedAnswer, type OfflineJson } from "@japangolearn/core";
+import { submitLearningAttemptWithQueue } from "@/lib/offline-queue";
 
 // ─── Types ───
 type ViewMode = "grid" | "detail" | "quiz";
@@ -321,21 +322,21 @@ export default function WritingScreen() {
         speakKana(current);
       }
 
-      setTimeout(() => {
+      setTimeout(async () => {
         const next = quizIndex + 1;
         setQuizIndex(next);
         if (next >= quizPool.length) {
           if (session) {
             const payload = toGradedAnswerPayload(answersRef.current);
-            void supabase
-              .rpc("submit_learning_attempt", {
-                p_activity_type: "writing_quiz",
-                p_attempt_key: quizAttemptKey,
-                p_answers: payload as unknown as Json,
-              })
-              .then(({ error }) => {
-                if (error) console.error("Failed to record writing quiz", error);
-              });
+            const result = await submitLearningAttemptWithQueue(supabase, {
+              activityType: "writing_quiz",
+              attemptKey: quizAttemptKey,
+              answers: payload as unknown as OfflineJson,
+              expectedUserId: session.user.id,
+            });
+            if (result.status === "failed") {
+              console.error("Failed to record writing quiz", result.error);
+            }
           }
           setQuizDone(true);
         } else {
@@ -883,6 +884,17 @@ export default function WritingScreen() {
           itemType="kana"
           itemId={selectedKana.id}
           itemTitle={selectedKana.character}
+          studyItem={{
+            listItemId: "pending",
+            itemType: "kana",
+            itemId: String(selectedKana.id),
+            front: selectedKana.character.trim(),
+            back: selectedKana.romaji.trim(),
+            correctAnswer: selectedKana.romaji.trim(),
+            audioText: selectedKana.character.trim(),
+            masteryScore: 0,
+            lastReviewed: null,
+          }}
         />
       )}
 

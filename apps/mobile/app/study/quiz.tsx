@@ -15,15 +15,23 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Speech from "expo-speech";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { createXpAttemptKey } from "@japangolearn/content";
+import type { PracticeList } from "@japangolearn/database";
 import {
   toGradedAnswerPayload,
+  type OfflineJson,
   type GradedAnswer,
   type PracticeStudyItem,
 } from "@japangolearn/core";
-import type { Json } from "@japangolearn/database";
+import {
+  addPracticeListItemWithQueue,
+  createPracticeListWithQueue,
+  submitLearningAttemptWithQueue,
+} from "@/lib/offline-queue";
 import { loadPracticeStudyItems } from "@/lib/practice-content";
+import { updateCache } from "@/lib/offline-cache";
 
 type QuizItem = PracticeStudyItem;
 
@@ -31,6 +39,8 @@ export default function QuizScreen() {
   const { listId } = useLocalSearchParams<{ listId: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { session } = useAuth();
+  const userId = session?.user.id;
 
   const [questions, setQuestions] = useState<QuizItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -38,10 +48,14 @@ export default function QuizScreen() {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [score, setScore] = useState(0);
   const [quizAttemptKey, setQuizAttemptKey] = useState(() => createXpAttemptKey());
   const answersRef = useRef<GradedAnswer[]>([]);
   const questionShownAtRef = useRef<number>(Date.now());
+  const needsPracticeListIdRef = useRef<string | null>(null);
+  const needsPracticeListPromiseRef = useRef<Promise<string | null> | null>(null);
+  const answerLockRef = useRef(false);
 
   const generateOptions = useCallback((allQuestions: QuizItem[], correctIndex: number) => {
     if (allQuestions.length === 0) return;
@@ -60,23 +74,44 @@ export default function QuizScreen() {
   }, []);
 
   const loadQuiz = useCallback(async () => {
+    if (!userId) {
+      setQuestions([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    setQuestions([]);
+    setIsSubmitting(false);
+    answerLockRef.current = false;
     setQuizAttemptKey(createXpAttemptKey());
     answersRef.current = [];
     questionShownAtRef.current = Date.now();
     const studyItems = await loadPracticeStudyItems(supabase, listId);
+    const {
+      data: { session: currentSession },
+    } = await supabase.auth.getSession();
+    if (currentSession?.user.id !== userId) return;
     const shuffled = [...studyItems].sort(() => Math.random() - 0.5).slice(0, 100);
     setQuestions(shuffled);
     generateOptions(shuffled, 0);
     setLoading(false);
-  }, [generateOptions, listId]);
+  }, [generateOptions, listId, userId]);
 
   useEffect(() => {
-    if (listId) void loadQuiz();
-  }, [listId, loadQuiz]);
+    if (listId && userId) void loadQuiz();
+  }, [listId, loadQuiz, userId]);
 
   const handleSelect = async (opt: string) => {
-    if (selectedOption !== null) return; // Prevent multiple taps
+    if (answerLockRef.current || selectedOption !== null || isSubmitting) return;
+    if (!userId) return;
+    answerLockRef.current = true;
+    const {
+      data: { session: currentSession },
+    } = await supabase.auth.getSession();
+    if (currentSession?.user.id !== userId) {
+      answerLockRef.current = false;
+      return;
+    }
 
     setSelectedOption(opt);
     const correctAns = questions[currentIndex].back;
@@ -104,74 +139,150 @@ export default function QuizScreen() {
     }
 
     // Move to next after delay
-    setTimeout(() => {
-      setSelectedOption(null);
-      setIsCorrect(null);
-      if (currentIndex + 1 < questions.length) {
+    const isLastQuestion = currentIndex + 1 >= questions.length;
+    setTimeout(async () => {
+      const {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
+      if (currentSession?.user.id !== userId) {
+        answerLockRef.current = false;
+        return;
+      }
+
+      if (!isLastQuestion) {
+        setSelectedOption(null);
+        setIsCorrect(null);
         setCurrentIndex((prev) => prev + 1);
         generateOptions(questions, currentIndex + 1);
         questionShownAtRef.current = Date.now();
+        answerLockRef.current = false;
       } else {
         // finished
+        setIsSubmitting(true);
         const payload = toGradedAnswerPayload(answersRef.current);
-        void supabase
-          .rpc("submit_learning_attempt", {
-            p_activity_type: "practice_quiz",
-            p_attempt_key: quizAttemptKey,
-            p_answers: payload as unknown as Json,
-            ...(listId ? { p_practice_list_id: listId } : {}),
-          })
-          .then(({ error }) => {
-            if (error) console.error("Failed to record practice quiz", error);
+        try {
+          const result = await submitLearningAttemptWithQueue(supabase, {
+            activityType: "practice_quiz",
+            attemptKey: quizAttemptKey,
+            answers: payload as unknown as OfflineJson,
+            practiceListId: listId,
+            expectedUserId: userId,
           });
-        setCurrentIndex((prev) => prev + 1);
+          if (result.status === "failed") {
+            console.error("Failed to record practice quiz", result.error);
+          }
+        } catch (error) {
+          console.error("Failed to record practice quiz", error);
+        } finally {
+          setSelectedOption(null);
+          setIsCorrect(null);
+          setCurrentIndex((prev) => prev + 1);
+          setIsSubmitting(false);
+          answerLockRef.current = false;
+        }
       }
     }, 1500);
   };
 
   const addToNeedsPractice = async (item: QuizItem) => {
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      data: { session },
+    } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) return;
 
-    // 1. Find or create Needs Practice list
-    let { data: smartList } = await supabase
-      .from("practice_lists")
-      .select("id")
-      .eq("user_id", user.id)
-      .eq("is_smart_list", true)
-      .single();
+    // 1. Find or create Needs Practice list. Reuse the in-flight promise so
+    // multiple wrong answers cannot queue duplicate smart-list creations offline.
+    let smartListId = needsPracticeListIdRef.current;
+    let createdNeedsPracticeList = false;
+    if (!smartListId) {
+      let pending = needsPracticeListPromiseRef.current;
+      if (!pending) {
+        pending = (async () => {
+          const { data: existingList } = await supabase
+            .from("practice_lists")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("is_smart_list", true)
+            .single();
+          if (existingList) return existingList.id;
 
-    if (!smartList) {
-      const { data: newList } = await supabase
-        .from("practice_lists")
-        .insert({ user_id: user.id, title: "Needs Practice", is_smart_list: true })
-        .select()
-        .single();
-      smartList = newList;
+          const result = await createPracticeListWithQueue(supabase, {
+            title: "Needs Practice",
+            isSmartList: true,
+            sortOrder: 1,
+            expectedUserId: user.id,
+          });
+          if (result.status !== "failed" && result.data) {
+            createdNeedsPracticeList = true;
+          }
+          return result.status === "failed" || !result.data ? null : result.data.id;
+        })();
+        needsPracticeListPromiseRef.current = pending;
+      }
+
+      smartListId = await pending;
+      needsPracticeListPromiseRef.current = null;
+      if (smartListId) needsPracticeListIdRef.current = smartListId;
     }
 
-    if (!smartList) return;
+    if (!smartListId) return;
 
     // 2. Add item to smart list if not already there
     // We need original item_id and item_type. We have to fetch it because our QuizItem merged them.
     const itemId = Number(item.itemId);
     if (Number.isInteger(itemId)) {
-      // Check if exists
-      const { data: existing } = await supabase
-        .from("practice_list_items")
-        .select("id")
-        .eq("list_id", smartList.id)
-        .eq("item_id", itemId)
-        .eq("item_type", item.itemType)
-        .single();
-
-      if (!existing) {
-        await supabase.from("practice_list_items").insert({
-          list_id: smartList.id,
-          item_id: itemId,
-          item_type: item.itemType,
+      const result = await addPracticeListItemWithQueue(supabase, {
+        listId: smartListId,
+        itemId,
+        itemType: item.itemType,
+        expectedUserId: user.id,
+      });
+      if (result.status === "failed") {
+        console.error("Failed to save item to Needs Practice", result.error);
+      } else {
+        const pendingStudyItem: PracticeStudyItem = {
+          ...item,
+          listItemId: `pending:${item.itemType}:${itemId}`,
+          itemId: String(itemId),
+          masteryScore: item.masteryScore ?? 0,
+          lastReviewed: item.lastReviewed ?? null,
+        };
+        void updateCache<PracticeStudyItem[]>(
+          `practice-study:${user.id}:${smartListId}`,
+          (current) =>
+            current?.some(
+              (cachedItem) =>
+                cachedItem.itemType === item.itemType && cachedItem.itemId === String(itemId)
+            )
+              ? current
+              : [...(current ?? []), pendingStudyItem]
+        );
+        void updateCache<PracticeList>(
+          `practice-list:${user.id}:${smartListId}`,
+          (current) =>
+            current ?? {
+              id: smartListId,
+              title: "Needs Practice",
+              is_smart_list: true,
+              sort_order: 1,
+              item_count: 1,
+            }
+        );
+        void updateCache<PracticeList[]>(`practice-lists:${user.id}`, (current) => {
+          const list = {
+            id: smartListId,
+            title: "Needs Practice",
+            is_smart_list: true,
+            sort_order: 1,
+            item_count: 1,
+          } as PracticeList;
+          const existing = current?.some((cachedList) => cachedList.id === smartListId);
+          if (!existing) return [list, ...(current ?? [])];
+          if (!createdNeedsPracticeList) return current!;
+          return current!.map((cachedList) =>
+            cachedList.id === smartListId ? { ...cachedList, item_count: 1 } : cachedList
+          );
         });
       }
     }

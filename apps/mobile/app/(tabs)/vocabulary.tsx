@@ -27,9 +27,10 @@ import { captureException } from "@/lib/monitoring";
 import { readCache, writeCache } from "@/lib/offline-cache";
 import { isOfflineError } from "@/lib/connectivity";
 import { OfflineNotice } from "@/components/OfflineNotice";
-import type { Json, VocabularyWord } from "@japangolearn/database";
+import type { VocabularyWord } from "@japangolearn/database";
 import { createXpAttemptKey } from "@japangolearn/content";
-import { toGradedAnswerPayload, type GradedAnswer } from "@japangolearn/core";
+import { toGradedAnswerPayload, type GradedAnswer, type OfflineJson } from "@japangolearn/core";
+import { submitLearningAttemptWithQueue } from "@/lib/offline-queue";
 
 // ─── Types ───
 type Word = VocabularyWord;
@@ -370,21 +371,21 @@ export default function VocabularyScreen() {
         speakWord(current);
       }
 
-      setTimeout(() => {
+      setTimeout(async () => {
         const next = quizIndex + 1;
         setQuizIndex(next);
         if (next >= quizPool.length) {
           if (session) {
             const payload = toGradedAnswerPayload(answersRef.current);
-            void supabase
-              .rpc("submit_learning_attempt", {
-                p_activity_type: "vocabulary_quiz",
-                p_attempt_key: quizAttemptKey,
-                p_answers: payload as unknown as Json,
-              })
-              .then(({ error }) => {
-                if (error) console.error("Failed to record vocabulary quiz", error);
-              });
+            const result = await submitLearningAttemptWithQueue(supabase, {
+              activityType: "vocabulary_quiz",
+              attemptKey: quizAttemptKey,
+              answers: payload as unknown as OfflineJson,
+              expectedUserId: session.user.id,
+            });
+            if (result.status === "failed") {
+              console.error("Failed to record vocabulary quiz", result.error);
+            }
           }
           setQuizDone(true);
         } else {
@@ -1029,6 +1030,17 @@ export default function VocabularyScreen() {
           itemType="vocabulary"
           itemId={selectedWord.id}
           itemTitle={selectedWord.kanji || selectedWord.hiragana}
+          studyItem={{
+            listItemId: "pending",
+            itemType: "vocabulary",
+            itemId: String(selectedWord.id),
+            front: (selectedWord.kanji?.trim() || selectedWord.hiragana.trim()).trim(),
+            back: selectedWord.english.trim(),
+            correctAnswer: selectedWord.english.trim(),
+            audioText: (selectedWord.kanji?.trim() || selectedWord.hiragana.trim()).trim(),
+            masteryScore: 0,
+            lastReviewed: null,
+          }}
         />
       )}
 

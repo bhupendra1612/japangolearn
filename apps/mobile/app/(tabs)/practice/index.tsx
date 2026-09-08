@@ -19,6 +19,8 @@ import { useFocusEffect } from "@react-navigation/native";
 import { LoadError } from "@/components/LoadError";
 import { captureException } from "@/lib/monitoring";
 import type { PracticeList } from "@japangolearn/database";
+import { createPracticeListWithQueue, deletePracticeListWithQueue } from "@/lib/offline-queue";
+import { readCache, removeCache, updateCache, writeCache } from "@/lib/offline-cache";
 
 export default function PracticeHubScreen() {
   const insets = useSafeAreaInsets();
@@ -35,6 +37,14 @@ export default function PracticeHubScreen() {
     if (!userId) return;
     setLoading(true);
     setLoadFailed(false);
+    setLists([]);
+    setStreak({ current: 0, longest: 0 });
+    const isStillCurrentUser = async () => {
+      const {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
+      return currentSession?.user.id === userId;
+    };
 
     // maybeSingle, not single: a user who has never studied has no streak row,
     // and single() reports that absence as an error. This way a missing row is
@@ -47,11 +57,12 @@ export default function PracticeHubScreen() {
 
     if (streakError) {
       captureException(streakError, { screen: "practice", query: "user_streaks" });
-    } else if (data) {
+    } else if (data && (await isStillCurrentUser())) {
       setStreak({ current: data.current_streak, longest: data.longest_streak });
     }
 
     // 1. Get lists
+    const cacheKey = `practice-lists:${userId}`;
     let { data: listsData, error: listsError } = await supabase
       .from("practice_lists")
       .select("id, title, is_smart_list")
@@ -60,28 +71,31 @@ export default function PracticeHubScreen() {
       .order("created_at", { ascending: false });
 
     if (listsError) {
-      setLoadFailed(true);
       captureException(listsError, { screen: "practice" });
+      const cached = await readCache<PracticeList[]>(cacheKey);
+      if (cached && (await isStillCurrentUser())) {
+        setLists(cached.data);
+      } else {
+        setLoadFailed(true);
+      }
       setLoading(false);
       return;
     }
 
     if (!listsData || listsData.length === 0) {
       // Auto-create Needs Practice list if it doesn't exist
-      const { data: smartList } = await supabase
-        .from("practice_lists")
-        .insert({
-          user_id: userId,
-          title: "Needs Practice",
-          is_smart_list: true,
-        })
-        .select()
-        .single();
-
-      if (smartList) listsData = [smartList];
+      const result = await createPracticeListWithQueue(supabase, {
+        title: "Needs Practice",
+        isSmartList: true,
+        sortOrder: 1,
+        expectedUserId: userId,
+      });
+      if (result.status !== "failed" && result.data) {
+        listsData = [result.data as PracticeList];
+      }
     }
 
-    if (listsData) {
+    if (listsData && (await isStillCurrentUser())) {
       // 2. Get item counts for each list
       const listsWithCounts = await Promise.all(
         listsData.map(async (list) => {
@@ -93,7 +107,10 @@ export default function PracticeHubScreen() {
           return { ...list, item_count: count || 0 };
         })
       );
-      setLists(listsWithCounts);
+      if (await isStillCurrentUser()) {
+        setLists(listsWithCounts);
+        void writeCache(cacheKey, listsWithCounts);
+      }
     }
     setLoading(false);
   }, [session?.user.id]);
@@ -119,8 +136,27 @@ export default function PracticeHubScreen() {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
-            await supabase.from("practice_lists").delete().eq("id", listId);
-            setLists(lists.filter((l) => l.id !== listId));
+            const userId = session?.user.id;
+            if (!userId) return;
+            const result = await deletePracticeListWithQueue(supabase, listId, userId);
+            if (result.status === "failed") {
+              Alert.alert("Could not delete list", "Please try again when you are connected.");
+              return;
+            }
+            setLists((previous) => previous.filter((list) => list.id !== listId));
+            if (userId) {
+              const cacheKey = `practice-lists:${userId}`;
+              void updateCache<PracticeList[]>(cacheKey, (current) => {
+                if (!current) return undefined;
+                return current.filter((list) => list.id !== listId);
+              });
+              void updateCache<PracticeList[]>(`practice-list-picker:${userId}`, (current) => {
+                if (!current) return undefined;
+                return current.filter((list) => list.id !== listId);
+              });
+              void removeCache(`practice-list:${userId}:${listId}`);
+              void removeCache(`practice-study:${userId}:${listId}`);
+            }
           },
         },
       ]

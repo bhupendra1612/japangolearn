@@ -2,11 +2,15 @@ import { useEffect } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
+import { AppState } from "react-native";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { trackEvent } from "@/lib/analytics";
 import { initMonitoring, Sentry } from "@/lib/monitoring";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Colors } from "@/constants/theme";
+import { supabase } from "@/lib/supabase";
+import { subscribeToConnectivity } from "@/lib/connectivity";
+import { drainOfflineQueue } from "@/lib/offline-queue";
 
 initMonitoring();
 
@@ -53,6 +57,31 @@ function RootNavigator() {
   );
 }
 
+function OfflineSynchronizer() {
+  const { session } = useAuth();
+
+  useEffect(() => {
+    if (!session?.user.id) return;
+
+    const sync = () => {
+      void drainOfflineQueue(supabase);
+    };
+
+    sync();
+    const stopConnectivityMonitor = subscribeToConnectivity(sync);
+    const appStateSubscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") sync();
+    });
+
+    return () => {
+      stopConnectivityMonitor();
+      appStateSubscription.remove();
+    };
+  }, [session?.user.id]);
+
+  return null;
+}
+
 function RootLayout() {
   useEffect(() => {
     trackEvent("mobile_app_opened");
@@ -62,6 +91,7 @@ function RootLayout() {
     <ErrorBoundary>
       <AuthProvider>
         <StatusBar style="light" />
+        <OfflineSynchronizer />
         <RootNavigator />
       </AuthProvider>
     </ErrorBoundary>

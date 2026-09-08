@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  applyPendingStudyRemovals,
   buildPracticeStudyItems,
+  type PendingStudyRemoval,
   type PracticeContentRows,
   type PracticeStudyItem,
 } from "@japangolearn/core";
@@ -22,17 +24,17 @@ export async function loadPracticeStudyItems(
   const pendingEntries = (await getOfflineQueueEntries(supabase)).filter(
     (entry) => !entry.deadLettered
   );
-  const pendingRemovalIds = new Set(
-    pendingEntries.flatMap((entry) =>
-      entry.operation.kind === "practice_list_item_remove" ? [entry.operation.listItemId] : []
-    )
+  const pendingRemovals: PendingStudyRemoval[] = pendingEntries.flatMap((entry) =>
+    entry.operation.kind === "practice_list_item_remove"
+      ? [{ listId: entry.operation.listId, listItemId: entry.operation.listItemId }]
+      : []
   );
   const hasPendingAddition = pendingEntries.some(
     (entry) =>
       entry.operation.kind === "practice_list_item_add" && entry.operation.listId === listId
   );
   const applyPendingProjection = (items: PracticeStudyItem[]) =>
-    items.filter((item) => !pendingRemovalIds.has(item.listItemId));
+    applyPendingStudyRemovals(items, listId, pendingRemovals);
   const isStillCurrentUser = async () => {
     const {
       data: { session: currentSession },

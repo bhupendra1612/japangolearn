@@ -90,10 +90,7 @@ export async function loadPracticeStudyItems(
           .in("id", vocabularyIds)
       : Promise.resolve({ data: [], error: null }),
     kanaIds.length
-      ? supabase
-          .from("kana")
-          .select("id, character, romaji, romaji_hindi, type")
-          .in("id", kanaIds)
+      ? supabase.from("kana").select("id, character, romaji, romaji_hindi, type").in("id", kanaIds)
       : Promise.resolve({ data: [], error: null }),
     kanjiIds.length
       ? supabase

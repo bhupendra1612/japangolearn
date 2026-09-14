@@ -151,10 +151,13 @@ export default function PracticeHubScreen() {
 
     setSavingNew(false);
     if (result.status === "failed" || !result.data) {
-      captureException(result.status === "failed" ? result.error : new Error("create list returned no row"), {
-        screen: "practice",
-        action: "create_list",
-      });
+      captureException(
+        result.status === "failed" ? result.error : new Error("create list returned no row"),
+        {
+          screen: "practice",
+          action: "create_list",
+        }
+      );
       Alert.alert("Could not create list", "Please try again when you are connected.");
       return;
     }
@@ -181,7 +184,11 @@ export default function PracticeHubScreen() {
       const userId = session?.user.id;
       if (!userId) return;
       const changes = ordered
-        .map((list, index) => ({ id: list.id, sortOrder: index + 1, previousOrder: list.sort_order }))
+        .map((list, index) => ({
+          id: list.id,
+          sortOrder: index + 1,
+          previousOrder: list.sort_order,
+        }))
         .filter((change) => change.previousOrder !== change.sortOrder)
         .map(({ id, sortOrder }) => ({ id, sortOrder }));
       if (changes.length === 0) return;

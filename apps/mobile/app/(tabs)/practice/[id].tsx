@@ -48,7 +48,6 @@ const ITEM_TYPE_EMOJI: Record<PracticeItemType, string> = {
   grammar: "文",
 };
 
-
 export default function PracticeListScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();

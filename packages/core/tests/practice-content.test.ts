@@ -39,9 +39,7 @@ describe("buildPracticeStudyItems", () => {
             romaji_hindi: "taberu",
           },
         ],
-        kana: [
-          { id: 2, character: "あ", romaji: "a", romaji_hindi: "a", type: "hiragana" },
-        ],
+        kana: [{ id: 2, character: "あ", romaji: "a", romaji_hindi: "a", type: "hiragana" }],
         kanji: [
           {
             id: 3,

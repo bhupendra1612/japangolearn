@@ -251,7 +251,10 @@ export default function DashboardHome() {
           style={s.practiceCard}
           onPress={() => {
             if (session) {
-              router.push("/(tabs)/practice");
+              // Practice is a registered tab with its own nested stack. Navigate
+              // selects that tab; push can create a second copy of the nested
+              // navigator when this card is pressed from Home.
+              router.navigate("/(tabs)/practice");
             } else {
               setShowPracticePrompt(true);
             }

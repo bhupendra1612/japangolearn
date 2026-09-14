@@ -58,15 +58,6 @@ export function AddToListModal({
   const [isCreating, setIsCreating] = useState(false);
   const [newListTitle, setNewListTitle] = useState("");
   const [savingToList, setSavingToList] = useState<string | null>(null);
-  const pendingStudyItem = studyItem
-    ? {
-        ...studyItem,
-        listItemId: `pending:${itemType}:${itemId}`,
-        itemId: String(itemId),
-        masteryScore: 0,
-        lastReviewed: null,
-      }
-    : null;
   // Ids of the user's lists that already contain this exact item. Loaded with
   // the lists so a tap can decide immediately whether to warn.
   const [existingListIds, setExistingListIds] = useState<string[]>([]);
@@ -207,6 +198,15 @@ export function AddToListModal({
     async (listId: string, ignoreBusy = false) => {
       const userId = session?.user.id;
       if ((!ignoreBusy && savingToList) || !userId) return;
+      const pendingStudyItem = studyItem
+        ? {
+            ...studyItem,
+            listItemId: `pending:${itemType}:${itemId}`,
+            itemId: String(itemId),
+            masteryScore: 0,
+            lastReviewed: null,
+          }
+        : null;
       setPendingAdd(null);
       setSavingToList(listId);
 
@@ -244,7 +244,7 @@ export function AddToListModal({
 
       setSavingToList(null);
     },
-    [itemId, itemType, onClose, pendingStudyItem, savingToList, session?.user.id]
+    [itemId, itemType, onClose, savingToList, session?.user.id, studyItem]
   );
 
   const handleAddToList = (listId: string, listTitle: string) => {

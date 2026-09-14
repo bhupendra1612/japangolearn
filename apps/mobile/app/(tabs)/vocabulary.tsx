@@ -11,6 +11,7 @@ import {
   Animated,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Speech from "expo-speech";
@@ -116,6 +117,23 @@ function getIcon(topic: string, wordIcon: string | null): string {
 export default function VocabularyScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
+  // Set when another screen — a practice list, say — wants a specific word
+  // opened. The detail view is local state rather than a route, so this is how
+  // it is reachable from outside.
+  const { focusItemId, focusNonce, fromListId } = useLocalSearchParams<{
+    focusItemId?: string;
+    focusNonce?: string;
+    fromListId?: string;
+  }>();
+  // The nonce makes repeat taps on the same item distinct; without it the
+  // params would be identical and this screen, still mounted, would ignore them.
+  const focusKey = focusNonce ?? focusItemId ?? null;
+  const consumedFocusRef = useRef<string | null>(null);
+  // True while the detail view was opened by a link from another screen (e.g. a
+  // practice list). Back then has to pop that route rather than fall back to
+  // this tab's browse list, or the user lands on Vocabulary instead of where
+  // they came from.
+  const openedViaFocusRef = useRef(false);
   const [words, setWords] = useState<Word[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -133,12 +151,25 @@ export default function VocabularyScreen() {
   const [selectedWord, setSelectedWord] = useState<Word | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
+  // Closing the detail or quiz view. Normally that just returns to this tab's
+  // browse list. But when the detail was opened from another screen, the browse
+  // list is not where the user was, so pop back to that screen instead. Either
+  // way the mode is reset so the tab does not reopen mid-detail next visit.
+  const closeOverlay = useCallback(() => {
+    setMode("browse");
+    // Opened from a practice list: return to that exact list. router.back() is
+    // not used because the list lives in the Practice tab's own navigator, and
+    // going "back" out of this tab is not reliable — navigating to the list's
+    // route by id always lands in the right place.
+    if (openedViaFocusRef.current && fromListId) {
+      openedViaFocusRef.current = false;
+      router.navigate({ pathname: "/(tabs)/practice/[id]", params: { id: fromListId } });
+    }
+  }, [fromListId]);
+
   // Detail and quiz are local state, not routes, so Android's back button would
   // otherwise leave the screen entirely instead of returning to the list.
-  useAndroidBack(
-    mode !== "browse",
-    useCallback(() => setMode("browse"), [])
-  );
+  useAndroidBack(mode !== "browse", closeOverlay);
 
   // Custom List State
   const [showAddListModal, setShowAddListModal] = useState(false);
@@ -258,7 +289,11 @@ export default function VocabularyScreen() {
   const speakWord = useCallback((word: Word) => {
     Speech.stop();
     setSpeakingWordId(word.id);
-    Speech.speak(word.kanji || word.hiragana, {
+    // Speak the hiragana reading, never the kanji. A kanji spoken in isolation
+    // is read with whichever reading the engine guesses, which for compounds is
+    // routinely wrong — お腹 (おなか) came out as お-はら. The hiragana column is
+    // the word's actual reading, so it is always pronounced correctly.
+    Speech.speak(word.hiragana, {
       language: "ja-JP",
       pitch: 1.0,
       rate: 0.8,
@@ -291,6 +326,37 @@ export default function VocabularyScreen() {
     },
     [speakWord, cardAnim]
   );
+
+  /*
+   * Opens the word named by ?focusItemId once the list has loaded. The index is
+   * taken from `filtered` because that is what the prev/next arrows walk, so a
+   * word opened this way still steps through its neighbours correctly.
+   *
+   * If the active category or search hides the word, the filters are cleared
+   * and this runs again against the full list — otherwise arriving from a
+   * practice list would silently do nothing whenever a filter happened to be
+   * set.
+   */
+  useEffect(() => {
+    if (!focusItemId || words.length === 0) return;
+    if (consumedFocusRef.current === focusKey) return;
+
+    const index = filtered.findIndex((word) => String(word.id) === focusItemId);
+    if (index >= 0) {
+      consumedFocusRef.current = focusKey;
+      openedViaFocusRef.current = true;
+      openDetail(filtered[index], index);
+      return;
+    }
+
+    if (words.some((word) => String(word.id) === focusItemId)) {
+      setSelectedCategory("All");
+      setSearch("");
+    } else {
+      // Not in this level's vocabulary at all; stop retrying on every render.
+      consumedFocusRef.current = focusKey;
+    }
+  }, [focusItemId, focusKey, words, filtered, openDetail]);
 
   const navigateWord = useCallback(
     (direction: 1 | -1) => {
@@ -625,6 +691,13 @@ export default function VocabularyScreen() {
     const wordIcon = getIcon(selectedWord.topic, selectedWord.icon);
     const isSpeaking = speakingWordId === selectedWord.id;
     const displayChar = selectedWord.kanji || selectedWord.hiragana;
+    // Every character of the written word gets its own animated glyph. This
+    // previously drew only displayChar[0], so a two-character word like お腹
+    // animated the お and left the 腹 undrawn. Array.from keeps any character
+    // outside the basic plane intact. The tiles shrink as the word grows so a
+    // longer word still fits the card on one row.
+    const strokeChars = Array.from(displayChar);
+    const strokeSize = Math.max(56, Math.min(120, Math.floor(280 / strokeChars.length)));
 
     return (
       <Animated.ScrollView
@@ -634,7 +707,7 @@ export default function VocabularyScreen() {
       >
         {/* Top bar */}
         <View style={s.detailTopBar}>
-          <TouchableOpacity onPress={() => setMode("browse")} style={s.backBtn} activeOpacity={0.7}>
+          <TouchableOpacity onPress={closeOverlay} style={s.backBtn} activeOpacity={0.7}>
             <Ionicons name="arrow-back" size={22} color={Colors.dark.text} />
           </TouchableOpacity>
           <Text style={s.detailCounter}>
@@ -652,23 +725,17 @@ export default function VocabularyScreen() {
           {/* Watermark */}
           <Text style={s.detailWatermark}>{wordIcon}</Text>
 
-          {/* Main word display (Animated first character) */}
+          {/* Animated stroke order for the whole written word */}
           <View style={s.detailMainCharContainer}>
-            {selectedWord.kanji ? (
+            {strokeChars.map((ch, i) => (
               <StrokeWriter
-                character={selectedWord.kanji[0]}
-                size={120}
+                key={`${ch}-${i}`}
+                character={ch}
+                size={strokeSize}
                 color={color}
                 outlineColor={Colors.dark.surface}
               />
-            ) : (
-              <StrokeWriter
-                character={selectedWord.hiragana[0]}
-                size={120}
-                color={color}
-                outlineColor={Colors.dark.surface}
-              />
-            )}
+            ))}
           </View>
 
           {/* Full Japanese Word Below Animation */}
@@ -1018,7 +1085,9 @@ export default function VocabularyScreen() {
 
   // ═══════════════════ RENDER ═══════════════════
   return (
-    <View style={[s.container, { paddingBottom: insets.bottom, paddingTop: insets.top }]}>
+    /* See writing.tsx: the tab bar already applies the bottom inset, so adding
+     * it here too left a dead band of background over the last row of cards. */
+    <View style={[s.container, { paddingTop: insets.top }]}>
       {mode === "browse" && renderBrowse()}
       {mode === "detail" && renderDetail()}
       {mode === "quiz" && renderQuiz()}
@@ -1356,9 +1425,12 @@ const s = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   detailMainCharContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "center",
-    height: 140,
+    gap: 4,
+    minHeight: 140,
     marginTop: Spacing.lg,
   },
   detailJapaneseFull: {

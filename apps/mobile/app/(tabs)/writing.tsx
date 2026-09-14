@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import * as Speech from "expo-speech";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "@/lib/supabase";
@@ -99,6 +100,22 @@ function formatGroup(group: string): string {
 export default function WritingScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
+  // Set when another screen wants a specific character opened. The type comes
+  // with it because the grid only ever loads one syllabary at a time, so a
+  // katakana id would not be found while hiragana is showing.
+  const { focusItemId, focusKanaType, focusNonce, fromListId } = useLocalSearchParams<{
+    focusItemId?: string;
+    focusKanaType?: string;
+    focusNonce?: string;
+    fromListId?: string;
+  }>();
+  // The nonce makes repeat taps on the same item distinct; without it the
+  // params would be identical and this screen, still mounted, would ignore them.
+  const focusKey = focusNonce ?? focusItemId ?? null;
+  const consumedFocusRef = useRef<string | null>(null);
+  // See vocabulary.tsx: when the detail was opened from another screen, back
+  // pops that route instead of returning to this tab's grid.
+  const openedViaFocusRef = useRef(false);
   const [kanaList, setKanaList] = useState<Kana[]>([]);
   const [loadFailed, setLoadFailed] = useState(false);
   const [offline, setOffline] = useState(false);
@@ -109,12 +126,22 @@ export default function WritingScreen() {
   const [selectedKana, setSelectedKana] = useState<Kana | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
+  // Closing detail or quiz. Returns to the grid, unless the detail was opened
+  // from another screen, in which case it pops back to that screen. Only detail
+  // is ever focus-opened, so the quiz path always just returns to the grid.
+  const closeOverlay = useCallback(() => {
+    setMode("grid");
+    // Opened from a practice list: navigate back to that list by id. See
+    // vocabulary.tsx — router.back() across tab navigators is not reliable.
+    if (openedViaFocusRef.current && fromListId) {
+      openedViaFocusRef.current = false;
+      router.navigate({ pathname: "/(tabs)/practice/[id]", params: { id: fromListId } });
+    }
+  }, [fromListId]);
+
   // Detail and quiz are local state, not routes, so Android's back button would
   // otherwise leave the screen entirely instead of returning to the grid.
-  useAndroidBack(
-    mode !== "grid",
-    useCallback(() => setMode("grid"), [])
-  );
+  useAndroidBack(mode !== "grid", closeOverlay);
 
   // Custom List State
   const [showAddListModal, setShowAddListModal] = useState(false);
@@ -241,6 +268,41 @@ export default function WritingScreen() {
     },
     [speakKana, cardAnim]
   );
+
+  /*
+   * Opens the character named by ?focusItemId once its syllabary has loaded,
+   * switching syllabary and clearing the group filter first if either would
+   * otherwise hide it. Index comes from `filtered` so the prev/next arrows keep
+   * working on a character opened this way.
+   */
+  useEffect(() => {
+    if (!focusItemId) return;
+    if (consumedFocusRef.current === focusKey) return;
+
+    if (
+      (focusKanaType === "hiragana" || focusKanaType === "katakana") &&
+      focusKanaType !== kanaType
+    ) {
+      setKanaType(focusKanaType);
+      return;
+    }
+
+    if (kanaList.length === 0) return;
+
+    const index = filtered.findIndex((kana) => String(kana.id) === focusItemId);
+    if (index >= 0) {
+      consumedFocusRef.current = focusKey;
+      openedViaFocusRef.current = true;
+      openDetail(filtered[index], index);
+      return;
+    }
+
+    if (kanaList.some((kana) => String(kana.id) === focusItemId)) {
+      setActiveGroup("All");
+    } else {
+      consumedFocusRef.current = focusKey;
+    }
+  }, [focusItemId, focusKey, focusKanaType, kanaType, kanaList, filtered, openDetail]);
 
   const navigateKana = useCallback(
     (direction: 1 | -1) => {
@@ -516,7 +578,7 @@ export default function WritingScreen() {
       >
         {/* Top bar */}
         <View style={s.detailTopBar}>
-          <TouchableOpacity onPress={() => setMode("grid")} style={s.backBtn} activeOpacity={0.7}>
+          <TouchableOpacity onPress={closeOverlay} style={s.backBtn} activeOpacity={0.7}>
             <Ionicons name="arrow-back" size={22} color={Colors.dark.text} />
           </TouchableOpacity>
           <Text style={s.detailCounter}>
@@ -872,7 +934,14 @@ export default function WritingScreen() {
 
   // ═══════════════════ RENDER ═══════════════════
   return (
-    <View style={[s.container, { paddingBottom: insets.bottom, paddingTop: insets.top }]}>
+    /*
+     * No paddingBottom. The tab bar is a laid-out bar, not an overlay, and its
+     * own style already adds the bottom safe-area inset — so padding the screen
+     * by it again reserved that height twice and left a dead band of background
+     * above the tab bar, covering the last row of cards. It sat on every mode
+     * because this container wraps the grid, the detail view and the quiz.
+     */
+    <View style={[s.container, { paddingTop: insets.top }]}>
       {mode === "grid" && renderGrid()}
       {mode === "detail" && renderDetail()}
       {mode === "quiz" && renderQuiz()}
@@ -969,7 +1038,7 @@ const s = StyleSheet.create({
   toggleRow: {
     flexDirection: "row",
     paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
     gap: Spacing.sm,
   },
   toggleBtn: {
@@ -1002,7 +1071,18 @@ const s = StyleSheet.create({
   hindiBtnText: { fontSize: 18, fontWeight: FontWeight.extrabold, color: Colors.dark.textMuted },
 
   // ── Filter Chips ──
-  chipScroll: { maxHeight: 44, marginBottom: Spacing.xs },
+  /*
+   * No maxHeight. It used to be capped at 44 while the content measures 40 —
+   * a 32px chip plus 4px padding top and bottom — so there were four pixels of
+   * slack. Anything that pushed past it (a larger system font scale, a taller
+   * line box for the Japanese row labels) overflowed, and a React Native View
+   * on Android does not clip by default: the excess drew on top of the script
+   * toggle above and the first group heading below instead of being hidden.
+   *
+   * flexShrink: 0 stops the surrounding flex column squeezing the row when the
+   * grid below is long.
+   */
+  chipScroll: { flexShrink: 0, marginBottom: Spacing.sm },
   chipRow: { paddingHorizontal: Spacing.lg, paddingVertical: 4, gap: 6, alignItems: "center" },
   chip: {
     flexDirection: "row",

@@ -12,6 +12,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Speech from "expo-speech";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
@@ -28,9 +29,16 @@ type ListItem = {
   item_id: number;
   mastery_score: number;
   last_reviewed: string | null;
-  // Detail data joined from other tables
-  content?: string; // e.g. kanji or hiragana for vocab, character for kana
-  subContent?: string; // romaji or meaning
+  // Detail data joined from other tables, so a whole list can be revised
+  // without opening each item.
+  primary: string; // the Japanese: kanji, kana character, or grammar pattern
+  reading?: string; // hiragana reading, only when it differs from `primary`
+  romaji?: string;
+  romajiHindi?: string; // Hindi transliteration of the reading, if any
+  english?: string; // meaning
+  meaningHindi?: string; // short Hindi meaning, if any
+  speakText?: string; // what the audio button pronounces (a reading, not kanji)
+  kanaType?: "hiragana" | "katakana";
 };
 
 const ITEM_TYPE_EMOJI: Record<PracticeItemType, string> = {
@@ -38,13 +46,6 @@ const ITEM_TYPE_EMOJI: Record<PracticeItemType, string> = {
   kana: "あ",
   kanji: "漢",
   grammar: "文",
-};
-
-const ITEM_TYPE_LABEL: Record<PracticeItemType, string> = {
-  vocabulary: "Vocabulary",
-  kana: "Kana",
-  kanji: "Kanji",
-  grammar: "Grammar",
 };
 
 export default function PracticeListScreen() {
@@ -57,6 +58,22 @@ export default function PracticeListScreen() {
   const [list, setList] = useState<PracticeList | null>(null);
   const [items, setItems] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  // The row whose audio is currently playing, so its button can show a
+  // playing state. Only one plays at a time.
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
+
+  const speakItem = useCallback((item: ListItem) => {
+    if (!item.speakText) return;
+    Speech.stop();
+    setSpeakingId(item.id);
+    Speech.speak(item.speakText, {
+      language: "ja-JP",
+      pitch: 1.0,
+      rate: 0.8,
+      onDone: () => setSpeakingId(null),
+      onError: () => setSpeakingId(null),
+    });
+  }, []);
 
   const loadData = useCallback(async () => {
     if (!userId) return;
@@ -97,8 +114,14 @@ export default function PracticeListScreen() {
         item_id: Number(item.itemId),
         mastery_score: item.masteryScore,
         last_reviewed: item.lastReviewed,
-        content: item.front,
-        subContent: item.back,
+        primary: item.front,
+        reading: item.reading,
+        romaji: item.romaji,
+        romajiHindi: item.romajiHindi,
+        english: item.english,
+        meaningHindi: item.meaningHindi,
+        speakText: item.audioText,
+        kanaType: item.kanaType,
       }))
     );
 
@@ -110,6 +133,12 @@ export default function PracticeListScreen() {
       if (session?.user && id) {
         void loadData();
       }
+      // Stop any playing pronunciation when the screen loses focus, so audio
+      // does not carry on after the user has left the list.
+      return () => {
+        Speech.stop();
+        setSpeakingId(null);
+      };
     }, [session?.user, id, loadData])
   );
 
@@ -168,6 +197,37 @@ export default function PracticeListScreen() {
     router.push({
       pathname: "/study/quiz",
       params: { listId: id },
+    });
+  };
+
+  /*
+   * Each content tab shows its own detail view from local state rather than a
+   * route, so there is no /vocabulary/:id to link to. Handing the tab a
+   * focusItemId is what lets a list row open the same full detail a learner
+   * gets by tapping the word in its own tab.
+   */
+  const DETAIL_ROUTES: Record<PracticeItemType, string> = {
+    vocabulary: "/(tabs)/vocabulary",
+    kana: "/(tabs)/writing",
+    kanji: "/(tabs)/kanji",
+    grammar: "/(tabs)/grammar",
+  };
+
+  const openItemDetail = (item: ListItem) => {
+    router.push({
+      pathname: DETAIL_ROUTES[item.item_type] as never,
+      params: {
+        focusItemId: String(item.item_id),
+        // Tabs stay mounted, so pushing the same word twice would hand the
+        // target identical params and its effect would never re-run — the
+        // second tap would do nothing. This makes every tap distinct.
+        focusNonce: String(Date.now()),
+        // The id of this list, so the detail's back button can return straight
+        // here. Content tabs live in a different navigator, so router.back()
+        // from one is not reliable — the target navigates back by this id.
+        fromListId: String(id),
+        ...(item.kanaType ? { focusKanaType: item.kanaType } : {}),
+      },
     });
   };
 
@@ -261,34 +321,75 @@ export default function PracticeListScreen() {
             contentContainerStyle={s.listContent}
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => (
-              <View style={s.itemCard}>
+              <TouchableOpacity
+                style={s.itemCard}
+                onPress={() => openItemDetail(item)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.primary}${item.english ? `, ${item.english}` : ""}. Open details`}
+              >
                 <View style={s.itemTypeBox}>
                   <Text style={s.itemTypeEmoji}>{ITEM_TYPE_EMOJI[item.item_type]}</Text>
                 </View>
 
                 <View style={s.itemInfo}>
-                  <Text style={s.itemTypeLabel}>{ITEM_TYPE_LABEL[item.item_type]}</Text>
-                  <Text style={s.itemContent}>{item.content}</Text>
-                  <Text style={s.itemSubContent} numberOfLines={1}>
-                    {item.subContent}
-                  </Text>
+                  <View style={s.itemPrimaryRow}>
+                    <Text style={s.itemPrimary}>{item.primary}</Text>
+                    {item.reading ? <Text style={s.itemReading}>{item.reading}</Text> : null}
+                  </View>
+
+                  {item.romaji ? (
+                    <Text style={s.itemRomaji} numberOfLines={1}>
+                      {item.romaji}
+                      {item.romajiHindi ? `  ·  ${item.romajiHindi}` : ""}
+                    </Text>
+                  ) : null}
+
+                  {item.english ? (
+                    <Text style={s.itemEnglish} numberOfLines={2}>
+                      {item.english}
+                    </Text>
+                  ) : null}
+
+                  {item.meaningHindi ? (
+                    <Text style={s.itemHindi} numberOfLines={1}>
+                      🇮🇳 {item.meaningHindi}
+                    </Text>
+                  ) : null}
+
+                  {/* Mastery bar */}
+                  <View style={s.masteryRow}>
+                    <View style={s.masteryTrack}>
+                      <View
+                        style={[
+                          s.masteryFill,
+                          {
+                            width: `${Math.max(5, item.mastery_score)}%`,
+                            backgroundColor: getMasteryColor(item.mastery_score),
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={s.masteryText}>{Math.round(item.mastery_score)}%</Text>
+                  </View>
                 </View>
 
-                {/* Mastery Bar */}
-                <View style={s.masteryWrapper}>
-                  <View style={s.masteryTrack}>
-                    <View
-                      style={[
-                        s.masteryFill,
-                        {
-                          width: `${Math.max(5, item.mastery_score)}%`,
-                          backgroundColor: getMasteryColor(item.mastery_score),
-                        },
-                      ]}
+                {/* Audio */}
+                {item.speakText ? (
+                  <TouchableOpacity
+                    style={[s.audioBtn, speakingId === item.id && s.audioBtnActive]}
+                    onPress={() => speakItem(item)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Play pronunciation of ${item.reading || item.primary}`}
+                  >
+                    <Ionicons
+                      name={speakingId === item.id ? "volume-high" : "volume-medium-outline"}
+                      size={20}
+                      color={speakingId === item.id ? "#fff" : Colors.primary[400]}
                     />
-                  </View>
-                  <Text style={s.masteryText}>{Math.round(item.mastery_score)}%</Text>
-                </View>
+                  </TouchableOpacity>
+                ) : null}
 
                 <TouchableOpacity
                   style={s.removeBtn}
@@ -297,9 +398,9 @@ export default function PracticeListScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Remove from list"
                 >
-                  <Ionicons name="close" size={20} color={Colors.dark.textMuted} />
+                  <Ionicons name="close" size={18} color={Colors.dark.textMuted} />
                 </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
             )}
             ListEmptyComponent={
               <View style={s.emptyBox}>
@@ -420,6 +521,8 @@ const s = StyleSheet.create({
     alignItems: "center",
     backgroundColor: Colors.dark.card,
     padding: Spacing.md,
+    // Room at the top-right for the absolutely positioned remove button.
+    paddingRight: Spacing["2xl"],
     borderRadius: BorderRadius.xl,
     borderWidth: 1,
     borderColor: Colors.dark.border,
@@ -432,43 +535,57 @@ const s = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: Spacing.md,
+    alignSelf: "flex-start",
   },
   itemTypeEmoji: {
     fontSize: 20,
   },
   itemInfo: {
     flex: 1,
+    gap: 2,
   },
-  itemTypeLabel: {
-    color: Colors.primary[300],
-    fontSize: FontSize.xs,
-    fontWeight: FontWeight.bold,
-    marginBottom: 2,
-    textTransform: "uppercase",
+  itemPrimaryRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
   },
-  itemContent: {
-    fontSize: FontSize.lg,
+  itemPrimary: {
+    fontSize: FontSize.xl,
     fontWeight: FontWeight.bold,
     color: Colors.dark.text,
-    marginBottom: 2,
   },
-  itemSubContent: {
+  itemReading: {
+    fontSize: FontSize.base,
+    color: Colors.primary[300],
+    fontWeight: FontWeight.semibold,
+  },
+  itemRomaji: {
     fontSize: FontSize.sm,
     color: Colors.dark.textMuted,
     fontWeight: FontWeight.medium,
   },
-  masteryWrapper: {
-    alignItems: "flex-end",
-    width: 60,
-    marginRight: Spacing.md,
+  itemEnglish: {
+    fontSize: FontSize.sm,
+    color: Colors.dark.textSecondary,
+  },
+  itemHindi: {
+    fontSize: FontSize.sm,
+    color: Colors.accent[300],
+  },
+  masteryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginTop: 4,
   },
   masteryTrack: {
-    width: "100%",
+    flex: 1,
+    maxWidth: 120,
     height: 6,
     backgroundColor: Colors.dark.surface,
     borderRadius: 3,
     overflow: "hidden",
-    marginBottom: 4,
   },
   masteryFill: {
     height: "100%",
@@ -479,8 +596,27 @@ const s = StyleSheet.create({
     fontWeight: "bold",
     color: Colors.dark.textMuted,
   },
+  audioBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.primary[500] + "1A",
+    borderWidth: 1,
+    borderColor: Colors.primary[500] + "40",
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: Spacing.sm,
+    alignSelf: "center",
+  },
+  audioBtnActive: {
+    backgroundColor: Colors.primary[500],
+    borderColor: Colors.primary[500],
+  },
   removeBtn: {
-    padding: Spacing.sm,
+    position: "absolute",
+    top: Spacing.sm,
+    right: Spacing.sm,
+    padding: 4,
   },
   emptyBox: {
     alignItems: "center",

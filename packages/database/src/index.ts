@@ -166,6 +166,7 @@ export type PracticeList = {
   user_id?: string;
   title: string;
   is_smart_list: boolean;
+  sort_order?: number;
   created_at?: string;
   item_count?: number;
 };

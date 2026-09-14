@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
+import { captureException } from "@/lib/monitoring";
 import { router } from "expo-router";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -74,6 +76,57 @@ export default function ProfileScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNewPass, setShowNewPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
+
+  // Activity counts per day for the last seven days, keyed by ISO date. Moved
+  // here from Home along with the calendar that renders it.
+  const [weekActivity, setWeekActivity] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 6);
+
+    void (async () => {
+      const { data, error } = await supabase
+        .from("activity_log")
+        .select("created_at")
+        .eq("user_id", user.id)
+        .gte("created_at", weekAgo.toISOString());
+
+      if (cancelled) return;
+      // The rest of Profile does not depend on this, so an empty calendar is a
+      // better failure than an error screen — but it must still be reported.
+      if (error) {
+        captureException(error, { screen: "profile" });
+        return;
+      }
+      const map: Record<string, number> = {};
+      data?.forEach((row: { created_at: string }) => {
+        const date = new Date(row.created_at).toISOString().split("T")[0];
+        map[date] = (map[date] || 0) + 1;
+      });
+      setWeekActivity(map);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const weekDays = Array.from({ length: 7 }).map((_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    const dateStr = d.toISOString().split("T")[0];
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    return {
+      date: dateStr,
+      dayName: dayNames[d.getDay()],
+      dayNum: d.getDate(),
+      isToday: i === 6,
+      count: weekActivity[dateStr] || 0,
+    };
+  });
 
   // Computed profile data
   const xp = profile?.xp ?? 0;
@@ -390,6 +443,41 @@ export default function ProfileScreen() {
           </View>
           <Text style={[s.statValue, { color: Colors.gold[400] }]}>Lv.{xpLevel.level}</Text>
           <Text style={s.statLabel}>Player</Text>
+        </View>
+      </View>
+
+      {/* This Week */}
+      <View style={s.card}>
+        <View style={s.cardHeader}>
+          <View style={s.cardTitleRow}>
+            <Ionicons name="flame" size={18} color="#F97316" />
+            <Text style={s.cardTitle}>This Week</Text>
+          </View>
+          <Text style={s.xpBadge}>{streak} day streak</Text>
+        </View>
+        <View style={s.weekRow}>
+          {weekDays.map((day) => {
+            const active = day.count > 0;
+            const intensity = day.count >= 5 ? 1 : day.count >= 2 ? 0.7 : day.count >= 1 ? 0.45 : 0;
+            return (
+              <View key={day.date} style={s.weekCol}>
+                <Text style={s.weekDayName}>{day.dayName}</Text>
+                <View
+                  style={[
+                    s.weekDot,
+                    active && {
+                      backgroundColor: `rgba(16,185,129,${intensity})`,
+                      borderColor: "#10B981",
+                    },
+                    day.isToday && s.weekDotToday,
+                  ]}
+                >
+                  <Text style={[s.weekDotNum, active && { color: "#fff" }]}>{day.dayNum}</Text>
+                </View>
+                {active && <Text style={s.weekCount}>{day.count}</Text>}
+              </View>
+            );
+          })}
         </View>
       </View>
 
@@ -1034,6 +1122,30 @@ const s = StyleSheet.create({
     marginHorizontal: Spacing.lg,
     marginBottom: Spacing.lg,
   },
+
+  // ── This Week (moved from Home) ──
+  weekRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  weekCol: { alignItems: "center", flex: 1, gap: 4 },
+  weekDayName: { fontSize: 10, color: Colors.dark.textMuted, fontWeight: FontWeight.semibold },
+  weekDot: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: Colors.dark.surface,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: Colors.dark.border,
+  },
+  weekDotToday: {
+    borderColor: Colors.primary[500],
+    borderWidth: 2,
+  },
+  weekDotNum: { fontSize: 12, fontWeight: FontWeight.bold, color: Colors.dark.textMuted },
+  weekCount: { fontSize: 9, color: "#10B981", fontWeight: FontWeight.bold },
   statCard: {
     flex: 1,
     backgroundColor: Colors.dark.card,

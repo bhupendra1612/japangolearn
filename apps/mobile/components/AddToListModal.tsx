@@ -29,6 +29,21 @@ type AddToListModalProps = {
   studyItem?: PracticeStudyItem;
 };
 
+// The noun used in the "already added" prompt, so it reads naturally for each
+// kind of content rather than a generic "item".
+const ITEM_NOUN: Record<PracticeItemType, string> = {
+  vocabulary: "word",
+  kana: "character",
+  kanji: "kanji",
+  grammar: "pattern",
+};
+
+type PendingAdd = {
+  listId: string;
+  listTitle: string;
+  otherListTitles: string[];
+};
+
 export function AddToListModal({
   visible,
   onClose,
@@ -43,21 +58,19 @@ export function AddToListModal({
   const [isCreating, setIsCreating] = useState(false);
   const [newListTitle, setNewListTitle] = useState("");
   const [savingToList, setSavingToList] = useState<string | null>(null);
-  const pendingStudyItem = studyItem
-    ? {
-        ...studyItem,
-        listItemId: `pending:${itemType}:${itemId}`,
-        itemId: String(itemId),
-        masteryScore: 0,
-        lastReviewed: null,
-      }
-    : null;
+  // Ids of the user's lists that already contain this exact item. Loaded with
+  // the lists so a tap can decide immediately whether to warn.
+  const [existingListIds, setExistingListIds] = useState<string[]>([]);
+  // Set when a tap needs confirming because the item is already in other lists.
+  const [pendingAdd, setPendingAdd] = useState<PendingAdd | null>(null);
 
   const loadLists = useCallback(async () => {
     const userId = session?.user.id;
     if (!userId) return;
     setLoading(true);
     setLists([]);
+    setPendingAdd(null);
+    setExistingListIds([]);
     // Fetch user's lists, ensuring the smart list exists
     const cacheKey = `practice-list-picker:${userId}`;
     const isStillCurrentUser = async () => {
@@ -104,9 +117,23 @@ export function AddToListModal({
     if (data && (await isStillCurrentUser())) {
       setLists(data);
       void writeCache(cacheKey, data);
+      // Which of these lists already hold this item? Scoped to the ids just
+      // loaded, so it never reads another user's rows.
+      const { data: memberships } = await supabase
+        .from("practice_list_items")
+        .select("list_id")
+        .eq("item_type", itemType)
+        .eq("item_id", itemId)
+        .in(
+          "list_id",
+          data.map((list) => list.id)
+        );
+      if (await isStillCurrentUser()) {
+        setExistingListIds(memberships?.map((row) => row.list_id) ?? []);
+      }
     }
     setLoading(false);
-  }, [session?.user.id]);
+  }, [session?.user.id, itemType, itemId]);
 
   useEffect(() => {
     if (visible) {
@@ -128,38 +155,38 @@ export function AddToListModal({
       Alert.alert("Could not create list", "Please try again when you are connected.");
     } else {
       const createdList = result.data as PracticeList;
+      const cachedCreatedList = { ...createdList, item_count: 0 };
       setLists((previous) => [createdList, ...previous]);
       void updateCache<PracticeList[]>(`practice-list-picker:${session.user.id}`, (current) => [
         createdList,
         ...(current ?? lists).filter((list) => list.id !== createdList.id),
       ]);
-      const addResult = await addPracticeListItemWithQueue(supabase, {
-        listId: createdList.id,
-        itemType,
-        itemId,
-        expectedUserId: session.user.id,
-      });
-      if (addResult.status === "failed") {
-        Alert.alert(
-          "Could not save item",
-          "The new list was created, but this item was not added."
-        );
-      } else {
-        void updateCache<PracticeList[]>(`practice-lists:${session.user.id}`, (current) => [
-          { ...createdList, item_count: 1 },
-          ...(current ?? []).filter((list) => list.id !== createdList.id),
-        ]);
-        void writeCache<PracticeList>(`practice-list:${session.user.id}:${createdList.id}`, {
-          ...createdList,
-          item_count: 1,
+      void updateCache<PracticeList[]>(`practice-lists:${session.user.id}`, (current) => [
+        cachedCreatedList,
+        ...(current ?? []).filter((list) => list.id !== createdList.id),
+      ]);
+      void writeCache<PracticeList>(
+        `practice-list:${session.user.id}:${createdList.id}`,
+        cachedCreatedList
+      );
+      // A brand-new list cannot already hold the item, but it may live in other
+      // lists — route through the same check so the warning still fires.
+      setNewListTitle("");
+      setIsCreating(false);
+      const otherListTitles = lists
+        .filter((list) => existingListIds.includes(list.id))
+        .map((list) => list.title);
+      if (otherListTitles.length > 0) {
+        setSavingToList(null);
+        setPendingAdd({
+          listId: createdList.id,
+          listTitle: createdList.title,
+          otherListTitles,
         });
-        if (pendingStudyItem) {
-          void writeCache(`practice-study:${session.user.id}:${createdList.id}`, [
-            pendingStudyItem,
-          ]);
-        }
-        onClose();
+      } else {
+        void performAdd(createdList.id, true);
       }
+      return;
     }
 
     setNewListTitle("");
@@ -167,44 +194,79 @@ export function AddToListModal({
     setSavingToList(null);
   };
 
-  const handleAddToList = async (listId: string) => {
-    const userId = session?.user.id;
-    if (savingToList || !userId) return;
-    setSavingToList(listId);
+  const performAdd = useCallback(
+    async (listId: string, ignoreBusy = false) => {
+      const userId = session?.user.id;
+      if ((!ignoreBusy && savingToList) || !userId) return;
+      const pendingStudyItem = studyItem
+        ? {
+            ...studyItem,
+            listItemId: `pending:${itemType}:${itemId}`,
+            itemId: String(itemId),
+            masteryScore: 0,
+            lastReviewed: null,
+          }
+        : null;
+      setPendingAdd(null);
+      setSavingToList(listId);
 
-    const result = await addPracticeListItemWithQueue(supabase, {
-      listId,
-      itemType,
-      itemId,
-      expectedUserId: userId,
-    });
-    if (result.status === "failed") {
-      Alert.alert("Could not save item", "Please try again when you are connected.");
-    } else {
-      const cachedStudy = await readCache<PracticeStudyItem[]>(
-        `practice-study:${userId}:${listId}`
-      );
-      const alreadyInCachedStudy = cachedStudy?.data.some(
-        (item) => item.itemType === itemType && Number(item.itemId) === itemId
-      );
-      if (pendingStudyItem && !alreadyInCachedStudy) {
-        void updateCache<PracticeStudyItem[]>(`practice-study:${userId}:${listId}`, (current) => [
-          ...(current ?? []),
-          pendingStudyItem,
-        ]);
+      const result = await addPracticeListItemWithQueue(supabase, {
+        listId,
+        itemType,
+        itemId,
+        expectedUserId: userId,
+      });
+      if (result.status === "failed") {
+        Alert.alert("Could not save item", "Please try again when you are connected.");
+      } else {
+        const cachedStudy = await readCache<PracticeStudyItem[]>(
+          `practice-study:${userId}:${listId}`
+        );
+        const alreadyInCachedStudy = cachedStudy?.data.some(
+          (item) => item.itemType === itemType && Number(item.itemId) === itemId
+        );
+        if (pendingStudyItem && !alreadyInCachedStudy) {
+          void updateCache<PracticeStudyItem[]>(`practice-study:${userId}:${listId}`, (current) => [
+            ...(current ?? []),
+            pendingStudyItem,
+          ]);
+        }
+        if ((cachedStudy || pendingStudyItem) && !alreadyInCachedStudy) {
+          void updateCache<PracticeList[]>(`practice-lists:${userId}`, (current) => {
+            if (!current) return undefined;
+            return current.map((list) =>
+              list.id === listId ? { ...list, item_count: (list.item_count ?? 0) + 1 } : list
+            );
+          });
+        }
+        onClose();
       }
-      if ((cachedStudy || pendingStudyItem) && !alreadyInCachedStudy) {
-        void updateCache<PracticeList[]>(`practice-lists:${userId}`, (current) => {
-          if (!current) return undefined;
-          return current.map((list) =>
-            list.id === listId ? { ...list, item_count: (list.item_count ?? 0) + 1 } : list
-          );
-        });
-      }
+
+      setSavingToList(null);
+    },
+    [itemId, itemType, onClose, savingToList, session?.user.id, studyItem]
+  );
+
+  const handleAddToList = (listId: string, listTitle: string) => {
+    if (savingToList) return;
+
+    // Already in the tapped list — nothing to do, and no warning to show.
+    if (existingListIds.includes(listId)) {
       onClose();
+      return;
     }
 
-    setSavingToList(null);
+    // In any OTHER list? Confirm before adding a second copy.
+    const otherListTitles = lists
+      .filter((list) => list.id !== listId && existingListIds.includes(list.id))
+      .map((list) => list.title);
+
+    if (otherListTitles.length > 0) {
+      setPendingAdd({ listId, listTitle, otherListTitles });
+      return;
+    }
+
+    void performAdd(listId);
   };
 
   if (!visible || !session?.user) return null;
@@ -278,11 +340,15 @@ export function AddToListModal({
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={s.listItem}
-                  onPress={() => handleAddToList(item.id)}
+                  onPress={() => handleAddToList(item.id, item.title)}
                   activeOpacity={0.7}
                   disabled={savingToList !== null}
                   accessibilityRole="button"
-                  accessibilityLabel={`Add to list ${item.title}`}
+                  accessibilityLabel={
+                    existingListIds.includes(item.id)
+                      ? `Already in ${item.title}`
+                      : `Add to list ${item.title}`
+                  }
                   accessibilityState={{ disabled: savingToList !== null }}
                 >
                   <View style={[s.listIconBox, item.is_smart_list && s.smartListIconBox]}>
@@ -297,6 +363,8 @@ export function AddToListModal({
                   </Text>
                   {savingToList === item.id ? (
                     <ActivityIndicator size="small" color={Colors.primary[400]} />
+                  ) : existingListIds.includes(item.id) ? (
+                    <Ionicons name="checkmark-circle" size={22} color={Colors.primary[400]} />
                   ) : (
                     <Ionicons name="add-circle-outline" size={22} color={Colors.dark.textMuted} />
                   )}
@@ -306,6 +374,48 @@ export function AddToListModal({
           )}
         </View>
       </KeyboardAvoidingView>
+
+      {pendingAdd && (
+        <View style={s.confirmOverlay}>
+          <TouchableOpacity
+            style={s.confirmBackdrop}
+            activeOpacity={1}
+            onPress={() => setPendingAdd(null)}
+          />
+          <View style={s.confirmCard}>
+            <Text style={s.confirmTitle}>Already in your practice lists</Text>
+            <Text style={s.confirmBody}>
+              <Text style={s.confirmItem}>「{itemTitle}」</Text> is already added to:
+            </Text>
+            {pendingAdd.otherListTitles.map((listTitle) => (
+              <Text key={listTitle} style={s.confirmListName}>
+                {"•"} {listTitle}
+              </Text>
+            ))}
+            <Text style={s.confirmQuestion}>
+              Add this {ITEM_NOUN[itemType]} to {pendingAdd.listTitle} as well?
+            </Text>
+            <View style={s.confirmActions}>
+              <TouchableOpacity
+                style={s.confirmCancelBtn}
+                onPress={() => setPendingAdd(null)}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel, do not add"
+              >
+                <Text style={s.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={s.confirmAddBtn}
+                onPress={() => void performAdd(pendingAdd.listId)}
+                accessibilityRole="button"
+                accessibilityLabel={`Add anyway to ${pendingAdd.listTitle}`}
+              >
+                <Text style={s.confirmAddText}>Add Anyway</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -450,5 +560,83 @@ const s = StyleSheet.create({
   smartListName: {
     color: "#FCA5A5",
     fontWeight: FontWeight.bold,
+  },
+
+  // ── Duplicate confirmation ──
+  // Sits above the sheet (zIndex on the parent overlay is 1000) so it reads as
+  // a decision on top of the list, not a separate screen.
+  confirmOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: Spacing.xl,
+    zIndex: 1100,
+  },
+  confirmBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.6)",
+  },
+  confirmCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: Colors.dark.card,
+    borderRadius: BorderRadius["2xl"],
+    padding: Spacing.xl,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  confirmTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.bold,
+    color: Colors.dark.text,
+    marginBottom: Spacing.md,
+  },
+  confirmBody: {
+    fontSize: FontSize.base,
+    color: Colors.dark.textSecondary,
+    marginBottom: Spacing.sm,
+  },
+  confirmItem: {
+    color: Colors.primary[300],
+    fontWeight: FontWeight.bold,
+  },
+  confirmListName: {
+    fontSize: FontSize.base,
+    color: Colors.dark.text,
+    fontWeight: FontWeight.medium,
+    marginLeft: Spacing.sm,
+    marginBottom: 2,
+  },
+  confirmQuestion: {
+    fontSize: FontSize.base,
+    color: Colors.dark.text,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  confirmActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: Spacing.sm,
+  },
+  confirmCancelBtn: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  confirmCancelText: {
+    color: Colors.dark.textMuted,
+    fontWeight: FontWeight.semibold,
+    fontSize: FontSize.base,
+  },
+  confirmAddBtn: {
+    backgroundColor: Colors.primary[500],
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  confirmAddText: {
+    color: "#fff",
+    fontWeight: FontWeight.bold,
+    fontSize: FontSize.base,
   },
 });

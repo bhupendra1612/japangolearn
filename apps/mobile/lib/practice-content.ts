@@ -84,13 +84,19 @@ export async function loadPracticeStudyItems(
 
   const [vocabularyResult, kanaResult, kanjiResult, grammarResult] = await Promise.all([
     vocabularyIds.length
-      ? supabase.from("vocabulary").select("id, kanji, hiragana, english").in("id", vocabularyIds)
+      ? supabase
+          .from("vocabulary")
+          .select("id, kanji, hiragana, english, romaji, romaji_hindi")
+          .in("id", vocabularyIds)
       : Promise.resolve({ data: [], error: null }),
     kanaIds.length
-      ? supabase.from("kana").select("id, character, romaji").in("id", kanaIds)
+      ? supabase.from("kana").select("id, character, romaji, romaji_hindi, type").in("id", kanaIds)
       : Promise.resolve({ data: [], error: null }),
     kanjiIds.length
-      ? supabase.from("kanji").select("id, character, hiragana, meaning_en").in("id", kanjiIds)
+      ? supabase
+          .from("kanji")
+          .select("id, character, hiragana, meaning_en, romaji, meaning_hi")
+          .in("id", kanjiIds)
       : Promise.resolve({ data: [], error: null }),
     grammarIds.length
       ? supabase.from("grammar_patterns").select("id, title, pattern, meaning").in("id", grammarIds)

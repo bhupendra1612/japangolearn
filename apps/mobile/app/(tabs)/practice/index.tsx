@@ -7,6 +7,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -19,7 +23,11 @@ import { useFocusEffect } from "@react-navigation/native";
 import { LoadError } from "@/components/LoadError";
 import { captureException } from "@/lib/monitoring";
 import type { PracticeList } from "@japangolearn/database";
-import { createPracticeListWithQueue, deletePracticeListWithQueue } from "@/lib/offline-queue";
+import {
+  createPracticeListWithQueue,
+  deletePracticeListWithQueue,
+  reorderPracticeListsWithQueue,
+} from "@/lib/offline-queue";
 import { readCache, removeCache, updateCache, writeCache } from "@/lib/offline-cache";
 
 export default function PracticeHubScreen() {
@@ -31,6 +39,10 @@ export default function PracticeHubScreen() {
   const [streak, setStreak] = useState({ current: 0, longest: 0 });
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newListTitle, setNewListTitle] = useState("");
+  const [savingNew, setSavingNew] = useState(false);
+  const [reordering, setReordering] = useState(false);
 
   const loadData = useCallback(async () => {
     const userId = session?.user.id;
@@ -65,9 +77,9 @@ export default function PracticeHubScreen() {
     const cacheKey = `practice-lists:${userId}`;
     let { data: listsData, error: listsError } = await supabase
       .from("practice_lists")
-      .select("id, title, is_smart_list")
+      .select("id, title, is_smart_list, sort_order")
       .eq("user_id", userId)
-      .order("is_smart_list", { ascending: false })
+      .order("sort_order", { ascending: true })
       .order("created_at", { ascending: false });
 
     if (listsError) {
@@ -91,7 +103,7 @@ export default function PracticeHubScreen() {
         expectedUserId: userId,
       });
       if (result.status !== "failed" && result.data) {
-        listsData = [result.data as PracticeList];
+        listsData = [result.data];
       }
     }
 
@@ -119,6 +131,94 @@ export default function PracticeHubScreen() {
     useCallback(() => {
       void loadData();
     }, [loadData])
+  );
+
+  const handleCreateList = async () => {
+    const userId = session?.user.id;
+    const title = newListTitle.trim();
+    if (!userId || !title || savingNew) return;
+    setSavingNew(true);
+
+    // A blank list, ready to have items added to it later. is_smart_list stays
+    // false so it behaves like any user list (deletable, shown after the smart
+    // list).
+    const nextOrder = lists.reduce((max, list) => Math.max(max, list.sort_order ?? 0), 0) + 1;
+    const result = await createPracticeListWithQueue(supabase, {
+      title,
+      sortOrder: nextOrder,
+      expectedUserId: userId,
+    });
+
+    setSavingNew(false);
+    if (result.status === "failed" || !result.data) {
+      captureException(
+        result.status === "failed" ? result.error : new Error("create list returned no row"),
+        {
+          screen: "practice",
+          action: "create_list",
+        }
+      );
+      Alert.alert("Could not create list", "Please try again when you are connected.");
+      return;
+    }
+
+    const createdList: PracticeList = { ...result.data, item_count: 0 };
+    setLists((previous) => [...previous, createdList]);
+    void updateCache<PracticeList[]>(`practice-lists:${userId}`, (current) => [
+      ...(current ?? []),
+      createdList,
+    ]);
+    void updateCache<PracticeList[]>(`practice-list-picker:${userId}`, (current) => [
+      ...(current ?? []),
+      createdList,
+    ]);
+    void writeCache(`practice-list:${userId}:${createdList.id}`, createdList);
+    setNewListTitle("");
+    setCreating(false);
+    // Open the new list so the user can start adding to it right away.
+    router.push(`/(tabs)/practice/${createdList.id}`);
+  };
+
+  const persistOrder = useCallback(
+    async (ordered: PracticeList[]) => {
+      const userId = session?.user.id;
+      if (!userId) return;
+      const changes = ordered
+        .map((list, index) => ({
+          id: list.id,
+          sortOrder: index + 1,
+          previousOrder: list.sort_order,
+        }))
+        .filter((change) => change.previousOrder !== change.sortOrder)
+        .map(({ id, sortOrder }) => ({ id, sortOrder }));
+      if (changes.length === 0) return;
+
+      const result = await reorderPracticeListsWithQueue(supabase, {
+        changes,
+        expectedUserId: userId,
+      });
+      if (result.status === "failed") {
+        captureException(result.error, { screen: "practice", action: "reorder" });
+        return;
+      }
+      void writeCache(`practice-lists:${userId}`, ordered);
+    },
+    [session?.user.id]
+  );
+
+  const moveList = useCallback(
+    (index: number, direction: -1 | 1) => {
+      const target = index + direction;
+      setLists((previous) => {
+        if (target < 0 || target >= previous.length) return previous;
+        const next = [...previous];
+        [next[index], next[target]] = [next[target], next[index]];
+        const ordered = next.map((list, listIndex) => ({ ...list, sort_order: listIndex + 1 }));
+        void persistOrder(ordered);
+        return ordered;
+      });
+    },
+    [persistOrder]
   );
 
   const handleDeleteList = (listId: string, isSmartList: boolean) => {
@@ -201,6 +301,41 @@ export default function PracticeHubScreen() {
       <View style={s.content}>
         <View style={s.listHeaderRow}>
           <Text style={s.sectionTitle}>My Study Lists</Text>
+          <View style={s.headerActions}>
+            {lists.length > 1 ? (
+              <TouchableOpacity
+                style={[s.headerBtn, reordering && s.headerBtnActive]}
+                onPress={() => setReordering((value) => !value)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={reordering ? "Finish reordering" : "Reorder lists"}
+              >
+                <Ionicons
+                  name={reordering ? "checkmark" : "swap-vertical"}
+                  size={18}
+                  color={reordering ? "#fff" : Colors.primary[300]}
+                />
+                <Text style={[s.headerBtnText, reordering && { color: "#fff" }]}>
+                  {reordering ? "Done" : "Reorder"}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+            {!reordering ? (
+              <TouchableOpacity
+                style={s.headerBtn}
+                onPress={() => {
+                  setNewListTitle("");
+                  setCreating(true);
+                }}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Create a new practice list"
+              >
+                <Ionicons name="add" size={18} color={Colors.primary[300]} />
+                <Text style={s.headerBtnText}>New List</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
 
         {loading ? (
@@ -218,28 +353,66 @@ export default function PracticeHubScreen() {
             keyExtractor={(item) => item.id}
             contentContainerStyle={s.listContent}
             showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={s.listCard}
-                onPress={() => router.push(`/(tabs)/practice/${item.id}`)}
-                activeOpacity={0.7}
-              >
-                <View style={[s.listIconBox, item.is_smart_list && s.smartListIconBox]}>
-                  <Ionicons
-                    name={item.is_smart_list ? "flame" : "list"}
-                    size={24}
-                    color={item.is_smart_list ? "#EF4444" : Colors.primary[300]}
-                  />
-                </View>
+            renderItem={({ item, index }) => (
+              <View style={s.listCard}>
+                <TouchableOpacity
+                  style={s.listCardMain}
+                  onPress={() => router.push(`/(tabs)/practice/${item.id}`)}
+                  disabled={reordering}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open list ${item.title}`}
+                >
+                  <View style={[s.listIconBox, item.is_smart_list && s.smartListIconBox]}>
+                    <Ionicons
+                      name={item.is_smart_list ? "flame" : "list"}
+                      size={24}
+                      color={item.is_smart_list ? "#EF4444" : Colors.primary[300]}
+                    />
+                  </View>
 
-                <View style={s.listInfo}>
-                  <Text style={[s.listName, item.is_smart_list && s.smartListName]}>
-                    {item.title}
-                  </Text>
-                  <Text style={s.listCount}>{item.item_count} items</Text>
-                </View>
+                  <View style={s.listInfo}>
+                    <Text style={[s.listName, item.is_smart_list && s.smartListName]}>
+                      {item.title}
+                    </Text>
+                    <Text style={s.listCount}>{item.item_count} items</Text>
+                  </View>
+                </TouchableOpacity>
 
-                {!item.is_smart_list ? (
+                {reordering ? (
+                  <View style={s.moveControls}>
+                    <TouchableOpacity
+                      style={[s.moveBtn, index === 0 && s.moveBtnDisabled]}
+                      onPress={() => moveList(index, -1)}
+                      disabled={index === 0}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Move ${item.title} up`}
+                    >
+                      <Ionicons
+                        name="chevron-up"
+                        size={22}
+                        color={index === 0 ? Colors.dark.border : Colors.primary[300]}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.moveBtn, index === lists.length - 1 && s.moveBtnDisabled]}
+                      onPress={() => moveList(index, 1)}
+                      disabled={index === lists.length - 1}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Move ${item.title} down`}
+                    >
+                      <Ionicons
+                        name="chevron-down"
+                        size={22}
+                        color={
+                          index === lists.length - 1 ? Colors.dark.border : Colors.primary[300]
+                        }
+                      />
+                    </TouchableOpacity>
+                  </View>
+                ) : !item.is_smart_list ? (
                   <TouchableOpacity
                     style={s.deleteBtn}
                     onPress={() => handleDeleteList(item.id, item.is_smart_list)}
@@ -257,8 +430,13 @@ export default function PracticeHubScreen() {
                     style={{ marginRight: 10 }}
                   />
                 )}
-              </TouchableOpacity>
+              </View>
             )}
+            ListHeaderComponent={
+              reordering && lists.length > 1 ? (
+                <Text style={s.reorderHint}>Use the arrows to change the order</Text>
+              ) : null
+            }
             ListEmptyComponent={
               <View style={s.emptyBox}>
                 <Ionicons name="document-text-outline" size={48} color={Colors.dark.border} />
@@ -271,6 +449,61 @@ export default function PracticeHubScreen() {
           />
         )}
       </View>
+
+      <Modal
+        visible={creating}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCreating(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={s.createOverlay}
+        >
+          <TouchableOpacity
+            style={s.createBackdrop}
+            activeOpacity={1}
+            onPress={() => setCreating(false)}
+          />
+          <View style={s.createCard}>
+            <Text style={s.createTitle}>New practice list</Text>
+            <TextInput
+              style={s.createInput}
+              placeholder="List name (e.g. Kitchen verbs)"
+              placeholderTextColor={Colors.dark.textMuted}
+              value={newListTitle}
+              onChangeText={setNewListTitle}
+              autoFocus
+              maxLength={40}
+              returnKeyType="done"
+              onSubmitEditing={() => void handleCreateList()}
+            />
+            <View style={s.createActions}>
+              <TouchableOpacity
+                style={s.createCancelBtn}
+                onPress={() => setCreating(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
+              >
+                <Text style={s.createCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.createConfirmBtn, !newListTitle.trim() && { opacity: 0.5 }]}
+                onPress={() => void handleCreateList()}
+                disabled={!newListTitle.trim() || savingNew}
+                accessibilityRole="button"
+                accessibilityLabel="Create list"
+              >
+                {savingNew ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={s.createConfirmText}>Create</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -341,6 +574,95 @@ const s = StyleSheet.create({
     fontWeight: FontWeight.bold,
     color: Colors.dark.text,
   },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  headerBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.primary[500] + "1A",
+    borderWidth: 1,
+    borderColor: Colors.primary[500] + "40",
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  headerBtnActive: {
+    backgroundColor: Colors.primary[500],
+    borderColor: Colors.primary[500],
+  },
+  headerBtnText: {
+    color: Colors.primary[300],
+    fontWeight: FontWeight.bold,
+    fontSize: FontSize.sm,
+  },
+  createOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: Spacing.xl,
+  },
+  createBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.6)",
+  },
+  createCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: Colors.dark.card,
+    borderRadius: BorderRadius["2xl"],
+    padding: Spacing.xl,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  createTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.bold,
+    color: Colors.dark.text,
+    marginBottom: Spacing.lg,
+  },
+  createInput: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    color: Colors.dark.text,
+    fontSize: FontSize.base,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  createActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: Spacing.sm,
+  },
+  createCancelBtn: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  createCancelText: {
+    color: Colors.dark.textMuted,
+    fontWeight: FontWeight.semibold,
+    fontSize: FontSize.base,
+  },
+  createConfirmBtn: {
+    backgroundColor: Colors.primary[500],
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    minWidth: 96,
+    alignItems: "center",
+  },
+  createConfirmText: {
+    color: "#fff",
+    fontWeight: FontWeight.bold,
+    fontSize: FontSize.base,
+  },
   centerBox: {
     flex: 1,
     justifyContent: "center",
@@ -358,6 +680,27 @@ const s = StyleSheet.create({
     borderRadius: BorderRadius.xl,
     borderWidth: 1,
     borderColor: Colors.dark.border,
+  },
+  listCardMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  moveControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  moveBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Colors.primary[500] + "14",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  moveBtnDisabled: {
+    backgroundColor: "transparent",
   },
   listIconBox: {
     width: 48,
@@ -390,6 +733,12 @@ const s = StyleSheet.create({
   },
   deleteBtn: {
     padding: Spacing.sm,
+  },
+  reorderHint: {
+    color: Colors.dark.textMuted,
+    fontSize: FontSize.sm,
+    textAlign: "center",
+    marginBottom: Spacing.sm,
   },
   emptyBox: {
     alignItems: "center",

@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import { useLocalSearchParams } from "expo-router";
 import {
   View,
   Text,
@@ -15,8 +16,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Speech from "expo-speech";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import StrokeWriter from "@/components/StrokeWriter";
+import { AddToListModal } from "@/components/AddToListModal";
+import { AuthPromptModal } from "@/components/AuthPromptModal";
 import type { Kanji as KanjiRow } from "@japangolearn/database";
 
 // ─── Types ─────────────────────────────────────────────
@@ -71,8 +75,16 @@ function KanjiDetailModal({
   showHindi: boolean;
   onSelectRelated?: (k: string) => void;
 }) {
+  const { session } = useAuth();
   const [tab, setTab] = useState<"info" | "vocab" | "examples">("info");
   const [speakingText, setSpeakingText] = useState<string | null>(null);
+  const [showAddList, setShowAddList] = useState(false);
+  const [showListAuthPrompt, setShowListAuthPrompt] = useState(false);
+
+  const openAddToList = () => {
+    if (session) setShowAddList(true);
+    else setShowListAuthPrompt(true);
+  };
 
   const safeSpeak = useCallback(
     (text: string) => {
@@ -137,6 +149,17 @@ function KanjiDetailModal({
               >
                 Play
               </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={modal.headerAddBtn}
+              onPress={openAddToList}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`Add ${kanji.character} to a practice list`}
+            >
+              <Ionicons name="add" size={18} color={Colors.primary[300]} />
+              <Text style={modal.headerAddText}>List</Text>
             </TouchableOpacity>
 
             <Text style={modal.jlptBadge}>{kanji.jlpt_level}</Text>
@@ -370,6 +393,22 @@ function KanjiDetailModal({
 
           <View style={{ height: 40 }} />
         </ScrollView>
+
+        {/* Rendered inside the sheet so the bottom-sheet overlay sits above it */}
+        <AddToListModal
+          visible={showAddList}
+          onClose={() => setShowAddList(false)}
+          itemType="kanji"
+          itemId={kanji.id}
+          itemTitle={kanji.character}
+        />
+        <AuthPromptModal
+          visible={showListAuthPrompt}
+          feature="practice lists"
+          redirectTo="/(tabs)/kanji"
+          description="Sign in to add kanji to practice lists and track your progress."
+          onClose={() => setShowListAuthPrompt(false)}
+        />
       </View>
     </Modal>
   );
@@ -496,9 +535,30 @@ export default function KanjiScreen() {
   const [selected, setSelected] = useState<Kanji | null>(null);
   const [showHindi, setShowHindi] = useState(true);
 
+  // Set when another screen wants a specific character's detail modal opened.
+  const { focusItemId, focusNonce } = useLocalSearchParams<{
+    focusItemId?: string;
+    focusNonce?: string;
+  }>();
+  // The nonce makes repeat taps on the same item distinct; without it the
+  // params would be identical and this screen, still mounted, would ignore them.
+  const focusKey = focusNonce ?? focusItemId ?? null;
+  const consumedFocusRef = useRef<string | null>(null);
+
   useEffect(() => {
     fetchKanji();
   }, []);
+
+  useEffect(() => {
+    if (!focusItemId || kanji.length === 0) return;
+    if (consumedFocusRef.current === focusKey) return;
+
+    consumedFocusRef.current = focusKey;
+    const match = kanji.find((entry) => String(entry.id) === focusItemId);
+    // The modal reads from `selected`, so it does not care about the search or
+    // tag filters the grid behind it is using.
+    if (match) setSelected(match);
+  }, [focusItemId, focusKey, kanji]);
 
   const fetchKanji = async () => {
     setLoading(true);
@@ -828,6 +888,22 @@ const modal = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.08)",
     justifyContent: "center",
     alignItems: "center",
+  },
+  headerAddBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: Colors.primary[500] + "1A",
+    borderWidth: 1,
+    borderColor: Colors.primary[500] + "40",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  headerAddText: {
+    color: Colors.primary[300],
+    fontWeight: FontWeight.bold,
+    fontSize: FontSize.sm,
   },
   jlptBadge: {
     fontSize: FontSize.sm,

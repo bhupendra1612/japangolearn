@@ -10,7 +10,9 @@ import {
   Animated,
   ActivityIndicator,
   Image,
+  ScrollView,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Link, router, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/lib/auth";
@@ -18,6 +20,7 @@ import { getSafeRedirectTo, setPendingRedirect } from "@/lib/auth-navigation";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 
 export default function LoginScreen() {
+  const insets = useSafeAreaInsets();
   const { signIn } = useAuth();
   const params = useLocalSearchParams<{ redirectTo?: string | string[] }>();
   const redirectTo = getSafeRedirectTo(params.redirectTo);
@@ -58,101 +61,113 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      // Android already resizes the window for the keyboard, so asking this to
+      // shrink it a second time squeezed the centred content until the header
+      // was clipped off the top of the screen.
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Animated.View
-        style={[styles.inner, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        {/* Logo & Title */}
-        <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <Image
-              source={require("@/assets/logo.png")}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
-          </View>
-          <Text style={styles.title}>Welcome Back</Text>
-          <Text style={styles.subtitle}>Sign in to continue learning Japanese</Text>
-        </View>
-
-        {/* Form */}
-        <View style={styles.form}>
-          {error ? (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{error}</Text>
+        <Animated.View
+          style={[styles.inner, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+        >
+          {/* Logo & Title */}
+          <View style={styles.header}>
+            <View style={styles.logoContainer}>
+              <Image
+                source={require("@/assets/logo.png")}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
-          ) : null}
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="your@email.com"
-              placeholderTextColor={Colors.dark.textMuted}
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              autoCorrect={false}
-            />
+            <Text style={styles.title}>Welcome Back</Text>
+            <Text style={styles.subtitle}>Sign in to continue learning Japanese</Text>
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Password</Text>
-            <View style={styles.passwordWrap}>
+          {/* Form */}
+          <View style={styles.form}>
+            {error ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email</Text>
               <TextInput
-                style={styles.passwordInput}
-                placeholder="••••••••"
+                style={styles.input}
+                placeholder="your@email.com"
                 placeholderTextColor={Colors.dark.textMuted}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
+                value={email}
+                onChangeText={setEmail}
                 autoCapitalize="none"
+                keyboardType="email-address"
                 autoCorrect={false}
               />
-              <TouchableOpacity
-                onPress={() => setShowPassword((v) => !v)}
-                style={styles.eyeBtn}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityRole="button"
-                accessibilityLabel={showPassword ? "Hide password" : "Show password"}
-              >
-                <Ionicons
-                  name={showPassword ? "eye-off-outline" : "eye-outline"}
-                  size={20}
-                  color={Colors.dark.textMuted}
-                />
-              </TouchableOpacity>
             </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.passwordWrap}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="••••••••"
+                  placeholderTextColor={Colors.dark.textMuted}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword((v) => !v)}
+                  style={styles.eyeBtn}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                >
+                  <Ionicons
+                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                    size={20}
+                    color={Colors.dark.textMuted}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleLogin}
+              disabled={loading}
+              activeOpacity={0.8}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Sign In</Text>
+              )}
+            </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-            activeOpacity={0.8}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Sign In</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+          {/* Footer */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Don't have an account? </Text>
+            <Link href={{ pathname: "/(auth)/signup", params: { redirectTo } } as never} asChild>
+              <TouchableOpacity>
+                <Text style={styles.footerLink}>Sign Up</Text>
+              </TouchableOpacity>
+            </Link>
+          </View>
 
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Don't have an account? </Text>
-          <Link href={{ pathname: "/(auth)/signup", params: { redirectTo } } as never} asChild>
-            <TouchableOpacity>
-              <Text style={styles.footerLink}>Sign Up</Text>
-            </TouchableOpacity>
-          </Link>
-        </View>
-
-        <Text style={styles.jp}>日本語の旅を続けよう</Text>
-      </Animated.View>
+          <Text style={styles.jp}>日本語の旅を続けよう</Text>
+        </Animated.View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -162,9 +177,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.dark.bg,
   },
-  inner: {
-    flex: 1,
+  // flexGrow keeps the form centred while it fits and lets it scroll once the
+  // keyboard leaves less room than the content needs.
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
+  },
+  inner: {
     paddingHorizontal: Spacing["3xl"],
   },
   header: {

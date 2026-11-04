@@ -28,6 +28,7 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload so the server sees the new auth cookies
       window.location.href = "/dashboard";
     }
   };

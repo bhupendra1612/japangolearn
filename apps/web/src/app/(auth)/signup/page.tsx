@@ -73,6 +73,7 @@ export default function SignupPage() {
     setLoading(false);
     if (data.session) {
       // Email confirmation disabled — straight in.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload so the server sees the new auth cookies
       window.location.href = "/dashboard";
       return;
     }
@@ -103,6 +104,7 @@ export default function SignupPage() {
       setVerifying(false);
       return;
     }
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload so the server sees the new auth cookies
     window.location.href = "/dashboard";
   };
 

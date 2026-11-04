@@ -35,6 +35,12 @@ const nextConfig = {
       },
     ],
   },
+  // Production builds stay on webpack (`next build --webpack`) so the OpenNext
+  // output matches what has been running on Workers. `next dev` uses Turbopack
+  // by default in Next 16; give it the same Sentry shim alias.
+  turbopack: {
+    resolveAlias: sentryEnabled ? {} : { "@sentry/nextjs": "./src/lib/sentry-shim.ts" },
+  },
   webpack(config, { dev }) {
     if (!dev) {
       config.cache = false;

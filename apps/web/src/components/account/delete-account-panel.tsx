@@ -20,6 +20,7 @@ export function DeleteAccountPanel({ email }: DeleteAccountPanelProps) {
       const result = await deleteAccount();
       if (result.ok) {
         setStatus("done");
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload so the server sees the new auth cookies
         window.location.href = "/";
       } else {
         setErrorMsg(result.error.message || "Failed to delete account");

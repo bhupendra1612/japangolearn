@@ -39,6 +39,20 @@ minimumReleaseAgeExclude:
   - expo-modules-autolinking@3.0.27
   - expo@54.0.37
   - expo-updates@29.0.20
+  - "@next/env@16.4.5"
+  - "@next/eslint-plugin-next@16.4.5"
+  - "@next/swc-darwin-arm64@16.4.5"
+  - "@next/swc-darwin-x64@16.4.5"
+  - "@next/swc-linux-arm64-gnu@16.4.5"
+  - "@next/swc-linux-arm64-musl@16.4.5"
+  - "@next/swc-linux-x64-gnu@16.4.5"
+  - "@next/swc-linux-x64-musl@16.4.5"
+  - "@next/swc-win32-arm64-msvc@16.4.5"
+  - "@next/swc-win32-x64-msvc@16.4.5"
+  - "@opennextjs/aws@4.1.15"
+  - "@opennextjs/cloudflare@1.20.16"
+  - eslint-config-next@16.4.5
+  - next@16.4.5
 
 onlyBuiltDependencies:
   - "@sentry/cli"

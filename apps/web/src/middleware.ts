@@ -1,3 +1,7 @@
+// Next.js 16 deprecates `middleware.ts` in favour of `proxy.ts`, but `proxy`
+// always runs on the Node.js runtime, which OpenNext Cloudflare only supports
+// experimentally ("not officially maintained"). Keep the edge-runtime
+// middleware until OpenNext supports Node proxy as stable.
 import { updateSession } from "@/lib/supabase/middleware";
 import { NextResponse, type NextRequest } from "next/server";
 import { courseCatalogEnabled, teacherStudioEnabled } from "@/lib/marketplace";

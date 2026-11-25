@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "id": "jgl-n5-mock-1",
+  "version": 3,
+  "level": "N5",
+  "title": "JapanGoLearn N5 Mock 1 Offline Pack",
+  "description": "36 original questions, 20 listening tracks, and two printable PDFs.",
+  "questionCount": 36,
+  "listeningTrackCount": 20,
+  "totalBytes": 1453574,
+  "publishedAt": "2026-09-22",
+  "assets": [
+    {
+      "path": "pack.json",
+      "role": "content",
+      "bytes": 25685,
+      "md5": "6bc49f63b1fc1881ecf9a5157be9f675"
+    },
+    {
+      "path": "audio/n5m1-l01.mp3",
+      "role": "audio",
+      "bytes": 60480,
+      "md5": "42c4dca674287c23e003c7e012ce39a1"
+    },
+    {
+      "path": "audio/n5m1-l02.mp3",
+      "role": "audio",
+      "bytes": 68112,
+      "md5": "811a95296c46cd74f07b4860521dec2f"
+    },
+    {
+      "path": "audio/n5m1-l03.mp3",
+      "role": "audio",
+      "bytes": 57888,
+      "md5": "5bff37cb8253c8454376f0234d2d11a9"
+    },
+    {
+      "path": "audio/n5m1-l04.mp3",
+      "role": "audio",
+      "bytes": 17712,
+      "md5": "13c796d4d8f18ab55a253096a1475d8a"
+    },
+    {
+      "path": "audio/n5m1-l05.mp3",
+      "role": "audio",
+      "bytes": 68976,
+      "md5": "18c6c9d6f34ce351188d68361d56ec9a"
+    },
+    {
+      "path": "audio/n5m1-l06.mp3",
+      "role": "audio",
+      "bytes": 47664,
+      "md5": "9df6d6cdfbffb5ea24b89df50521d047"
+    },
+    {
+      "path": "audio/n5m1-l07.mp3",
+      "role": "audio",
+      "bytes": 11952,
+      "md5": "a1f5595e4f82438e29b1a651a78943d1"
+    },
+    {
+      "path": "audio/n5m1-l08.mp3",
+      "role": "audio",
+      "bytes": 59328,
+      "md5": "52d1223104830a8d752ee0c611eea2ba"
+    },
+    {
+      "path": "audio/n5m1-l09.mp3",
+      "role": "audio",
+      "bytes": 64944,
+      "md5": "3fbf0a1fe1852769280657034e6acc34"
+    },
+    {
+      "path": "audio/n5m1-l10.mp3",
+      "role": "audio",
+      "bytes": 36288,
+      "md5": "64a97f724521898fd8ff270018cd4f80"
+    },
+    {
+      "path": "audio/n5m1-l11.mp3",
+      "role": "audio",
+      "bytes": 47088,
+      "md5": "4f4f7c2be7e669952df1ac8868c5aa77"
+    },
+    {
+      "path": "audio/n5m1-l12.mp3",
+      "role": "audio",
+      "bytes": 14112,
+      "md5": "7cb0cbc7f71628833baac5311c09cbe1"
+    },
+    {
+      "path": "audio/n5m1-l13.mp3",
+      "role": "audio",
+      "bytes": 44640,
+      "md5": "36681bca7d743106a5984f52b2e67346"
+    },
+    {
+      "path": "audio/n5m1-l14.mp3",
+      "role": "audio",
+      "bytes": 48096,
+      "md5": "456bf77b39dfa5ee9c0d124d2ab86b43"
+    },
+    {
+      "path": "audio/n5m1-l15.mp3",
+      "role": "audio",
+      "bytes": 49968,
+      "md5": "3ff71a13437b28b8cca7ecaef1ef7ba4"
+    },
+    {
+      "path": "audio/n5m1-l16.mp3",
+      "role": "audio",
+      "bytes": 45072,
+      "md5": "b1009c7a9e54ab3e640a101c7b7bbbd2"
+    },
+    {
+      "path": "audio/n5m1-l17.mp3",
+      "role": "audio",
+      "bytes": 19872,
+      "md5": "1687a0a5ba6383d11fcaf3484f8323eb"
+    },
+    {
+      "path": "audio/n5m1-l18.mp3",
+      "role": "audio",
+      "bytes": 56160,
+      "md5": "718c569f3dfe6c2a59a2cb417789414f"
+    },
+    {
+      "path": "audio/n5m1-l19.mp3",
+      "role": "audio",
+      "bytes": 62496,
+      "md5": "3a76c7f8552d49842d9689e825258fcc"
+    },
+    {
+      "path": "audio/n5m1-l20.mp3",
+      "role": "audio",
+      "bytes": 68832,
+      "md5": "3e142ef3fef0f3e31663674971c6dbc5"
+    },
+    {
+      "path": "pdf/japangolearn-n5-mock-1-test-paper.pdf",
+      "role": "test-paper",
+      "bytes": 232923,
+      "md5": "d406f87b0c2a96bcbdce7ad7e2c7ffb9"
+    },
+    {
+      "path": "pdf/japangolearn-n5-mock-1-answer-key.pdf",
+      "role": "answer-key",
+      "bytes": 245286,
+      "md5": "59ad7b2d6c147aa18e3c08c954da347d"
+    }
+  ]
+}

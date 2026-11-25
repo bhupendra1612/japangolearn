@@ -45,6 +45,12 @@ const NAV_ITEMS = [
     free: true,
   },
   {
+    icon: "document-text-outline" as const,
+    label: "JLPT N5 Exam Center",
+    route: "/exam",
+    free: true,
+  },
+  {
     icon: "chatbubble-ellipses-outline" as const,
     label: "AI Conversation",
     route: "/(tabs)/ai",
@@ -314,7 +320,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.6)",
   },
   sidebar: {

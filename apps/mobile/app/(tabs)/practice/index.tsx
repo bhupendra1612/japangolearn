@@ -12,14 +12,13 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
-import { useFocusEffect } from "@react-navigation/native";
 import { LoadError } from "@/components/LoadError";
 import { captureException } from "@/lib/monitoring";
 import type { PracticeList } from "@japangolearn/database";
@@ -606,7 +605,7 @@ const s = StyleSheet.create({
     padding: Spacing.xl,
   },
   createBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.6)",
   },
   createCard: {

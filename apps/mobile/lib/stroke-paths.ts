@@ -27,6 +27,8 @@ export interface StrokePath {
   d: string;
   /** Approximate length, used to drive the dash offset. */
   length: number;
+  /** Positions each glyph when displaying a multi-character kana combination. */
+  transform?: string;
 }
 
 const cache = new Map<string, StrokePath[] | null>();
@@ -195,6 +197,23 @@ export async function fetchStrokePaths(character: string): Promise<StrokePath[] 
   const cached = cache.get(character);
   if (cached !== undefined) return cached;
 
+  const characters = [...character];
+  if (characters.length > 1) {
+    const parts = await Promise.all(characters.map(fetchStrokePaths));
+    // Never silently animate just the first half of a combination.
+    if (parts.some((part) => !part)) return null;
+    const scale = 1 / characters.length;
+    const cell = STROKE_VIEWBOX * scale;
+    const result = parts.flatMap((part, index) =>
+      part!.map((stroke) => ({
+        ...stroke,
+        transform: `translate(${index * cell} ${(STROKE_VIEWBOX - cell) / 2}) scale(${scale})`,
+      }))
+    );
+    cache.set(character, result);
+    return result;
+  }
+
   const fileName = fileNameFor(character);
   if (!fileName) {
     cache.set(character, null);
@@ -219,8 +238,14 @@ export async function fetchStrokePaths(character: string): Promise<StrokePath[] 
   }
 
   if (!response.ok) {
-    cache.set(character, null);
-    return null;
+    // A temporary CDN failure must be retryable and must not hide saved paths.
+    const stored = await readCache<StrokePath[]>(`${STROKE_CACHE_PREFIX}${fileName}`);
+    if (stored) {
+      cache.set(character, stored.data);
+      return stored.data;
+    }
+    if (response.status === 404) return null;
+    throw new Error(`Stroke data request failed (${response.status})`);
   }
 
   const svg = await response.text();

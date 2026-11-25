@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { BackHandler } from "react-native";
+import { BackHandler, Platform } from "react-native";
 
 /**
  * Runs `onBack` when the Android hardware back button is pressed, while
@@ -15,7 +15,7 @@ import { BackHandler } from "react-native";
  */
 export function useAndroidBack(active: boolean, onBack: () => void) {
   useEffect(() => {
-    if (!active) return;
+    if (!active || Platform.OS !== "android") return;
 
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       onBack();

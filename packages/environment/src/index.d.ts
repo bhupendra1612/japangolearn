@@ -1,5 +1,6 @@
 export const APP_ENVIRONMENTS: readonly AppEnvironment[];
 export const PRODUCTION_SUPABASE_PROJECT_REF: "teylstfbjtutssnfmhhu";
+export const PRODUCTION_SUPABASE_HOSTS: ReadonlySet<string>;
 
 export type AppEnvironment = "development" | "test" | "preview" | "staging" | "production";
 

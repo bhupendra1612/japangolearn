@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -16,11 +16,11 @@ import * as Speech from "expo-speech";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
-import { useFocusEffect } from "@react-navigation/native";
 import type { PracticeItemType, PracticeList } from "@japangolearn/database";
 import { loadPracticeStudyItems } from "@/lib/practice-content";
 import { removePracticeListItemWithQueue } from "@/lib/offline-queue";
 import { readCache, updateCache, writeCache } from "@/lib/offline-cache";
+import { loadListeningPracticeItems, removeListeningPracticeItem } from "@/lib/listening-practice";
 import type { PracticeStudyItem } from "@japangolearn/core";
 
 type ListItem = {
@@ -39,6 +39,7 @@ type ListItem = {
   meaningHindi?: string; // short Hindi meaning, if any
   speakText?: string; // what the audio button pronounces (a reading, not kanji)
   kanaType?: "hiragana" | "katakana";
+  questionId?: string;
 };
 
 const ITEM_TYPE_EMOJI: Record<PracticeItemType, string> = {
@@ -46,6 +47,14 @@ const ITEM_TYPE_EMOJI: Record<PracticeItemType, string> = {
   kana: "あ",
   kanji: "漢",
   grammar: "文",
+  listening: "🎧",
+};
+
+const DETAIL_ROUTES: Record<Exclude<PracticeItemType, "listening">, string> = {
+  vocabulary: "/(tabs)/vocabulary",
+  kana: "/(tabs)/writing",
+  kanji: "/(tabs)/kanji",
+  grammar: "/(tabs)/grammar",
 };
 
 export default function PracticeListScreen() {
@@ -61,6 +70,10 @@ export default function PracticeListScreen() {
   // The row whose audio is currently playing, so its button can show a
   // playing state. Only one plays at a time.
   const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const standardItemCount = items.filter((item) => item.item_type !== "listening").length;
+  const listeningQuestionIds = items.flatMap((item) =>
+    item.item_type === "listening" && item.questionId ? [item.questionId] : []
+  );
 
   const speakItem = useCallback((item: ListItem) => {
     if (!item.speakText) return;
@@ -104,25 +117,41 @@ export default function PracticeListScreen() {
       if (cached && (await isStillCurrentUser())) setList(cached.data);
     }
 
-    // 2. Hydrate vocabulary, kana, kanji, and grammar through the shared loader.
-    const studyItems = await loadPracticeStudyItems(supabase, id);
+    // 2. Hydrate standard learning content and locally-authored listening questions.
+    const [studyItems, listeningItems] = await Promise.all([
+      loadPracticeStudyItems(supabase, id),
+      loadListeningPracticeItems(supabase, id),
+    ]);
     if (!(await isStillCurrentUser())) return;
     setItems(
-      studyItems.map((item) => ({
-        id: item.listItemId,
-        item_type: item.itemType,
-        item_id: Number(item.itemId),
-        mastery_score: item.masteryScore,
-        last_reviewed: item.lastReviewed,
-        primary: item.front,
-        reading: item.reading,
-        romaji: item.romaji,
-        romajiHindi: item.romajiHindi,
-        english: item.english,
-        meaningHindi: item.meaningHindi,
-        speakText: item.audioText,
-        kanaType: item.kanaType,
-      }))
+      studyItems
+        .map<ListItem>((item) => ({
+          id: item.listItemId,
+          item_type: item.itemType,
+          item_id: Number(item.itemId),
+          mastery_score: item.masteryScore,
+          last_reviewed: item.lastReviewed,
+          primary: item.front,
+          reading: item.reading,
+          romaji: item.romaji,
+          romajiHindi: item.romajiHindi,
+          english: item.english,
+          meaningHindi: item.meaningHindi,
+          speakText: item.audioText,
+          kanaType: item.kanaType,
+        }))
+        .concat(
+          listeningItems.map((item) => ({
+            id: item.listItemId,
+            item_type: "listening" as const,
+            item_id: item.itemId,
+            mastery_score: 0,
+            last_reviewed: null,
+            primary: item.prompt,
+            english: `${item.skill} · Tap to practise this listening question`,
+            questionId: item.questionId,
+          }))
+        )
     );
 
     setLoading(false);
@@ -150,14 +179,19 @@ export default function PracticeListScreen() {
         style: "destructive",
         onPress: async () => {
           if (!userId) return;
-          const result = await removePracticeListItemWithQueue(supabase, {
-            listId: id,
-            listItemId: item.id,
-            itemType: item.item_type,
-            itemId: item.item_id,
-            expectedUserId: userId,
-          });
-          if (result.status === "failed") {
+          const failed =
+            item.item_type === "listening"
+              ? !(await removeListeningPracticeItem(supabase, item.id)).ok
+              : (
+                  await removePracticeListItemWithQueue(supabase, {
+                    listId: id,
+                    listItemId: item.id,
+                    itemType: item.item_type,
+                    itemId: item.item_id,
+                    expectedUserId: userId,
+                  })
+                ).status === "failed";
+          if (failed) {
             Alert.alert("Could not remove item", "Please try again when you are connected.");
             return;
           }
@@ -185,7 +219,7 @@ export default function PracticeListScreen() {
   };
 
   const startFlashcards = () => {
-    if (items.length === 0) return;
+    if (standardItemCount === 0) return;
     router.push({
       pathname: "/study/flashcards",
       params: { listId: id },
@@ -193,11 +227,16 @@ export default function PracticeListScreen() {
   };
 
   const startQuiz = () => {
-    if (items.length === 0) return;
+    if (standardItemCount === 0) return;
     router.push({
       pathname: "/study/quiz",
       params: { listId: id },
     });
+  };
+
+  const startListeningPractice = () => {
+    if (listeningQuestionIds.length === 0) return;
+    router.push(`/exam/run?mode=review&questionIds=${listeningQuestionIds.join(",")}` as never);
   };
 
   /*
@@ -206,30 +245,31 @@ export default function PracticeListScreen() {
    * focusItemId is what lets a list row open the same full detail a learner
    * gets by tapping the word in its own tab.
    */
-  const DETAIL_ROUTES: Record<PracticeItemType, string> = {
-    vocabulary: "/(tabs)/vocabulary",
-    kana: "/(tabs)/writing",
-    kanji: "/(tabs)/kanji",
-    grammar: "/(tabs)/grammar",
-  };
-
-  const openItemDetail = (item: ListItem) => {
-    router.push({
-      pathname: DETAIL_ROUTES[item.item_type] as never,
-      params: {
-        focusItemId: String(item.item_id),
-        // Tabs stay mounted, so pushing the same word twice would hand the
-        // target identical params and its effect would never re-run — the
-        // second tap would do nothing. This makes every tap distinct.
-        focusNonce: String(Date.now()),
-        // The id of this list, so the detail's back button can return straight
-        // here. Content tabs live in a different navigator, so router.back()
-        // from one is not reliable — the target navigates back by this id.
-        fromListId: String(id),
-        ...(item.kanaType ? { focusKanaType: item.kanaType } : {}),
-      },
-    });
-  };
+  const openItemDetail = useCallback(
+    (item: ListItem) => {
+      if (item.item_type === "listening") {
+        if (item.questionId)
+          router.push(`/exam/run?mode=review&questionIds=${item.questionId}` as never);
+        return;
+      }
+      router.push({
+        pathname: DETAIL_ROUTES[item.item_type] as never,
+        params: {
+          focusItemId: String(item.item_id),
+          // Tabs stay mounted, so pushing the same word twice would hand the
+          // target identical params and its effect would never re-run — the
+          // second tap would do nothing. This makes every tap distinct.
+          focusNonce: String(Date.now()),
+          // The id of this list, so the detail's back button can return straight
+          // here. Content tabs live in a different navigator, so router.back()
+          // from one is not reliable — the target navigates back by this id.
+          fromListId: String(id),
+          ...(item.kanaType ? { focusKanaType: item.kanaType } : {}),
+        },
+      });
+    },
+    [id, router]
+  );
 
   const getMasteryColor = (score: number) => {
     if (score >= 80) return Colors.primary[400];
@@ -266,13 +306,13 @@ export default function PracticeListScreen() {
 
         <View style={s.actionRow}>
           <TouchableOpacity
-            style={[s.studyBtn, items.length === 0 && { opacity: 0.5 }]}
+            style={[s.studyBtn, standardItemCount === 0 && { opacity: 0.5 }]}
             onPress={startFlashcards}
-            disabled={items.length === 0}
+            disabled={standardItemCount === 0}
             activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel="Study with flashcards"
-            accessibilityState={{ disabled: items.length === 0 }}
+            accessibilityState={{ disabled: standardItemCount === 0 }}
           >
             <LinearGradient
               colors={[Colors.primary[500], Colors.primary[600]]}
@@ -284,13 +324,13 @@ export default function PracticeListScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[s.studyBtn, items.length === 0 && { opacity: 0.5 }]}
+            style={[s.studyBtn, standardItemCount === 0 && { opacity: 0.5 }]}
             onPress={startQuiz}
-            disabled={items.length === 0}
+            disabled={standardItemCount === 0}
             activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel="Start quiz"
-            accessibilityState={{ disabled: items.length === 0 }}
+            accessibilityState={{ disabled: standardItemCount === 0 }}
           >
             <LinearGradient
               colors={[Colors.accent[500], Colors.accent[600]]}
@@ -301,6 +341,24 @@ export default function PracticeListScreen() {
             </LinearGradient>
           </TouchableOpacity>
         </View>
+        {listeningQuestionIds.length > 0 ? (
+          <TouchableOpacity
+            style={s.listeningBtn}
+            onPress={startListeningPractice}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={`Practise ${listeningQuestionIds.length} saved listening mistakes`}
+          >
+            <View style={s.listeningIcon}>
+              <Ionicons name="headset" size={20} color={Colors.sakura[300]} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.listeningTitle}>Listening mistake practice</Text>
+              <Text style={s.listeningMeta}>{listeningQuestionIds.length} saved questions</Text>
+            </View>
+            <Ionicons name="arrow-forward" size={20} color={Colors.sakura[300]} />
+          </TouchableOpacity>
+        ) : null}
       </LinearGradient>
     </View>
   );
@@ -358,20 +416,22 @@ export default function PracticeListScreen() {
                   ) : null}
 
                   {/* Mastery bar */}
-                  <View style={s.masteryRow}>
-                    <View style={s.masteryTrack}>
-                      <View
-                        style={[
-                          s.masteryFill,
-                          {
-                            width: `${Math.max(5, item.mastery_score)}%`,
-                            backgroundColor: getMasteryColor(item.mastery_score),
-                          },
-                        ]}
-                      />
+                  {item.item_type !== "listening" ? (
+                    <View style={s.masteryRow}>
+                      <View style={s.masteryTrack}>
+                        <View
+                          style={[
+                            s.masteryFill,
+                            {
+                              width: `${Math.max(5, item.mastery_score)}%`,
+                              backgroundColor: getMasteryColor(item.mastery_score),
+                            },
+                          ]}
+                        />
+                      </View>
+                      <Text style={s.masteryText}>{Math.round(item.mastery_score)}%</Text>
                     </View>
-                    <Text style={s.masteryText}>{Math.round(item.mastery_score)}%</Text>
-                  </View>
+                  ) : null}
                 </View>
 
                 {/* Audio */}
@@ -407,7 +467,7 @@ export default function PracticeListScreen() {
                 <Ionicons name="folder-open-outline" size={48} color={Colors.dark.border} />
                 <Text style={s.emptyText}>This list is empty.</Text>
                 <Text style={s.emptySub}>
-                  Add vocabulary, kana, kanji, or grammar to start practicing!
+                  Add learning content or save listening mistakes to start practising.
                 </Text>
               </View>
             }
@@ -502,6 +562,36 @@ const s = StyleSheet.create({
     color: "#fff",
     fontSize: FontSize.base,
     fontWeight: FontWeight.bold,
+  },
+  listeningBtn: {
+    minHeight: 64,
+    marginTop: Spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.xl,
+    borderWidth: 1,
+    borderColor: "rgba(251,113,133,0.4)",
+    backgroundColor: "rgba(251,113,133,0.12)",
+  },
+  listeningIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(251,113,133,0.18)",
+  },
+  listeningTitle: {
+    color: "#fff",
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+  },
+  listeningMeta: {
+    color: Colors.primary[200],
+    fontSize: FontSize.xs,
+    marginTop: 2,
   },
   content: {
     flex: 1,

@@ -1,47 +1,41 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
   ActivityIndicator,
+  FlatList,
+  Keyboard,
+  Linking,
+  Modal,
   ScrollView,
-  Animated,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import * as Speech from "expo-speech";
-import { supabase } from "@/lib/supabase";
-import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
-import { AddToListModal } from "@/components/AddToListModal";
-import { AuthPromptModal } from "@/components/AuthPromptModal";
-import StrokeWriter from "@/components/StrokeWriter";
 import { useAuth } from "@/lib/auth";
 import { useAndroidBack } from "@/lib/use-android-back";
-import { CONTENT_JLPT_LEVEL } from "@/constants/jlpt";
-import { LoadError } from "@/components/LoadError";
-import { captureException } from "@/lib/monitoring";
+import { useVocabularySpeech } from "@/lib/use-vocabulary-speech";
+import { loadVocabulary, rememberedVocabulary, type VocabularyLoad } from "@/lib/vocabulary-loader";
+import {
+  prepareVocabulary,
+  primaryReading,
+  searchVocabulary,
+  writtenWord,
+  type StudyWord,
+} from "@/lib/vocabulary-study";
 import { readCache, writeCache } from "@/lib/offline-cache";
 import { isOfflineError } from "@/lib/connectivity";
-import { OfflineNotice } from "@/components/OfflineNotice";
-import type { VocabularyWord } from "@japangolearn/database";
-import { createXpAttemptKey } from "@japangolearn/content";
-import { toGradedAnswerPayload, type GradedAnswer, type OfflineJson } from "@japangolearn/core";
-import { submitLearningAttemptWithQueue } from "@/lib/offline-queue";
+import { AddToListModal } from "@/components/AddToListModal";
+import { AuthPromptModal } from "@/components/AuthPromptModal";
+import { LoadError } from "@/components/LoadError";
+import StrokeWriter from "@/components/StrokeWriter";
+import VocabularyPractice from "@/components/VocabularyPractice";
 
-// ─── Types ───
-type Word = VocabularyWord;
-
-type ViewMode = "browse" | "detail" | "quiz";
-
-const VOCAB_CACHE_KEY = "vocabulary-n5";
-
-// ─── Constants ───
-const CATEGORY_ICONS: Record<string, string> = {
+const TOPIC_ICONS: Record<string, string> = {
   Verbs: "🏃",
   "i-Adjectives": "✨",
   "na-Adjectives": "💫",
@@ -72,1703 +66,1195 @@ const CATEGORY_ICONS: Record<string, string> = {
   Months: "📅",
   "Week Days": "📆",
 };
-
-const CATEGORY_COLORS: Record<string, string> = {
-  Verbs: "#7C3AED",
-  "i-Adjectives": "#0891B2",
-  "na-Adjectives": "#059669",
-  Numbers: "#DC2626",
-  "Food & Drink": "#D97706",
-  Family: "#DB2777",
-  "Daily Life": "#2563EB",
-  "Animals & Birds": "#65A30D",
-  "Nature & Weather": "#0D9488",
-  Colors: "#9333EA",
-  Time: "#F59E0B",
-  "Greetings & Expressions": "#EC4899",
-  "Body Parts": "#6366F1",
-  "School & Study": "#14B8A6",
-  Adverbs: "#F97316",
-  Clothing: "#8B5CF6",
-  "House & Rooms": "#78716C",
-  "Question Words": "#D946EF",
-  "Pronouns & People": "#0EA5E9",
-  "Fruits & Vegetables": "#22C55E",
-  Vehicles: "#06B6D4",
-  Directions: "#0D9488",
-  "Position Words": "#7C3AED",
-  Counters: "#3B82F6",
-  Conjunctions: "#64748B",
-  Seasons: "#F43F5E",
-  Months: "#6366F1",
-  "Week Days": "#8B5CF6",
-  "Places & Buildings": "#0891B2",
+const wordIcon = (word: StudyWord) => word.icon || TOPIC_ICONS[word.topic] || "📌";
+const TOPIC_COLORS: Record<string, string> = {
+  "Daily Life": "#F2C991",
+  "Position Words": "#98C6F5",
+  Verbs: "#8BD8C6",
+  "i-Adjectives": "#D5AEF0",
+  "na-Adjectives": "#C8B5EE",
+  Colors: "#E6B1CC",
+  "Food & Drink": "#F0C38B",
+  "Fruits & Vegetables": "#AED69D",
+  Family: "#E8B1C4",
+  "Pronouns & People": "#E0B9DA",
+  "School & Study": "#96CBE0",
+  Numbers: "#ACBEF3",
+  "Nature & Weather": "#9EDCCB",
+  "Animals & Birds": "#B8D8A3",
+  Time: "#E9C88A",
 };
+const topicColor = (topic: string) => TOPIC_COLORS[topic] ?? "#C2B8EB";
 
-function getColor(topic: string): string {
-  return CATEGORY_COLORS[topic] || "#6B7280";
+function VocabIconButton({
+  name,
+  label,
+  onPress,
+  active = false,
+  disabled = false,
+  color,
+  testID,
+}: {
+  name: React.ComponentProps<typeof Ionicons>["name"];
+  label: string;
+  onPress: () => void;
+  active?: boolean;
+  disabled?: boolean;
+  color?: string;
+  testID?: string;
+}) {
+  return (
+    <TouchableOpacity
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={[
+        s.iconButton,
+        active && {
+          backgroundColor: `${color ?? "#B9A5FA"}20`,
+          borderColor: `${color ?? "#B9A5FA"}70`,
+        },
+        disabled && { opacity: 0.35 },
+      ]}
+    >
+      <Ionicons name={name} size={20} color={color ?? (active ? "#D8CCFF" : "#B8C7DF")} />
+    </TouchableOpacity>
+  );
+}
+function VocabControl({
+  label,
+  icon,
+  active,
+  onPress,
+  testID,
+  glyph,
+  color = "#C5B4FF",
+}: {
+  label: string;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  active: boolean;
+  onPress: () => void;
+  testID?: string;
+  glyph?: string;
+  color?: string;
+}) {
+  return (
+    <TouchableOpacity
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={[s.control, active && { backgroundColor: `${color}20`, borderColor: `${color}85` }]}
+    >
+      {glyph ? (
+        <Text accessible={false} style={[s.controlGlyph, { color }]}>
+          {glyph}
+        </Text>
+      ) : (
+        <Ionicons name={icon} size={21} color={color} />
+      )}
+    </TouchableOpacity>
+  );
 }
 
-function getIcon(topic: string, wordIcon: string | null): string {
-  return wordIcon || CATEGORY_ICONS[topic] || "📌";
-}
-
-// ─── Main Component ───
 export default function VocabularyScreen() {
+  const { session } = useAuth();
+  return (
+    <VocabularyStudy key={session?.user.id ?? "guest"} storageOwner={session?.user.id ?? "guest"} />
+  );
+}
+
+function VocabularyStudy({ storageOwner }: { storageOwner: string }) {
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
-  // Set when another screen — a practice list, say — wants a specific word
-  // opened. The detail view is local state rather than a route, so this is how
-  // it is reachable from outside.
-  const { focusItemId, focusNonce, fromListId } = useLocalSearchParams<{
+  const { speak, stop, speaking, speechMode, audioError } = useVocabularySpeech();
+  const params = useLocalSearchParams<{
     focusItemId?: string;
     focusNonce?: string;
     fromListId?: string;
   }>();
-  // The nonce makes repeat taps on the same item distinct; without it the
-  // params would be identical and this screen, still mounted, would ignore them.
-  const focusKey = focusNonce ?? focusItemId ?? null;
-  const consumedFocusRef = useRef<string | null>(null);
-  // True while the detail view was opened by a link from another screen (e.g. a
-  // practice list). Back then has to pop that route rather than fall back to
-  // this tab's browse list, or the user lands on Vocabulary instead of where
-  // they came from.
-  const openedViaFocusRef = useRef(false);
-  const [words, setWords] = useState<Word[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [offline, setOffline] = useState(false);
-  const [servedFrom, setServedFrom] = useState<number | null>(null);
-  const [mode, setMode] = useState<ViewMode>("browse");
-
-  // Browse state
-  const [selectedCategory, setSelectedCategory] = useState("All");
-  const [search, setSearch] = useState("");
+  const consumedFocus = useRef<string | null>(null);
+  const fromList = useRef(false);
+  const [content, setContent] = useState<VocabularyLoad>(() => ({
+    data: rememberedVocabulary()?.data ?? [],
+    savedAt: rememberedVocabulary()?.savedAt ?? 0,
+    refreshing: true,
+    error: null,
+  }));
+  const controller = useRef<AbortController | null>(null);
+  const [mode, setMode] = useState<"browse" | "detail" | "quiz">("browse");
+  const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [topic, setTopic] = useState("All");
+  const [savedOnly, setSavedOnly] = useState(false);
+  const [showRomaji, setShowRomaji] = useState(false);
   const [showHindi, setShowHindi] = useState(false);
-  const [speakingWordId, setSpeakingWordId] = useState<number | null>(null);
+  const [hideMeanings, setHideMeanings] = useState(false);
+  const [revealed, setRevealed] = useState<Set<string>>(new Set());
+  const [saved, setSaved] = useState<Set<string>>(new Set());
+  const savedRef = useRef<Set<string>>(new Set());
+  const [savedReady, setSavedReady] = useState(false);
+  const [topicSheet, setTopicSheet] = useState(false);
+  const [topicQuery, setTopicQuery] = useState("");
+  const [about, setAbout] = useState(false);
+  const [detail, setDetail] = useState<{ pool: StudyWord[]; index: number } | null>(null);
+  const [strokeOpen, setStrokeOpen] = useState(false);
+  const [strokeIndex, setStrokeIndex] = useState(0);
+  const [replay, setReplay] = useState(0);
+  const [addList, setAddList] = useState(false);
+  const [listAuth, setListAuth] = useState(false);
+  const [quizSelection, setQuizSelection] = useState<{ words: StudyWord[]; label: string } | null>(
+    null
+  );
+  const listRef = useRef<FlatList<StudyWord>>(null);
+  const detailScroll = useRef<ScrollView>(null);
+  const bookmarkKey = `vocabulary-bookmarks:${storageOwner}`;
 
-  // Detail state
-  const [selectedWord, setSelectedWord] = useState<Word | null>(null);
-  const [selectedIndex, setSelectedIndex] = useState(0);
-
-  // Closing the detail or quiz view. Normally that just returns to this tab's
-  // browse list. But when the detail was opened from another screen, the browse
-  // list is not where the user was, so pop back to that screen instead. Either
-  // way the mode is reset so the tab does not reopen mid-detail next visit.
-  const closeOverlay = useCallback(() => {
-    setMode("browse");
-    // Opened from a practice list: return to that exact list. router.back() is
-    // not used because the list lives in the Practice tab's own navigator, and
-    // going "back" out of this tab is not reliable — navigating to the list's
-    // route by id always lands in the right place.
-    if (openedViaFocusRef.current && fromListId) {
-      openedViaFocusRef.current = false;
-      router.navigate({ pathname: "/(tabs)/practice/[id]", params: { id: fromListId } });
-    }
-  }, [fromListId]);
-
-  // Detail and quiz are local state, not routes, so Android's back button would
-  // otherwise leave the screen entirely instead of returning to the list.
-  useAndroidBack(mode !== "browse", closeOverlay);
-
-  // Custom List State
-  const [showAddListModal, setShowAddListModal] = useState(false);
-  const [showListAuthPrompt, setShowListAuthPrompt] = useState(false);
-  const [showProgressAuthPrompt, setShowProgressAuthPrompt] = useState(false);
-
-  // Quiz state
-  const [quizPool, setQuizPool] = useState<Word[]>([]);
-  const [quizIndex, setQuizIndex] = useState(0);
-  const [quizOptions, setQuizOptions] = useState<string[]>([]);
-  const [quizAnswer, setQuizAnswer] = useState<string | null>(null);
-  const [quizScore, setQuizScore] = useState({ correct: 0, total: 0 });
-  const [quizDone, setQuizDone] = useState(false);
-  const [quizAttemptKey, setQuizAttemptKey] = useState(() => createXpAttemptKey());
-  const answersRef = useRef<GradedAnswer[]>([]);
-  const questionShownAtRef = useRef<number>(Date.now());
-
-  // Animations
-  const cardAnim = useRef(new Animated.Value(0)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  const loadVocabulary = useCallback(async () => {
-    setLoading(true);
-    setLoadFailed(false);
-    const { data, error } = await supabase
-      .from("vocabulary")
-      .select("id, kanji, hiragana, romaji, romaji_hindi, english, topic, jlpt_level, icon")
-      .eq("jlpt_level", CONTENT_JLPT_LEVEL)
-      .order("topic")
-      .order("hiragana");
-
-    if (!error && data) {
-      setWords(data);
-      setServedFrom(null);
-      void writeCache(VOCAB_CACHE_KEY, data);
-      setLoading(false);
-      return;
-    }
-
-    captureException(error, { screen: "vocabulary" });
-    setOffline(isOfflineError(error));
-
-    // Fall back to the last successful load rather than showing nothing.
-    const cached = await readCache<Word[]>(VOCAB_CACHE_KEY);
-    if (cached) {
-      setWords(cached.data);
-      setServedFrom(cached.savedAt);
-    } else {
-      setLoadFailed(true);
-    }
-    setLoading(false);
+  const refresh = useCallback(() => {
+    controller.current?.abort();
+    controller.current = new AbortController();
+    void loadVocabulary(setContent, controller.current.signal);
   }, []);
-
   useEffect(() => {
-    void loadVocabulary();
-  }, [loadVocabulary]);
-
-  // ─── Derived Data ───
-  const categories = useMemo(() => {
-    return ["All", ...Array.from(new Set(words.map((w) => w.topic))).sort()];
-  }, [words]);
-
-  const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = { All: words.length };
-    words.forEach((w) => {
-      counts[w.topic] = (counts[w.topic] || 0) + 1;
+    refresh();
+    return () => controller.current?.abort();
+  }, [refresh]);
+  useEffect(() => {
+    let active = true;
+    void readCache<string[]>(bookmarkKey).then((value) => {
+      if (!active) return;
+      const valid = Array.isArray(value?.data)
+        ? value.data.filter((item) => typeof item === "string")
+        : [];
+      savedRef.current = new Set(valid);
+      setSaved(savedRef.current);
+      setSavedReady(true);
     });
+    return () => {
+      active = false;
+    };
+  }, [bookmarkKey]);
+  const words = useMemo(() => prepareVocabulary(content.data), [content.data]);
+  const topics = useMemo(() => [...new Set(words.flatMap((w) => w.topics))].sort(), [words]);
+  const topicCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    words.forEach((w) => w.topics.forEach((t) => counts.set(t, (counts.get(t) ?? 0) + 1)));
     return counts;
   }, [words]);
-
-  const filtered = useMemo(() => {
-    return words.filter((w) => {
-      const matchCat = selectedCategory === "All" || w.topic === selectedCategory;
-      const q = search.toLowerCase();
-      const matchSearch =
-        !q ||
-        (w.kanji || "").includes(q) ||
-        w.hiragana.includes(q) ||
-        w.english.toLowerCase().includes(q) ||
-        w.romaji.toLowerCase().includes(q) ||
-        (showHindi && w.romaji_hindi?.toLowerCase().includes(q));
-      return matchCat && matchSearch;
-    });
-  }, [words, selectedCategory, search, showHindi]);
-
-  // Group filtered words by topic for sectioned browse
-  const groupedWords = useMemo(() => {
-    const groups: { topic: string; data: Word[] }[] = [];
-    const seen = new Set<string>();
-    for (const w of filtered) {
-      if (!seen.has(w.topic)) {
-        seen.add(w.topic);
-        groups.push({ topic: w.topic, data: filtered.filter((x) => x.topic === w.topic) });
-      }
-    }
-    return groups;
-  }, [filtered]);
-
-  // Flat list data with section headers for FlatList
-  const sectionedData = useMemo(() => {
-    const items: (
-      | { type: "header"; topic: string; count: number }
-      | { type: "word"; word: Word; globalIndex: number }
-    )[] = [];
-    let globalIdx = 0;
-    for (const g of groupedWords) {
-      items.push({ type: "header", topic: g.topic, count: g.data.length });
-      for (const w of g.data) {
-        items.push({ type: "word", word: w, globalIndex: globalIdx });
-        globalIdx++;
-      }
-    }
-    return items;
-  }, [groupedWords]);
-
-  // ─── Helpers ───
-  const speakWord = useCallback((word: Word) => {
-    Speech.stop();
-    setSpeakingWordId(word.id);
-    // Speak the hiragana reading, never the kanji. A kanji spoken in isolation
-    // is read with whichever reading the engine guesses, which for compounds is
-    // routinely wrong — お腹 (おなか) came out as お-はら. The hiragana column is
-    // the word's actual reading, so it is always pronounced correctly.
-    Speech.speak(word.hiragana, {
-      language: "ja-JP",
-      pitch: 1.0,
-      rate: 0.8,
-      onDone: () => setSpeakingWordId(null),
-      onError: () => setSpeakingWordId(null),
-    });
+  const savedCount = useMemo(() => words.filter((w) => saved.has(w.key)).length, [words, saved]);
+  const filtered = useMemo(
+    () => searchVocabulary(words, query, topic).filter((w) => !savedOnly || saved.has(w.key)),
+    [words, query, topic, savedOnly, saved]
+  );
+  const focusedWord = detail?.pool[detail.index];
+  const word = focusedWord
+    ? (words.find((entry) => entry.sourceIds.includes(focusedWord.id)) ?? focusedWord)
+    : undefined;
+  const resetDetailTools = useCallback(() => {
+    setStrokeOpen(false);
+    setStrokeIndex(0);
+    setReplay(0);
+    detailScroll.current?.scrollTo({ y: 0, animated: false });
   }, []);
-
-  const openAddToList = () => {
-    if (session) {
-      setShowAddListModal(true);
-    } else {
-      setShowListAuthPrompt(true);
+  const openWord = useCallback(
+    (pool: StudyWord[], index: number) => {
+      stop();
+      setDetail({ pool, index });
+      resetDetailTools();
+      setMode("detail");
+    },
+    [stop, resetDetailTools]
+  );
+  const closeDetail = useCallback(() => {
+    stop();
+    setMode("browse");
+    if (fromList.current && params.fromListId) {
+      fromList.current = false;
+      router.navigate({ pathname: "/(tabs)/practice/[id]", params: { id: params.fromListId } });
     }
+  }, [stop, params.fromListId]);
+  useAndroidBack(mode === "detail" && !topicSheet && !about, closeDetail);
+  useEffect(() => {
+    const key = params.focusNonce ?? params.focusItemId;
+    if (!params.focusItemId || !words.length || consumedFocus.current === key) return;
+    const index = words.findIndex((entry) =>
+      entry.sourceIds.some((id) => String(id) === params.focusItemId)
+    );
+    if (index < 0) return;
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (active) {
+        consumedFocus.current = key ?? null;
+        fromList.current = true;
+        openWord(words, index);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [params.focusItemId, params.focusNonce, words, openWord]);
+  const toggleSaved = (entry: StudyWord) => {
+    if (!savedReady) return;
+    const next = new Set(savedRef.current);
+    if (next.has(entry.key)) next.delete(entry.key);
+    else next.add(entry.key);
+    savedRef.current = next;
+    setSaved(next);
+    void writeCache(bookmarkKey, [...next]);
+  };
+  const changeFilters = (change: () => void) => {
+    change();
+    setRevealed(new Set());
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  };
+  const startPractice = () => {
+    stop();
+    setQuizSelection({
+      words: [...filtered],
+      label: [
+        savedOnly ? "Saved words" : "Your collection",
+        topic !== "All" ? topic : null,
+        query.trim() ? `Search: ${query.trim()}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    });
+    setMode("quiz");
   };
 
-  const openDetail = useCallback(
-    (word: Word, idx: number) => {
-      setSelectedWord(word);
-      setSelectedIndex(idx);
-      setMode("detail");
-      cardAnim.setValue(0);
-      Animated.spring(cardAnim, {
-        toValue: 1,
-        useNativeDriver: true,
-        tension: 50,
-        friction: 9,
-      }).start();
-      speakWord(word);
-    },
-    [speakWord, cardAnim]
+  const readingControls = (
+    <>
+      <VocabControl
+        label="Romaji pronunciation"
+        icon="text-outline"
+        glyph="Aa"
+        color="#99C7FA"
+        active={showRomaji}
+        onPress={() => setShowRomaji(!showRomaji)}
+        testID="vocab-romaji-toggle"
+      />
+      <VocabControl
+        label="Hindi pronunciation"
+        icon="language-outline"
+        glyph="अ"
+        color="#F0B3CE"
+        active={showHindi}
+        onPress={() => setShowHindi(!showHindi)}
+        testID="vocab-hindi-toggle"
+      />
+      {mode === "browse" && (
+        <VocabControl
+          label={hideMeanings ? "Show meanings" : "Hide meanings for recall"}
+          icon={hideMeanings ? "eye-off-outline" : "eye-outline"}
+          color="#C9B6FA"
+          active={hideMeanings}
+          onPress={() => {
+            setHideMeanings(!hideMeanings);
+            setRevealed(new Set());
+          }}
+          testID={"vocab-meaning-toggle"}
+        />
+      )}
+    </>
   );
-
-  /*
-   * Opens the word named by ?focusItemId once the list has loaded. The index is
-   * taken from `filtered` because that is what the prev/next arrows walk, so a
-   * word opened this way still steps through its neighbours correctly.
-   *
-   * If the active category or search hides the word, the filters are cleared
-   * and this runs again against the full list — otherwise arriving from a
-   * practice list would silently do nothing whenever a filter happened to be
-   * set.
-   */
-  useEffect(() => {
-    if (!focusItemId || words.length === 0) return;
-    if (consumedFocusRef.current === focusKey) return;
-
-    const index = filtered.findIndex((word) => String(word.id) === focusItemId);
-    if (index >= 0) {
-      consumedFocusRef.current = focusKey;
-      openedViaFocusRef.current = true;
-      openDetail(filtered[index], index);
-      return;
-    }
-
-    if (words.some((word) => String(word.id) === focusItemId)) {
-      setSelectedCategory("All");
-      setSearch("");
-    } else {
-      // Not in this level's vocabulary at all; stop retrying on every render.
-      consumedFocusRef.current = focusKey;
-    }
-  }, [focusItemId, focusKey, words, filtered, openDetail]);
-
-  const navigateWord = useCallback(
-    (direction: 1 | -1) => {
-      const newIdx = selectedIndex + direction;
-      if (newIdx < 0 || newIdx >= filtered.length) return;
-      const word = filtered[newIdx];
-      setSelectedWord(word);
-      setSelectedIndex(newIdx);
-      cardAnim.setValue(0);
-      Animated.spring(cardAnim, {
-        toValue: 1,
-        useNativeDriver: true,
-        tension: 50,
-        friction: 9,
-      }).start();
-      speakWord(word);
-    },
-    [filtered, selectedIndex, speakWord, cardAnim]
+  const pronunciations = (entry: StudyWord) => (
+    <>
+      {showRomaji && <Text style={s.romaji}>{entry.romaji}</Text>}
+      {showHindi && (
+        <Text style={s.hindi}>
+          {entry.romaji_hindi ? `हिं · ${entry.romaji_hindi}` : "Hindi pronunciation unavailable"}
+        </Text>
+      )}
+    </>
   );
-
-  // ─── Quiz Logic ───
-  const setupQuizQuestion = useCallback(
-    (pool: Word[], idx: number) => {
-      if (idx >= pool.length) {
-        setQuizDone(true);
-        return;
-      }
-      const target = pool[idx];
-      const others = words.filter((word) => word.id !== target.id);
-      const randomOthers = others.sort(() => Math.random() - 0.5).slice(0, 3);
-      const options = [...randomOthers.map((word) => word.english), target.english].sort(
-        () => Math.random() - 0.5
-      );
-      setQuizOptions(options);
-      setQuizAnswer(null);
-      questionShownAtRef.current = Date.now();
-    },
-    [words]
-  );
-
-  const startQuiz = useCallback(() => {
-    const pool = filtered.length >= 4 ? filtered : words;
-    if (pool.length < 4) return;
-    const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, Math.min(15, pool.length));
-    setQuizPool(shuffled);
-    setQuizIndex(0);
-    setQuizScore({ correct: 0, total: 0 });
-    setQuizAnswer(null);
-    setQuizDone(false);
-    setQuizAttemptKey(createXpAttemptKey());
-    answersRef.current = [];
-    setupQuizQuestion(shuffled, 0);
-    setMode("quiz");
-    fadeAnim.setValue(0);
-    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-  }, [filtered, words, fadeAnim, setupQuizQuestion]);
-
-  const handleQuizAnswer = useCallback(
-    (answer: string) => {
-      if (quizAnswer) return;
-      setQuizAnswer(answer);
-      const current = quizPool[quizIndex];
-      const correct = answer === current?.english;
-      setQuizScore((s) => ({
-        correct: s.correct + (correct ? 1 : 0),
-        total: s.total + 1,
-      }));
-      if (current) {
-        answersRef.current.push({
-          itemType: "vocabulary",
-          itemId: String(current.id),
-          isCorrect: correct,
-          prompt: current.kanji || current.hiragana,
-          answer,
-          correctAnswer: current.english,
-          responseMs: Date.now() - questionShownAtRef.current,
-        });
-        speakWord(current);
-      }
-
-      setTimeout(async () => {
-        const next = quizIndex + 1;
-        setQuizIndex(next);
-        if (next >= quizPool.length) {
-          if (session) {
-            const payload = toGradedAnswerPayload(answersRef.current);
-            const result = await submitLearningAttemptWithQueue(supabase, {
-              activityType: "vocabulary_quiz",
-              attemptKey: quizAttemptKey,
-              answers: payload as unknown as OfflineJson,
-              expectedUserId: session.user.id,
-            });
-            if (result.status === "failed") {
-              console.error("Failed to record vocabulary quiz", result.error);
-            }
-          }
-          setQuizDone(true);
-        } else {
-          setupQuizQuestion(quizPool, next);
-        }
-      }, 1200);
-    },
-    [quizAnswer, quizPool, quizIndex, quizAttemptKey, session, speakWord, setupQuizQuestion]
-  );
-
-  // ═══════════════════ BROWSE MODE ═══════════════════
-  const renderBrowse = () => (
-    <View style={s.flex}>
-      {/* Hero Banner */}
-      <View style={s.heroBanner}>
-        <LinearGradient
-          colors={[Colors.primary[700], "#1E1064"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={s.heroGradient}
-        >
-          <View style={s.heroLeft}>
-            <Text style={s.heroKanji}>語</Text>
-          </View>
-          <View style={s.heroRight}>
-            <Text style={s.heroTitle}>Vocabulary</Text>
-            <Text style={s.heroSubtitle}>
-              {words.length} N5 words · {categories.length - 1} topics
-            </Text>
-            <View style={s.heroActions}>
-              <TouchableOpacity style={s.heroQuizBtn} onPress={startQuiz} activeOpacity={0.8}>
-                <Ionicons name="help-circle" size={16} color="#fff" />
-                <Text style={s.heroQuizBtnText}>Quiz Me</Text>
+  return (
+    <View style={[s.screen, { paddingTop: insets.top }]}>
+      {mode === "browse" && (
+        <>
+          <LinearGradient
+            colors={["#262344", "#162D40", "#112B34"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={s.headerSurface}
+          >
+            <View style={s.header}>
+              <View style={s.flex}>
+                <Text style={s.browseHeading}>Vocabulary</Text>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="About this vocabulary collection"
+                  onPress={() => setAbout(true)}
+                  style={s.collectionLink}
+                >
+                  <Text style={s.muted}>N5 study collection</Text>
+                  <Ionicons name="information-circle-outline" size={14} color="#A6A0BD" />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                testID="vocab-practice"
+                accessibilityRole="button"
+                accessibilityLabel="Practice filtered vocabulary"
+                accessibilityState={{ disabled: !filtered.length }}
+                disabled={!filtered.length}
+                onPress={startPractice}
+                style={[s.primaryButton, s.practiceButton, !filtered.length && { opacity: 0.4 }]}
+              >
+                <Ionicons name="school-outline" size={17} color="#fff" />
+                <Text style={s.buttonText}>Practice</Text>
               </TouchableOpacity>
+              <VocabIconButton
+                testID="vocab-search-toggle"
+                name={searchOpen ? "close" : "search-outline"}
+                label={searchOpen ? "Close vocabulary search" : "Open vocabulary search"}
+                active={searchOpen}
+                onPress={() => {
+                  if (searchOpen) {
+                    changeFilters(() => setQuery(""));
+                    Keyboard.dismiss();
+                  }
+                  setSearchOpen(!searchOpen);
+                }}
+              />
             </View>
+            {searchOpen && (
+              <View style={s.searchBox}>
+                <Ionicons name="search-outline" size={19} color="#A6A0BD" />
+                <TextInput
+                  testID="vocab-search"
+                  accessibilityLabel="Search vocabulary"
+                  value={query}
+                  onChangeText={(value) => changeFilters(() => setQuery(value))}
+                  placeholder="Japanese, English, Romaji or Hindi"
+                  placeholderTextColor="#8F87A7"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoFocus
+                  returnKeyType="search"
+                  onSubmitEditing={() => Keyboard.dismiss()}
+                  style={s.searchInput}
+                />
+                {query ? (
+                  <VocabIconButton
+                    name={"close-circle"}
+                    label={"Clear vocabulary search"}
+                    onPress={() => changeFilters(() => setQuery(""))}
+                  />
+                ) : null}
+              </View>
+            )}
+            <View style={s.filters}>
+              <VocabControl
+                label={"All words"}
+                icon={"albums-outline"}
+                active={!savedOnly && topic === "All"}
+                onPress={() =>
+                  changeFilters(() => {
+                    setSavedOnly(false);
+                    setTopic("All");
+                  })
+                }
+                testID="vocab-all-filter"
+              />
+              <VocabControl
+                label={`Saved ${savedCount}`}
+                icon={savedOnly ? "bookmark" : "bookmark-outline"}
+                color="#F2CD8F"
+                active={savedOnly}
+                onPress={() => changeFilters(() => setSavedOnly(!savedOnly))}
+                testID={"vocab-saved-filter"}
+              />
+              <VocabControl
+                label={topic === "All" ? "Choose topic" : `Choose topic: ${topic}`}
+                icon={"options-outline"}
+                color="#8CDECF"
+                active={topic !== "All"}
+                onPress={() => {
+                  setTopicQuery("");
+                  setTopicSheet(true);
+                }}
+                testID={"vocab-topics"}
+              />
+              {readingControls}
+            </View>
+          </LinearGradient>
+          <View style={s.resultsRow}>
+            <Text style={s.muted}>
+              {filtered.length} {filtered.length === 1 ? "word" : "words"}
+              {topic !== "All" ? ` · ${topic}` : ` · ${topics.length} topics`}
+            </Text>
+            {content.refreshing ? (
+              <ActivityIndicator size="small" color="#A78BFA" />
+            ) : (
+              <VocabIconButton
+                name={content.error ? "cloud-download-outline" : "refresh-outline"}
+                label={
+                  content.error ? "Using cached vocabulary. Retry refresh" : "Refresh vocabulary"
+                }
+                color={content.error ? "#FBBF24" : undefined}
+                onPress={refresh}
+              />
+            )}
           </View>
-          {/* Decorative */}
-          <Text style={s.heroDecorative}>語彙</Text>
-        </LinearGradient>
-      </View>
-
-      {/* Search + Hindi Toggle Row */}
-      <View style={s.searchRow}>
-        <View style={s.searchBox}>
-          <Ionicons name="search" size={17} color={Colors.dark.textMuted} />
-          <TextInput
-            style={s.searchInput}
-            placeholder="Search japanese / english / romaji..."
-            placeholderTextColor={Colors.dark.textMuted}
-            value={search}
-            onChangeText={setSearch}
-            autoCorrect={false}
-          />
-          {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch("")}>
-              <Ionicons name="close-circle" size={17} color={Colors.dark.textMuted} />
-            </TouchableOpacity>
+          {!words.length ? (
+            content.refreshing ? (
+              <View style={s.center}>
+                <ActivityIndicator color="#A78BFA" />
+                <Text style={s.muted}>Loading your word collection…</Text>
+              </View>
+            ) : (
+              <LoadError
+                onRetry={refresh}
+                offline={isOfflineError(content.error)}
+                message="Vocabulary could not be loaded"
+              />
+            )
+          ) : (
+            <FlatList
+              ref={listRef}
+              data={filtered}
+              keyExtractor={(entry) => entry.key}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              contentContainerStyle={s.list}
+              initialNumToRender={10}
+              maxToRenderPerBatch={12}
+              windowSize={7}
+              renderItem={({ item, index }) => (
+                <View style={[s.wordCard, { borderLeftColor: `${topicColor(item.topic)}85` }]}>
+                  <View style={s.wordTop}>
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open word ${writtenWord(item)}`}
+                      testID={`vocab-word-${item.id}`}
+                      onPress={() => openWord(filtered, index)}
+                      style={s.wordMain}
+                    >
+                      <Text style={s.japanese}>{writtenWord(item)}</Text>
+                      {writtenWord(item) !== item.hiragana && (
+                        <Text style={s.kana}>{item.hiragana}</Text>
+                      )}
+                      {pronunciations(item)}
+                    </TouchableOpacity>
+                    <View style={s.wordSide}>
+                      <View style={s.wordTools}>
+                        {
+                          <VocabIconButton
+                            name={speaking === item.id ? "volume-high" : "volume-medium-outline"}
+                            label={`Listen to ${writtenWord(item)}`}
+                            onPress={() => void speak(item)}
+                            active={speaking === item.id}
+                            color="#8BDDD1"
+                          />
+                        }
+                        {
+                          <VocabIconButton
+                            name={saved.has(item.key) ? "bookmark" : "bookmark-outline"}
+                            label={`${saved.has(item.key) ? "Unsave" : "Save"} ${writtenWord(item)}`}
+                            onPress={() => toggleSaved(item)}
+                            active={saved.has(item.key)}
+                            color="#EDC888"
+                            disabled={!savedReady}
+                          />
+                        }
+                      </View>
+                      <Text style={[s.topicLabel, { color: topicColor(item.topic) }]}>
+                        {item.topics.join(" · ")}
+                      </Text>
+                    </View>
+                  </View>
+                  {hideMeanings && !revealed.has(item.key) ? (
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      accessibilityLabel={`Reveal meaning of ${writtenWord(item)}`}
+                      onPress={() => setRevealed((previous) => new Set(previous).add(item.key))}
+                      style={s.reveal}
+                    >
+                      <Ionicons name="eye-outline" size={16} color="#C4B5FD" />
+                      <Text style={s.revealText}>Reveal meaning</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={s.meaningRow}>
+                      <Text accessible={false} style={s.wordEmoji}>
+                        {wordIcon(item)}
+                      </Text>
+                      <Text style={[s.meaning, s.flex]}>{item.english}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+              ListEmptyComponent={
+                <View style={s.empty}>
+                  <Ionicons
+                    name={savedOnly ? "bookmark-outline" : "search-outline"}
+                    size={35}
+                    color="#A78BFA"
+                  />
+                  <Text style={s.title}>
+                    {savedOnly && !savedCount ? "Keep useful words close" : "No matching words"}
+                  </Text>
+                  <Text style={s.body}>
+                    {savedOnly && !savedCount
+                      ? "Tap a bookmark beside any word to save it here."
+                      : "Try another spelling or clear your filters."}
+                  </Text>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    onPress={() =>
+                      changeFilters(() => {
+                        setQuery("");
+                        setTopic("All");
+                        setSavedOnly(false);
+                      })
+                    }
+                    style={s.secondaryButton}
+                  >
+                    <Text style={s.buttonText}>Browse all words</Text>
+                  </TouchableOpacity>
+                </View>
+              }
+              ListFooterComponent={
+                filtered.length ? (
+                  <Text style={s.listFooter}>Listen. Recall. Use the word in a sentence.</Text>
+                ) : null
+              }
+            />
           )}
-        </View>
-        <TouchableOpacity
-          style={[s.hindiToggle, showHindi && s.hindiToggleActive]}
-          onPress={() => setShowHindi(!showHindi)}
-          activeOpacity={0.8}
-        >
-          <Text style={[s.hindiToggleText, showHindi && { color: "#fff" }]}>हिं</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Category Filter Chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={s.chipRow}
-        style={s.chipScroll}
-        bounces={false}
-      >
-        {categories.map((cat) => {
-          const isSelected = cat === selectedCategory;
-          const c = cat === "All" ? Colors.primary[500] : getColor(cat);
-          return (
-            <TouchableOpacity
-              key={cat}
-              style={[s.chip, isSelected && { backgroundColor: c + "20", borderColor: c }]}
-              onPress={() => setSelectedCategory(cat)}
-              activeOpacity={0.8}
-            >
-              {cat !== "All" && <Text style={s.chipIcon}>{CATEGORY_ICONS[cat] || "📌"}</Text>}
-              <Text style={[s.chipLabel, isSelected && { color: c, fontWeight: "700" as const }]}>
-                {cat}
+        </>
+      )}
+      {mode === "detail" && word && detail && (
+        <>
+          <LinearGradient
+            colors={["#25213F", "#15303D"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={s.detailHeader}
+          >
+            {
+              <VocabIconButton
+                name={"arrow-back"}
+                label={"Back to vocabulary"}
+                onPress={closeDetail}
+              />
+            }
+            <View style={s.flex}>
+              <Text style={s.title}>Word study</Text>
+              <Text style={s.muted}>
+                {detail.index + 1} of {detail.pool.length}
               </Text>
-              <View style={[s.chipCountBadge, isSelected && { backgroundColor: c + "30" }]}>
-                <Text style={[s.chipCount, isSelected && { color: c }]}>
-                  {categoryCounts[cat] || 0}
+            </View>
+            {
+              <VocabIconButton
+                name={"chevron-back"}
+                label={"Previous vocabulary word"}
+                onPress={() => openWord(detail.pool, detail.index - 1)}
+                active={false}
+                disabled={detail.index === 0}
+              />
+            }
+            {
+              <VocabIconButton
+                name={"chevron-forward"}
+                label={"Next vocabulary word"}
+                onPress={() => openWord(detail.pool, detail.index + 1)}
+                active={false}
+                disabled={detail.index + 1 === detail.pool.length}
+              />
+            }
+          </LinearGradient>
+          <ScrollView
+            ref={detailScroll}
+            contentContainerStyle={s.detailContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <LinearGradient
+              colors={["#252D4A", "#172C3D", "#152D33"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={s.wordHero}
+            >
+              <View
+                style={[
+                  s.heroTopic,
+                  {
+                    borderColor: `${topicColor(word.topic)}40`,
+                    backgroundColor: `${topicColor(word.topic)}12`,
+                  },
+                ]}
+              >
+                <Text style={[s.eyebrow, { color: topicColor(word.topic) }]}>
+                  {word.topics.join(" · ")}
                 </Text>
               </View>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
-      {/* Result count */}
-      <Text style={s.resultCount}>
-        <Text style={{ color: Colors.primary[400], fontWeight: "700" as const }}>
-          {filtered.length}
-        </Text>{" "}
-        words{selectedCategory !== "All" ? ` · ${selectedCategory}` : ""}
-      </Text>
-
-      {servedFrom !== null && (
-        <OfflineNotice savedAt={servedFrom} onRetry={() => void loadVocabulary()} />
-      )}
-
-      {/* Sectioned word list */}
-      {loading ? (
-        <View style={s.centerBox}>
-          <ActivityIndicator size="large" color={Colors.primary[500]} />
-          <Text style={s.loadingText}>Loading N5 Vocabulary...</Text>
-        </View>
-      ) : loadFailed ? (
-        <LoadError
-          onRetry={() => void loadVocabulary()}
-          offline={offline}
-          message="We could not load the vocabulary."
-        />
-      ) : (
-        <FlatList
-          data={sectionedData}
-          keyExtractor={(item, index) => {
-            if (item.type === "header") return `header-${item.topic}`;
-            return `word-${item.word.id}`;
-          }}
-          renderItem={({ item }) => {
-            if (item.type === "header") {
-              const color = getColor(item.topic);
-              return (
-                <View style={s.sectionHeader}>
-                  <View style={[s.sectionDot, { backgroundColor: color }]} />
-                  <Text style={s.sectionTitle}>{item.topic}</Text>
-                  <Text style={s.sectionIcon}>{CATEGORY_ICONS[item.topic] || "📌"}</Text>
-                  <View style={[s.sectionLine, { backgroundColor: color + "30" }]} />
-                  <Text style={s.sectionCount}>{item.count}</Text>
-                </View>
-              );
-            }
-            return renderWordCard(item.word, item.globalIndex);
-          }}
-          contentContainerStyle={s.listContainer}
-          showsVerticalScrollIndicator={false}
-          initialNumToRender={25}
-          maxToRenderPerBatch={20}
-          ListEmptyComponent={
-            <View style={s.empty}>
-              <Text style={s.emptyEmoji}>🔍</Text>
-              <Text style={s.emptyText}>No words found</Text>
-              <Text style={s.emptySubtext}>Try a different search or category</Text>
-            </View>
-          }
-          ListFooterComponent={
-            filtered.length > 0 ? (
-              <Text style={s.footerText}>
-                語彙は言語の基礎 — Vocabulary is the foundation of language.
+              <Text style={s.largeJapanese}>{writtenWord(word)}</Text>
+              <Text style={s.largeReading}>{word.hiragana}</Text>
+              {pronunciations(word)}
+              <View style={s.divider} />
+              <Text style={s.largeMeaning}>
+                {wordIcon(word)} {word.english}
               </Text>
-            ) : null
-          }
-        />
-      )}
-    </View>
-  );
-
-  // ─── Word Card ───
-  const renderWordCard = (word: Word, globalIndex: number) => {
-    const color = getColor(word.topic);
-    const isSpeaking = speakingWordId === word.id;
-    const wordIcon = getIcon(word.topic, word.icon);
-
-    return (
-      <TouchableOpacity
-        style={[s.wordCard, { borderLeftColor: color, borderLeftWidth: 3 }]}
-        onPress={() => openDetail(word, globalIndex)}
-        activeOpacity={0.85}
-      >
-        {/* Background watermark icon */}
-        <Text style={s.watermarkIcon} numberOfLines={1}>
-          {wordIcon}
-        </Text>
-
-        <View style={s.wordRow}>
-          {/* Japanese word */}
-          <View style={s.wordMain}>
-            <Text style={s.wordJapanese}>{word.kanji || word.hiragana}</Text>
-            {word.kanji && <Text style={s.wordReading}>{word.hiragana}</Text>}
-          </View>
-
-          {/* Meanings */}
-          <View style={s.meaningCol}>
-            <Text style={s.wordMeaning} numberOfLines={2}>
-              {word.english}
-            </Text>
-            {showHindi && word.romaji_hindi && (
-              <Text style={s.hindiMeaning}>🇮🇳 {word.romaji_hindi}</Text>
-            )}
-            <Text style={s.romaji}>{word.romaji}</Text>
-          </View>
-
-          {/* Speak button */}
-          <TouchableOpacity
-            style={[s.speakBtn, isSpeaking && s.speakBtnActive]}
-            accessibilityRole="button"
-            accessibilityLabel={`Play pronunciation of ${word.kanji || word.hiragana}`}
-            onPress={(e) => {
-              e.stopPropagation();
-              speakWord(word);
-            }}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons
-              name={isSpeaking ? "volume-high" : "volume-medium-outline"}
-              size={18}
-              color={isSpeaking ? "#fff" : Colors.primary[400]}
-            />
-          </TouchableOpacity>
-
-          {/* Detail arrow */}
-          <Ionicons name="chevron-forward" size={14} color={Colors.dark.textMuted} />
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  // ═══════════════════ DETAIL MODE ═══════════════════
-  const renderDetail = () => {
-    if (!selectedWord) return null;
-    const total = filtered.length;
-    const canPrev = selectedIndex > 0;
-    const canNext = selectedIndex < total - 1;
-    const color = getColor(selectedWord.topic);
-    const wordIcon = getIcon(selectedWord.topic, selectedWord.icon);
-    const isSpeaking = speakingWordId === selectedWord.id;
-    const displayChar = selectedWord.kanji || selectedWord.hiragana;
-    // Every character of the written word gets its own animated glyph. This
-    // previously drew only displayChar[0], so a two-character word like お腹
-    // animated the お and left the 腹 undrawn. Array.from keeps any character
-    // outside the basic plane intact. The tiles shrink as the word grows so a
-    // longer word still fits the card on one row.
-    const strokeChars = Array.from(displayChar);
-    const strokeSize = Math.max(56, Math.min(120, Math.floor(280 / strokeChars.length)));
-
-    return (
-      <Animated.ScrollView
-        style={[s.flex, { opacity: cardAnim }]}
-        contentContainerStyle={s.detailScroll}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Top bar */}
-        <View style={s.detailTopBar}>
-          <TouchableOpacity onPress={closeOverlay} style={s.backBtn} activeOpacity={0.7}>
-            <Ionicons name="arrow-back" size={22} color={Colors.dark.text} />
-          </TouchableOpacity>
-          <Text style={s.detailCounter}>
-            {selectedIndex + 1} / {total}
-          </Text>
-          <TouchableOpacity onPress={startQuiz} style={s.topQuizBtn} activeOpacity={0.7}>
-            <Ionicons name="help-circle-outline" size={20} color={Colors.primary[400]} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Large Word Card */}
-        <View style={s.detailCharCard}>
-          <LinearGradient colors={[color + "15", "transparent"]} style={s.detailCharGlow} />
-
-          {/* Watermark */}
-          <Text style={s.detailWatermark}>{wordIcon}</Text>
-
-          {/* Animated stroke order for the whole written word */}
-          <View style={s.detailMainCharContainer}>
-            {strokeChars.map((ch, i) => (
-              <StrokeWriter
-                key={`${ch}-${i}`}
-                character={ch}
-                size={strokeSize}
-                color={color}
-                outlineColor={Colors.dark.surface}
-              />
-            ))}
-          </View>
-
-          {/* Full Japanese Word Below Animation */}
-          <Text style={s.detailJapaneseFull}>{displayChar}</Text>
-
-          {/* Hiragana reading (if kanji exists) */}
-          {selectedWord.kanji && <Text style={s.detailHiragana}>{selectedWord.hiragana}</Text>}
-
-          {/* Render the full string below the first animated character if needed */}
-          <Text style={[s.detailRomaji, { color, marginTop: Spacing.md }]}>
-            {showHindi && selectedWord.romaji_hindi
-              ? selectedWord.romaji_hindi
-              : selectedWord.romaji}
-          </Text>
-          {showHindi && selectedWord.romaji_hindi && (
-            <Text style={s.detailRomajiSub}>{selectedWord.romaji}</Text>
-          )}
-
-          {/* Divider */}
-          <View style={s.detailDivider} />
-
-          {/* English Meaning */}
-          <Text style={s.detailEnglish}>{selectedWord.english}</Text>
-          {showHindi && selectedWord.romaji_hindi && (
-            <Text style={s.detailHindiMeaning}>🇮🇳 {selectedWord.romaji_hindi}</Text>
-          )}
-
-          {/* Action buttons */}
-          <View style={s.detailActions}>
-            <TouchableOpacity
-              style={[s.detailActionBtn, isSpeaking && { backgroundColor: Colors.primary[600] }]}
-              onPress={() => speakWord(selectedWord)}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name={isSpeaking ? "volume-high" : "volume-medium-outline"}
-                size={20}
-                color={isSpeaking ? "#fff" : Colors.primary[400]}
-              />
-              <Text style={[s.detailActionText, isSpeaking && { color: "#fff" }]}>
-                {isSpeaking ? "Playing..." : "Audio"}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={s.detailActionBtnSecondary}
-              onPress={openAddToList}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="add" size={20} color={Colors.primary[300]} />
-              <Text style={s.detailActionTextSecondary}>Add to List</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Badges */}
-          <View style={s.badgeRow}>
-            <View style={[s.badge, { backgroundColor: color + "18", borderColor: color + "40" }]}>
-              <Text style={s.badgeIcon}>{wordIcon}</Text>
-              <Text style={[s.badgeText, { color }]}>{selectedWord.topic}</Text>
-            </View>
-            <View style={[s.badge, { backgroundColor: "#7C3AED18", borderColor: "#7C3AED40" }]}>
-              <Text style={[s.badgeText, { color: "#7C3AED" }]}>JLPT N5</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Word Info Card */}
-        <View style={s.card}>
-          <View style={s.cardHeader}>
-            <Ionicons name="information-circle" size={16} color={Colors.accent[400]} />
-            <Text style={s.cardTitle}>Details</Text>
-          </View>
-          {[
-            { label: "Japanese", value: displayChar },
-            ...(selectedWord.kanji ? [{ label: "Kanji", value: selectedWord.kanji }] : []),
-            { label: "Hiragana", value: selectedWord.hiragana },
-            { label: "Romaji", value: selectedWord.romaji },
-            ...(selectedWord.romaji_hindi
-              ? [{ label: "Hindi", value: selectedWord.romaji_hindi }]
-              : []),
-            { label: "English", value: selectedWord.english },
-            { label: "Topic", value: selectedWord.topic },
-            { label: "JLPT Level", value: selectedWord.jlpt_level },
-          ].map((item, i, arr) => (
-            <View
-              key={item.label}
-              style={[s.infoRow, i === arr.length - 1 && { borderBottomWidth: 0 }]}
-            >
-              <Text style={s.infoLabel}>{item.label}</Text>
-              <Text style={s.infoValue}>{item.value}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* More Words in this Topic */}
-        {(() => {
-          const topicWords = words.filter(
-            (w) => w.topic === selectedWord.topic && w.id !== selectedWord.id
-          );
-          if (topicWords.length === 0) return null;
-          const preview = topicWords.slice(0, 5);
-          return (
-            <View style={s.card}>
-              <View style={s.cardHeader}>
-                <Text style={s.badgeIcon}>{wordIcon}</Text>
-                <Text style={s.cardTitle}>More in {selectedWord.topic}</Text>
-                <View style={[s.relatedCountBadge, { backgroundColor: color + "20" }]}>
-                  <Text style={[s.relatedCountText, { color }]}>{topicWords.length}</Text>
-                </View>
-              </View>
-              {preview.map((w) => (
+              <View style={s.actions}>
                 <TouchableOpacity
-                  key={w.id}
-                  style={s.relatedWordRow}
-                  onPress={() => {
-                    const idx = filtered.findIndex((f) => f.id === w.id);
-                    openDetail(w, idx >= 0 ? idx : 0);
-                  }}
-                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Listen to word"
+                  accessibilityState={{ selected: speaking === word.id && speechMode === "normal" }}
+                  onPress={() => void speak(word)}
+                  style={[
+                    s.listenButton,
+                    speaking === word.id && speechMode === "normal" && s.listenActive,
+                  ]}
                 >
-                  <Text style={s.relatedJapanese}>{w.kanji || w.hiragana}</Text>
-                  <Text style={s.relatedEnglish} numberOfLines={1}>
-                    {w.english}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={14} color={Colors.dark.textMuted} />
+                  <Ionicons
+                    name={
+                      speaking === word.id && speechMode === "normal"
+                        ? "volume-high"
+                        : "volume-medium-outline"
+                    }
+                    size={20}
+                    color="#C5FFF1"
+                  />
+                  <Text style={s.buttonText}>Listen</Text>
                 </TouchableOpacity>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Listen slowly"
+                  accessibilityState={{ selected: speaking === word.id && speechMode === "slow" }}
+                  onPress={() => void speak(word, true)}
+                  style={[
+                    s.slowButton,
+                    speaking === word.id && speechMode === "slow" && s.slowActive,
+                  ]}
+                >
+                  <Ionicons name="speedometer-outline" size={19} color="#F4D599" />
+                  <Text style={s.buttonText}>Slow</Text>
+                </TouchableOpacity>
+                {
+                  <VocabIconButton
+                    name={saved.has(word.key) ? "bookmark" : "bookmark-outline"}
+                    label={`${saved.has(word.key) ? "Unsave" : "Save"} ${writtenWord(word)}`}
+                    onPress={() => toggleSaved(word)}
+                    active={saved.has(word.key)}
+                    color="#EDC888"
+                    disabled={!savedReady}
+                  />
+                }
+              </View>
+              {speaking === word.id && (
+                <Text accessibilityLiveRegion="polite" style={s.audioStatus}>
+                  {speechMode === "slow" ? "Playing slowly…" : "Playing at normal speed…"}
+                </Text>
+              )}
+              {audioError && (
+                <Text style={s.muted}>
+                  Audio is unavailable. Check the Japanese voice settings on your device.
+                </Text>
+              )}
+            </LinearGradient>
+            <View style={s.controls}>{readingControls}</View>
+            {showHindi && (
+              <Text style={s.hint}>
+                Hindi text is a pronunciation aid, not a meaning translation. Listen for the
+                Japanese sound.
+              </Text>
+            )}
+            {word.hiragana.includes("/") && (
+              <View style={s.infoCard}>
+                <Text style={s.title}>More than one reading</Text>
+                <Text style={s.body}>
+                  This entry lists alternative readings. Listen plays the first:{" "}
+                  {primaryReading(word)}. The reading used can depend on context.
+                </Text>
+              </View>
+            )}
+            <View style={s.infoCard}>
+              <Text style={s.title}>Make it part of your routine</Text>
+              <Text style={s.body}>
+                Listen once, say it aloud, then hide the meaning in the word list and recall it
+                yourself.
+              </Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Add vocabulary to practice list"
+                onPress={() => (session ? setAddList(true) : setListAuth(true))}
+                style={s.secondaryButton}
+              >
+                <Ionicons name="add-circle-outline" size={20} color="#C4B5FD" />
+                <Text style={s.buttonText}>Add to practice list</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={s.infoCard}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={
+                  strokeOpen ? "Hide word stroke order" : "Show word stroke order"
+                }
+                accessibilityState={{ expanded: strokeOpen }}
+                onPress={() => setStrokeOpen(!strokeOpen)}
+                style={s.expandRow}
+              >
+                <Ionicons name="pencil-outline" size={20} color="#C4B5FD" />
+                <Text style={[s.title, s.flex]}>Writing & stroke order</Text>
+                <Ionicons
+                  name={strokeOpen ? "chevron-up" : "chevron-down"}
+                  size={18}
+                  color="#A6A0BD"
+                />
+              </TouchableOpacity>
+              {strokeOpen && (
+                <>
+                  <Text style={s.body}>Choose a character, then replay to follow its strokes.</Text>
+                  <View style={s.characterTabs}>
+                    {[...writtenWord(word)].map((character, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Show strokes for ${character}, character ${index + 1}`}
+                        onPress={() => {
+                          setStrokeIndex(index);
+                          setReplay(0);
+                        }}
+                        style={[s.characterTab, strokeIndex === index && s.chipActive]}
+                      >
+                        <Text style={s.japanese}>{character}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <View style={s.centerStroke}>
+                    <StrokeWriter
+                      key={`${word.key}-${strokeIndex}-${replay}`}
+                      character={[...writtenWord(word)][strokeIndex] ?? writtenWord(word)[0]}
+                      size={180}
+                      color="#DDD6FE"
+                      showUnavailableMessage
+                    />
+                  </View>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel="Replay word stroke animation"
+                    onPress={() => setReplay(replay + 1)}
+                    style={s.secondaryButton}
+                  >
+                    <Ionicons name="refresh-outline" size={18} color="#C4B5FD" />
+                    <Text style={s.buttonText}>Replay stroke order</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+            <View style={s.infoCard}>
+              <Text style={s.title}>Word information</Text>
+              {[
+                { label: "Japanese", value: writtenWord(word) },
+                { label: "Reading", value: word.hiragana },
+                ...(showRomaji ? [{ label: "Romaji", value: word.romaji }] : []),
+                { label: "Meaning", value: word.english },
+                { label: "Study level", value: `${word.jlpt_level} collection` },
+              ].map((row) => (
+                <View key={row.label} style={s.infoRow}>
+                  <Text style={s.muted}>{row.label}</Text>
+                  <Text style={s.infoValue}>{row.value}</Text>
+                </View>
               ))}
             </View>
-          );
-        })()}
-
-        {/* Navigation */}
-        <View style={s.detailNav}>
-          <TouchableOpacity
-            style={[s.navBtn, !canPrev && s.navBtnDisabled]}
-            onPress={() => navigateWord(-1)}
-            disabled={!canPrev}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Previous word"
-            accessibilityState={{ disabled: !canPrev }}
-          >
-            <Ionicons
-              name="chevron-back"
-              size={20}
-              color={canPrev ? Colors.dark.text : Colors.dark.textMuted}
-            />
-            <Text style={[s.navBtnText, !canPrev && { color: Colors.dark.textMuted }]}>
-              Previous
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[s.navBtnPrimary, !canNext && { opacity: 0.4 }]}
-            onPress={() => navigateWord(1)}
-            disabled={!canNext}
-            activeOpacity={0.7}
-          >
-            <Text style={s.navBtnPrimaryText}>Next</Text>
-            <Ionicons name="chevron-forward" size={20} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </Animated.ScrollView>
-    );
-  };
-
-  // ═══════════════════ QUIZ MODE ═══════════════════
-  const renderQuiz = () => {
-    // Results screen
-    if (quizDone) {
-      const pct = quizScore.total > 0 ? Math.round((quizScore.correct / quizScore.total) * 100) : 0;
-      const emoji = pct >= 90 ? "🏆" : pct >= 70 ? "🎉" : pct >= 50 ? "💪" : "📚";
-      const message =
-        pct >= 90
-          ? "Outstanding!"
-          : pct >= 70
-            ? "Great job!"
-            : pct >= 50
-              ? "Good effort!"
-              : "Keep practicing!";
-
-      return (
-        <View style={s.quizContainer}>
-          <View style={s.quizResultCard}>
-            <Text style={s.quizResultEmoji}>{emoji}</Text>
-            <Text style={s.quizResultTitle}>Quiz Complete!</Text>
-            <Text style={s.quizResultMessage}>{message}</Text>
-
-            {/* Score ring */}
-            <View style={s.scoreRing}>
-              <Text style={s.scoreRingPct}>{pct}%</Text>
-              <Text style={s.scoreRingLabel}>Accuracy</Text>
-            </View>
-
-            <View style={s.scoreDetail}>
-              <View style={s.scoreItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                <Text style={s.scoreItemText}>{quizScore.correct} correct</Text>
+          </ScrollView>
+        </>
+      )}
+      {mode === "quiz" && quizSelection && (
+        <VocabularyPractice
+          words={quizSelection.words}
+          allWords={words}
+          label={quizSelection.label}
+          onClose={() => setMode("browse")}
+        />
+      )}
+      <Modal
+        visible={topicSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setTopicSheet(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={[s.sheet, { paddingBottom: Math.max(20, insets.bottom) }]}>
+            <View style={s.sheetHeader}>
+              <View style={s.flex}>
+                <Text style={s.heading}>Find your topic</Text>
+                <Text style={s.muted}>Choose from {topics.length} study topics</Text>
               </View>
-              <View style={s.scoreItem}>
-                <Ionicons name="close-circle" size={20} color="#EF4444" />
-                <Text style={s.scoreItemText}>{quizScore.total - quizScore.correct} wrong</Text>
-              </View>
-            </View>
-
-            {!session && (
-              <TouchableOpacity
-                style={s.quizSavePrompt}
-                onPress={() => setShowProgressAuthPrompt(true)}
-                activeOpacity={0.75}
-              >
-                <Ionicons name="lock-closed-outline" size={17} color={Colors.primary[300]} />
-                <Text style={s.quizSavePromptText}>Sign in to save XP and progress</Text>
-              </TouchableOpacity>
-            )}
-
-            <View style={s.quizResultActions}>
-              <TouchableOpacity style={s.retryBtn} onPress={startQuiz} activeOpacity={0.7}>
-                <Ionicons name="refresh" size={18} color="#fff" />
-                <Text style={s.retryBtnText}>Try Again</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={s.backGridBtn}
-                onPress={() => setMode("browse")}
-                activeOpacity={0.7}
-              >
-                <Text style={s.backGridBtnText}>Back to Library</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      );
-    }
-
-    // Active question
-    const current = quizPool[quizIndex];
-    if (!current) return null;
-    const progress = quizPool.length > 0 ? (quizIndex + 1) / quizPool.length : 0;
-    const displayChar = current.kanji || current.hiragana;
-    const color = getColor(current.topic);
-
-    return (
-      <View style={s.quizContainer}>
-        {/* Quiz header */}
-        <View style={s.quizHeader}>
-          <TouchableOpacity
-            onPress={() => setMode("browse")}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Exit quiz"
-          >
-            <Ionicons name="close" size={24} color={Colors.dark.textMuted} />
-          </TouchableOpacity>
-          <View style={s.quizProgressWrap}>
-            <View style={s.quizProgressBar}>
-              <LinearGradient
-                colors={[Colors.primary[500], Colors.accent[500]]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[s.quizProgressFill, { width: `${Math.round(progress * 100)}%` as any }]}
-              />
-            </View>
-            <Text style={s.quizProgressText}>
-              {quizIndex + 1}/{quizPool.length}
-            </Text>
-          </View>
-          <View style={s.quizScoreBadge}>
-            <Text style={s.quizScoreText}>
-              {quizScore.correct}/{quizScore.total}
-            </Text>
-          </View>
-        </View>
-
-        {/* Question */}
-        <View style={s.quizQuestionCard}>
-          <Text style={s.quizPrompt}>What does this word mean?</Text>
-
-          <TouchableOpacity onPress={() => speakWord(current)} activeOpacity={0.8}>
-            <View style={[s.quizCharBox, { borderColor: color + "60" }]}>
-              <Text style={s.quizChar}>{displayChar}</Text>
-            </View>
-          </TouchableOpacity>
-
-          {current.kanji && <Text style={s.quizHiragana}>{current.hiragana}</Text>}
-          <Text style={s.quizRomaji}>{current.romaji}</Text>
-          <Text style={s.quizTapHint}>Tap word to hear pronunciation</Text>
-        </View>
-
-        {/* Options */}
-        <View style={s.quizOptions}>
-          {quizOptions.map((opt) => {
-            const isCorrectOpt = opt === current.english;
-            const isSelectedOpt = quizAnswer === opt;
-            const answered = quizAnswer !== null;
-
-            let optStyle = s.quizOptBtn;
-            let textStyle = s.quizOptText;
-            if (answered) {
-              if (isCorrectOpt) {
-                optStyle = { ...s.quizOptBtn, ...s.quizOptCorrect };
-                textStyle = { ...s.quizOptText, color: "#10B981" };
-              } else if (isSelectedOpt) {
-                optStyle = { ...s.quizOptBtn, ...s.quizOptWrong };
-                textStyle = { ...s.quizOptText, color: "#EF4444" };
-              } else {
-                optStyle = { ...s.quizOptBtn, opacity: 0.4 };
+              {
+                <VocabIconButton
+                  name={"close"}
+                  label={"Close topic picker"}
+                  onPress={() => setTopicSheet(false)}
+                />
               }
-            }
-
-            return (
-              <TouchableOpacity
-                key={opt}
-                style={optStyle}
-                onPress={() => handleQuizAnswer(opt)}
-                disabled={answered}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: answered }}
-                // After answering, right and wrong are shown only by a coloured
-                // icon, which a screen-reader user cannot perceive. Say it.
-                accessibilityLabel={
-                  answered
-                    ? isCorrectOpt
-                      ? `${opt}, correct answer`
-                      : isSelectedOpt
-                        ? `${opt}, your answer, incorrect`
-                        : opt
-                    : opt
-                }
-              >
-                {answered && isCorrectOpt && (
-                  <Ionicons name="checkmark-circle" size={22} color="#10B981" />
-                )}
-                {answered && isSelectedOpt && !isCorrectOpt && (
-                  <Ionicons name="close-circle" size={22} color="#EF4444" />
-                )}
-                <Text style={textStyle} numberOfLines={2}>
-                  {opt}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+            </View>
+            <TextInput
+              accessibilityLabel="Search topics"
+              value={topicQuery}
+              onChangeText={setTopicQuery}
+              placeholder="Search topics"
+              placeholderTextColor="#8F87A7"
+              style={s.topicSearch}
+            />
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {["All", ...topics]
+                .filter((t) => t.toLowerCase().includes(topicQuery.toLowerCase().trim()))
+                .map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select topic ${t}`}
+                    onPress={() => {
+                      changeFilters(() => setTopic(t));
+                      setTopicSheet(false);
+                    }}
+                    style={[s.topicRow, topic === t && s.chipActive]}
+                  >
+                    <Text style={[s.title, s.flex]}>{t === "All" ? "All topics" : t}</Text>
+                    <Text style={s.muted}>{t === "All" ? words.length : topicCounts.get(t)}</Text>
+                    <Ionicons
+                      name={topic === t ? "checkmark-circle" : "chevron-forward"}
+                      size={20}
+                      color="#A78BFA"
+                    />
+                  </TouchableOpacity>
+                ))}
+            </ScrollView>
+          </View>
         </View>
-      </View>
-    );
-  };
-
-  // ═══════════════════ RENDER ═══════════════════
-  return (
-    /* See writing.tsx: the tab bar already applies the bottom inset, so adding
-     * it here too left a dead band of background over the last row of cards. */
-    <View style={[s.container, { paddingTop: insets.top }]}>
-      {mode === "browse" && renderBrowse()}
-      {mode === "detail" && renderDetail()}
-      {mode === "quiz" && renderQuiz()}
-
-      {selectedWord && (
+      </Modal>
+      <Modal
+        visible={about}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAbout(false)}
+      >
+        <View style={s.aboutOverlay}>
+          <View style={s.aboutCard}>
+            <ScrollView contentContainerStyle={s.aboutContent} showsVerticalScrollIndicator={false}>
+              <Text style={s.heading}>About this collection</Text>
+              <Text style={s.body}>
+                An app-curated collection for N5 study and everyday Japanese. Level labels are study
+                guidance: the JLPT does not publish an exhaustive vocabulary list.
+              </Text>
+              <Text style={s.body}>
+                English gives the meaning. Romaji and Hindi help with pronunciation. Some words have
+                multiple readings or meanings depending on the sentence.
+              </Text>
+              <Text style={s.body}>
+                Bookmarks are saved on this device. Use a practice list to sync words to your
+                account.
+              </Text>
+              <TouchableOpacity
+                accessibilityRole="link"
+                onPress={() => void Linking.openURL("https://www.jlpt.jp/e/faq/index.html")}
+                style={s.secondaryButton}
+              >
+                <Text style={s.buttonText}>Read the official JLPT FAQ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityRole="button"
+                onPress={() => setAbout(false)}
+                style={s.primaryButton}
+              >
+                <Text style={s.buttonText}>Got it</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      {word && (
         <AddToListModal
-          visible={showAddListModal}
-          onClose={() => setShowAddListModal(false)}
+          visible={addList}
+          onClose={() => setAddList(false)}
           itemType="vocabulary"
-          itemId={selectedWord.id}
-          itemTitle={selectedWord.kanji || selectedWord.hiragana}
+          itemId={word.id}
+          itemTitle={writtenWord(word)}
           studyItem={{
             listItemId: "pending",
             itemType: "vocabulary",
-            itemId: String(selectedWord.id),
-            front: (selectedWord.kanji?.trim() || selectedWord.hiragana.trim()).trim(),
-            back: selectedWord.english.trim(),
-            correctAnswer: selectedWord.english.trim(),
-            audioText: (selectedWord.kanji?.trim() || selectedWord.hiragana.trim()).trim(),
+            itemId: String(word.id),
+            front: writtenWord(word),
+            back: word.english,
+            correctAnswer: word.english,
+            audioText: primaryReading(word),
             masteryScore: 0,
             lastReviewed: null,
           }}
         />
       )}
-
       <AuthPromptModal
-        visible={showListAuthPrompt}
+        visible={listAuth}
         feature="practice lists"
         redirectTo="/(tabs)/vocabulary"
-        description="Sign in to add vocabulary to custom lists and sync your practice progress."
-        onClose={() => setShowListAuthPrompt(false)}
-      />
-      <AuthPromptModal
-        visible={showProgressAuthPrompt}
-        feature="saved quiz progress"
-        redirectTo="/(tabs)/vocabulary"
-        description="Sign in to earn XP and keep your quiz progress synced across devices."
-        onClose={() => setShowProgressAuthPrompt(false)}
+        description="Sign in to save words in practice lists and sync progress across devices."
+        onClose={() => setListAuth(false)}
       />
     </View>
   );
 }
 
-// ════════════════════════ STYLES ════════════════════════
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.dark.bg },
+  screen: { flex: 1, backgroundColor: "#0C1322" },
   flex: { flex: 1 },
-  centerBox: { flex: 1, justifyContent: "center", alignItems: "center", gap: Spacing.md },
-  loadingText: { color: Colors.dark.textSecondary, fontSize: FontSize.base, marginTop: Spacing.sm },
-
-  // ── Hero ──
-  heroBanner: {
-    marginHorizontal: Spacing.lg,
-    marginTop: Spacing.sm,
-    marginBottom: Spacing.md,
-    borderRadius: BorderRadius.xl,
-    overflow: "hidden",
+  headerSurface: {
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderColor: "#304357",
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
   },
-  heroGradient: {
-    flexDirection: "row",
-    padding: Spacing.xl,
-    alignItems: "center",
-    position: "relative",
-    minHeight: 100,
-  },
-  heroLeft: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: Spacing.lg,
-  },
-  heroKanji: { fontSize: 36, color: "#fff", fontWeight: FontWeight.bold },
-  heroRight: { flex: 1 },
-  heroTitle: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: "#fff", marginBottom: 2 },
-  heroSubtitle: { fontSize: FontSize.sm, color: "rgba(255,255,255,0.7)", marginBottom: Spacing.md },
-  heroActions: { flexDirection: "row", gap: Spacing.sm },
-  heroQuizBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    borderRadius: BorderRadius.md,
-  },
-  heroQuizBtnText: { fontSize: FontSize.xs, fontWeight: FontWeight.bold, color: "#fff" },
-  heroDecorative: {
-    position: "absolute",
-    right: 12,
-    bottom: -8,
-    fontSize: 50,
-    color: "rgba(255,255,255,0.05)",
-    fontWeight: FontWeight.bold,
-  },
-
-  // ── Search ──
-  searchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.sm,
-  },
-  searchBox: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: Colors.dark.card,
-    borderRadius: BorderRadius.lg,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 11,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-  },
-  searchInput: { flex: 1, color: Colors.dark.text, fontSize: FontSize.sm },
-  hindiToggle: {
-    width: 44,
-    height: 44,
-    borderRadius: BorderRadius.lg,
-    backgroundColor: Colors.dark.card,
-    borderWidth: 1.5,
-    borderColor: Colors.dark.border,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  hindiToggleActive: { backgroundColor: "#7C3AED", borderColor: "#5B21B6" },
-  hindiToggleText: { color: Colors.dark.textMuted, fontSize: 18, fontWeight: FontWeight.extrabold },
-
-  // ── Chips ──
-  chipScroll: { maxHeight: 46, marginBottom: 6 },
-  chipRow: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 4,
+  header: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
-  chip: {
+  browseHeading: { color: "#F8F4EC", fontSize: 24, fontWeight: "800" },
+  practiceButton: { minHeight: 44, paddingHorizontal: 10, paddingVertical: 10, gap: 5 },
+  eyebrow: { color: "#C4B5FD", fontSize: 10, fontWeight: "800", letterSpacing: 1.3 },
+  heading: { color: "#FAF8FF", fontSize: 28, fontWeight: "800", marginTop: 4 },
+  title: { color: "#F5F1FF", fontSize: 16, fontWeight: "700" },
+  muted: { color: "#A6B7D0", fontSize: 12, lineHeight: 18 },
+  body: { color: "#C5D0E2", fontSize: 14, lineHeight: 22 },
+  collectionLink: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 4 },
+  primaryButton: {
+    minHeight: 46,
+    backgroundColor: "#7057CD",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 15,
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    height: 34,
-    backgroundColor: Colors.dark.card,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-  },
-  chipIcon: { fontSize: 13, lineHeight: 18 },
-  chipLabel: {
-    color: Colors.dark.textSecondary,
-    fontSize: 12,
-    fontWeight: FontWeight.semibold,
-    lineHeight: 16,
-  },
-  chipCountBadge: {
-    backgroundColor: Colors.dark.bg,
-    borderRadius: 8,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    minWidth: 18,
-    alignItems: "center",
-  },
-  chipCount: { color: Colors.dark.textMuted, fontSize: 10, fontWeight: FontWeight.bold },
-
-  // ── Results ──
-  resultCount: {
-    color: Colors.dark.textMuted,
-    fontSize: 12,
-    paddingHorizontal: Spacing.lg,
-    marginBottom: 8,
-  },
-
-  // ── Section Headers ──
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-    marginTop: Spacing.lg,
-    paddingHorizontal: 2,
-  },
-  sectionDot: { width: 8, height: 8, borderRadius: 4 },
-  sectionTitle: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.bold,
-    color: Colors.dark.textSecondary,
-  },
-  sectionIcon: { fontSize: 14 },
-  sectionLine: { flex: 1, height: 1 },
-  sectionCount: {
-    fontSize: FontSize.xs,
-    color: Colors.dark.textMuted,
-    fontWeight: FontWeight.semibold,
-  },
-
-  // ── Word Cards ──
-  listContainer: { paddingHorizontal: Spacing.lg, paddingBottom: 24 },
-  wordCard: {
-    backgroundColor: Colors.dark.card,
-    borderRadius: BorderRadius.lg,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-    overflow: "hidden",
-    marginBottom: 7,
-  },
-  watermarkIcon: {
-    position: "absolute",
-    right: -4,
-    top: -4,
-    fontSize: 64,
-    opacity: 0.08,
-  },
-  wordRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  wordMain: { alignItems: "center", minWidth: 64, maxWidth: 76 },
-  wordJapanese: { fontSize: 22, color: Colors.dark.text, fontWeight: FontWeight.bold },
-  wordReading: { fontSize: 10, color: Colors.dark.textMuted, marginTop: 1 },
-  meaningCol: { flex: 1 },
-  wordMeaning: { color: Colors.dark.text, fontSize: 13, lineHeight: 18 },
-  hindiMeaning: { color: "#F97316", fontSize: 12, marginTop: 2, fontWeight: FontWeight.semibold },
-  romaji: { color: Colors.dark.textMuted, fontSize: 11, marginTop: 2, fontStyle: "italic" },
-  speakBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: Colors.primary[900] + "80",
     justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: Colors.primary[800],
+    gap: 8,
   },
-  speakBtnActive: { backgroundColor: Colors.primary[600], borderColor: Colors.primary[500] },
-
-  // ── Footer ──
-  footerText: {
-    textAlign: "center",
-    color: Colors.dark.textMuted,
-    fontSize: 12,
-    marginTop: Spacing.xl,
-    paddingBottom: Spacing.md,
-    fontStyle: "italic",
-  },
-
-  // ── Empty ──
-  empty: { alignItems: "center", paddingTop: 60, gap: 8 },
-  emptyEmoji: { fontSize: 48 },
-  emptyText: {
-    color: Colors.dark.textMuted,
-    fontSize: FontSize.base,
-    fontWeight: FontWeight.semibold,
-  },
-  emptySubtext: { color: Colors.dark.textMuted, fontSize: FontSize.sm },
-
-  // ═══ Detail Mode ═══
-  detailScroll: { paddingBottom: 40 },
-  detailTopBar: {
+  secondaryButton: {
+    minHeight: 46,
+    backgroundColor: "#27354D",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    justifyContent: "center",
+    gap: 8,
   },
-  backBtn: { width: 36, height: 36, justifyContent: "center", alignItems: "center" },
-  detailCounter: {
-    fontSize: FontSize.sm,
-    color: Colors.dark.textMuted,
-    fontWeight: FontWeight.semibold,
-  },
-  topQuizBtn: { width: 36, height: 36, justifyContent: "center", alignItems: "center" },
-
-  detailCharCard: {
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.lg,
-    backgroundColor: Colors.dark.card,
-    borderRadius: BorderRadius["2xl"],
-    padding: Spacing["2xl"],
-    alignItems: "center",
+  buttonText: { color: "#FAF8FF", fontSize: 13, fontWeight: "700" },
+  searchBox: {
+    marginHorizontal: 16,
+    marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
-    overflow: "hidden",
+    borderColor: "#3C4D64",
+    backgroundColor: "#101C2F",
+    borderRadius: 15,
+    minHeight: 44,
+    paddingLeft: 14,
+    paddingRight: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
-  detailCharGlow: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: BorderRadius["2xl"],
+  searchInput: { flex: 1, color: "#fff", fontSize: 14, paddingVertical: 13, minWidth: 0 },
+  filters: { flexDirection: "row", justifyContent: "space-between", gap: 4, paddingHorizontal: 16 },
+  controls: {
+    flexDirection: "row",
+    gap: 7,
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 4,
   },
-  detailWatermark: {
-    position: "absolute",
-    right: 10,
-    top: 10,
-    fontSize: 80,
-    opacity: 0.06,
+  control: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#111E32",
+    borderWidth: 1,
+    borderColor: "#354158",
   },
-  detailJapanese: {
-    fontSize: 72,
-    fontWeight: FontWeight.bold,
-    color: Colors.dark.text,
-    marginBottom: 4,
+  chipActive: { backgroundColor: "#37315D", borderColor: "#A18BDC" },
+  controlGlyph: { color: "#BFB7D3", fontSize: 20, fontWeight: "600" },
+  resultsRow: {
+    minHeight: 44,
+    paddingHorizontal: 18,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  hint: {
+    color: "#ACA3C2",
+    fontSize: 11,
+    lineHeight: 17,
+    paddingHorizontal: 18,
+    paddingBottom: 10,
+  },
+  list: { paddingHorizontal: 16, paddingBottom: 24, gap: 9 },
+  wordCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderLeftWidth: 2,
+    borderColor: "#2A3850",
+    backgroundColor: "#172238",
+    padding: 12,
+    gap: 6,
+  },
+  wordTop: { flexDirection: "row", gap: 8 },
+  wordMain: { flex: 1, minWidth: 0, gap: 3 },
+  wordSide: { width: "42%", maxWidth: 150, minWidth: 94, alignItems: "flex-end", gap: 4 },
+  wordTools: { flexDirection: "row", gap: 6 },
+  japanese: { color: "#F4F6FC", fontSize: 24, fontWeight: "700", lineHeight: 32 },
+  kana: { color: "#B5C6E0", fontSize: 13, lineHeight: 19 },
+  romaji: { color: "#C4B5FD", fontSize: 13, lineHeight: 20 },
+  hindi: { color: "#BECCD5", fontSize: 12, lineHeight: 20 },
+  meaning: { color: "#DEE7F4", fontSize: 15, lineHeight: 23 },
+  meaningRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  wordEmoji: { fontSize: 20, lineHeight: 24 },
+  topicLabel: { fontSize: 10, lineHeight: 14, textAlign: "right", alignSelf: "stretch" },
+  iconButton: {
+    minWidth: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 13,
+    backgroundColor: "#1D2D43",
+    borderWidth: 1,
+    borderColor: "#35435B",
+  },
+  reveal: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 40 },
+  revealText: { color: "#C4B5FD", fontSize: 13 },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
+  empty: { alignItems: "center", gap: 12, paddingVertical: 34, paddingHorizontal: 20 },
+  listFooter: { color: "#9387AD", fontSize: 12, textAlign: "center", marginVertical: 20 },
+  detailHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 12,
+    borderBottomWidth: 1,
+    borderColor: "#344257",
+  },
+  detailContent: { padding: 18, paddingBottom: 30, gap: 16 },
+  wordHero: {
+    borderRadius: 24,
+    padding: 22,
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#3E506A",
+  },
+  heroTopic: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
+  largeJapanese: {
+    color: "#fff",
+    fontSize: 42,
+    fontWeight: "700",
+    lineHeight: 58,
     textAlign: "center",
   },
-  detailHiragana: {
-    fontSize: FontSize.xl,
-    color: Colors.dark.textSecondary,
-    marginBottom: 4,
-    fontWeight: FontWeight.semibold,
-  },
-  detailRomaji: { fontSize: 28, fontWeight: FontWeight.extrabold, marginBottom: 2 },
-  detailRomajiSub: {
-    fontSize: FontSize.sm,
-    color: Colors.dark.textMuted,
-    marginBottom: Spacing.sm,
-  },
-  detailDivider: {
-    width: 60,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: Colors.dark.border,
-    marginVertical: Spacing.lg,
-  },
-  detailEnglish: {
-    fontSize: FontSize["2xl"],
-    fontWeight: FontWeight.bold,
-    color: Colors.dark.text,
+  largeReading: { color: "#B5C7F1", fontSize: 18, lineHeight: 29, textAlign: "center" },
+  largeMeaning: {
+    color: "#F3EFFF",
+    fontSize: 21,
+    fontWeight: "600",
+    lineHeight: 30,
     textAlign: "center",
-    marginBottom: 4,
   },
-  detailHindiMeaning: {
-    fontSize: FontSize.base,
-    color: "#F97316",
-    fontWeight: FontWeight.semibold,
-    marginBottom: Spacing.sm,
+  divider: { height: 1, backgroundColor: "#3B5064", alignSelf: "stretch", marginVertical: 5 },
+  listenButton: {
+    minHeight: 46,
+    paddingHorizontal: 15,
+    borderRadius: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    backgroundColor: "#17666B",
+    borderWidth: 1,
+    borderColor: "#328C8C",
   },
-  detailMainCharContainer: {
+  listenActive: { backgroundColor: "#217D7C", borderColor: "#9DEDDD" },
+  slowButton: {
+    minHeight: 46,
+    paddingHorizontal: 15,
+    borderRadius: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    backgroundColor: "#3B3546",
+    borderWidth: 1,
+    borderColor: "#8F7959",
+  },
+  slowActive: { backgroundColor: "#66513A", borderColor: "#F0CE90" },
+  audioStatus: { color: "#C6DBE4", fontSize: 12, lineHeight: 18 },
+  actions: {
     flexDirection: "row",
     flexWrap: "wrap",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    minHeight: 140,
-    marginTop: Spacing.lg,
-  },
-  detailJapaneseFull: {
-    fontSize: FontSize["3xl"],
-    fontWeight: "800",
-    color: Colors.dark.text,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.xs,
-  },
-  detailActions: {
-    flexDirection: "row",
-    gap: Spacing.md,
-    justifyContent: "center",
-    marginTop: Spacing.xl,
-  },
-  detailActionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
     gap: 8,
-    paddingVertical: 12,
-    backgroundColor: Colors.primary[900] + "40",
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.primary[700] + "50",
-  },
-  detailActionBtnSecondary: {
-    flex: 1,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 12,
-    backgroundColor: Colors.dark.surface,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
+    marginTop: 8,
   },
-  detailActionText: { color: Colors.primary[300], fontWeight: FontWeight.bold },
-  detailActionTextSecondary: { color: Colors.dark.text, fontWeight: FontWeight.bold },
-
-  badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  badge: {
+  infoCard: {
+    padding: 18,
+    borderRadius: 20,
+    backgroundColor: "#172338",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#304159",
+  },
+  expandRow: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 10 },
+  characterTabs: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  characterTab: {
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#3C4D65",
+    borderRadius: 12,
+    minWidth: 48,
+    alignItems: "center",
+  },
+  centerStroke: { alignItems: "center" },
+  infoRow: { flexDirection: "row", gap: 20, justifyContent: "space-between", paddingVertical: 8 },
+  infoValue: { color: "#E9E2F5", fontSize: 13, lineHeight: 21, flex: 1, textAlign: "right" },
+  modalOverlay: { flex: 1, backgroundColor: "#0009", justifyContent: "flex-end" },
+  sheet: {
+    maxHeight: "88%",
+    backgroundColor: "#172338",
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    padding: 20,
+  },
+  sheetHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 },
+  topicSearch: {
+    backgroundColor: "#22344B",
+    borderRadius: 13,
+    padding: 14,
+    color: "#fff",
+    marginBottom: 14,
+    minHeight: 48,
+  },
+  topicRow: {
+    minHeight: 55,
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  badgeIcon: { fontSize: 13 },
-  badgeText: { fontSize: 11, fontWeight: FontWeight.bold },
-
-  // ── Cards ──
-  card: {
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.lg,
-    backgroundColor: Colors.dark.card,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    marginBottom: Spacing.lg,
-  },
-  cardTitle: {
-    fontSize: FontSize.base,
-    fontWeight: FontWeight.bold,
-    color: Colors.dark.text,
-    flex: 1,
-  },
-  relatedCountBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8 },
-  relatedCountText: { fontSize: 11, fontWeight: FontWeight.bold },
-
-  infoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: Spacing.md,
+    gap: 12,
+    padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.dark.border,
+    borderColor: "#314159",
+    borderRadius: 10,
   },
-  infoLabel: { fontSize: FontSize.sm, color: Colors.dark.textMuted, fontWeight: FontWeight.medium },
-  infoValue: {
-    fontSize: FontSize.sm,
-    color: Colors.dark.text,
-    fontWeight: FontWeight.semibold,
-    maxWidth: "60%" as any,
-    textAlign: "right",
-  },
-
-  relatedWordRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.md,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.dark.border + "60",
-  },
-  relatedJapanese: {
-    fontSize: FontSize.lg,
-    fontWeight: FontWeight.bold,
-    color: Colors.dark.text,
-    minWidth: 60,
-  },
-  relatedEnglish: { flex: 1, fontSize: FontSize.sm, color: Colors.dark.textSecondary },
-
-  // ── Detail Nav ──
-  detailNav: {
-    flexDirection: "row",
-    gap: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-    marginTop: Spacing.sm,
-  },
-  navBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    paddingVertical: Spacing.lg,
-    backgroundColor: Colors.dark.card,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-  },
-  navBtnDisabled: { opacity: 0.35 },
-  navBtnText: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.dark.text },
-  navBtnPrimary: {
-    flex: 1.5,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    paddingVertical: Spacing.lg,
-    backgroundColor: Colors.primary[600],
-    borderRadius: BorderRadius.lg,
-    shadowColor: Colors.primary[500],
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  navBtnPrimaryText: { fontSize: FontSize.sm, fontWeight: FontWeight.bold, color: "#fff" },
-
-  // ═══ Quiz Mode ═══
-  quizContainer: { flex: 1, paddingHorizontal: Spacing.lg },
-  quizHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.md,
-    paddingVertical: Spacing.lg,
-  },
-  quizProgressWrap: { flex: 1, gap: 4 },
-  quizProgressBar: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.dark.surface,
+  aboutOverlay: { flex: 1, backgroundColor: "#000A", justifyContent: "center", padding: 24 },
+  aboutCard: {
+    maxHeight: "100%",
+    borderRadius: 24,
+    backgroundColor: "#19283C",
     overflow: "hidden",
   },
-  quizProgressFill: { height: "100%", borderRadius: 3 },
-  quizProgressText: {
-    fontSize: 10,
-    color: Colors.dark.textMuted,
-    fontWeight: FontWeight.semibold,
-    textAlign: "center",
-  },
-  quizScoreBadge: {
-    backgroundColor: Colors.primary[900] + "80",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: Colors.primary[700],
-  },
-  quizScoreText: { fontSize: 12, fontWeight: FontWeight.bold, color: Colors.primary[300] },
-
-  quizQuestionCard: {
-    backgroundColor: Colors.dark.card,
-    borderRadius: BorderRadius["2xl"],
-    padding: Spacing["2xl"],
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-    marginBottom: Spacing.xl,
-  },
-  quizPrompt: { fontSize: FontSize.sm, color: Colors.dark.textMuted, marginBottom: Spacing.xl },
-  quizCharBox: {
-    width: 160,
-    height: 120,
-    borderRadius: 24,
-    backgroundColor: Colors.dark.bg,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    marginBottom: Spacing.md,
-  },
-  quizChar: { fontSize: 52, fontWeight: FontWeight.bold, color: Colors.dark.text },
-  quizHiragana: {
-    fontSize: FontSize.lg,
-    color: Colors.primary[400],
-    fontWeight: FontWeight.semibold,
-    marginBottom: 2,
-  },
-  quizRomaji: {
-    fontSize: FontSize.sm,
-    color: Colors.dark.textMuted,
-    fontStyle: "italic",
-    marginBottom: Spacing.xs,
-  },
-  quizTapHint: { fontSize: 11, color: Colors.dark.textMuted },
-
-  quizOptions: { gap: Spacing.md },
-  quizOptBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: Spacing.sm,
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.md,
-    backgroundColor: Colors.dark.card,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1.5,
-    borderColor: Colors.dark.border,
-  } as any,
-  quizOptCorrect: {
-    backgroundColor: "rgba(16,185,129,0.12)",
-    borderColor: "#10B981",
-    borderWidth: 2,
-  },
-  quizOptWrong: {
-    backgroundColor: "rgba(239,68,68,0.12)",
-    borderColor: "#EF4444",
-    borderWidth: 2,
-  },
-  quizOptText: {
-    fontSize: FontSize.base,
-    fontWeight: FontWeight.bold,
-    color: Colors.dark.text,
-    textAlign: "center",
-  } as any,
-
-  // ── Quiz Results ──
-  quizResultCard: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: Spacing.xl,
-  },
-  quizResultEmoji: { fontSize: 64, marginBottom: Spacing.md },
-  quizResultTitle: {
-    fontSize: FontSize["2xl"],
-    fontWeight: FontWeight.bold,
-    color: Colors.dark.text,
-    marginBottom: 4,
-  },
-  quizResultMessage: {
-    fontSize: FontSize.base,
-    color: Colors.dark.textSecondary,
-    marginBottom: Spacing["2xl"],
-  },
-  scoreRing: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 4,
-    borderColor: Colors.primary[500],
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: Spacing.xl,
-    backgroundColor: Colors.primary[900] + "40",
-  },
-  scoreRingPct: { fontSize: 32, fontWeight: FontWeight.extrabold, color: Colors.primary[300] },
-  scoreRingLabel: { fontSize: 11, color: Colors.dark.textMuted, fontWeight: FontWeight.semibold },
-  scoreDetail: {
-    flexDirection: "row",
-    gap: Spacing["3xl"],
-    marginBottom: Spacing["3xl"],
-  },
-  scoreItem: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
-  scoreItemText: {
-    fontSize: FontSize.sm,
-    color: Colors.dark.textSecondary,
-    fontWeight: FontWeight.semibold,
-  },
-  quizSavePrompt: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    marginBottom: Spacing.xl,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.primary[700],
-    borderRadius: BorderRadius.lg,
-    backgroundColor: Colors.primary[900] + "40",
-  },
-  quizSavePromptText: {
-    color: Colors.primary[200],
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.semibold,
-  },
-  quizResultActions: { flexDirection: "row", gap: Spacing.md, width: "100%" },
-  retryBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: Spacing.sm,
-    paddingVertical: Spacing.lg,
-    backgroundColor: Colors.primary[600],
-    borderRadius: BorderRadius.lg,
-    shadowColor: Colors.primary[500],
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  retryBtnText: { fontSize: FontSize.base, fontWeight: FontWeight.bold, color: "#fff" },
-  backGridBtn: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: Spacing.lg,
-    backgroundColor: Colors.dark.card,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-  },
-  backGridBtnText: {
-    fontSize: FontSize.base,
-    fontWeight: FontWeight.semibold,
-    color: Colors.dark.textSecondary,
-  },
+  aboutContent: { padding: 24, gap: 18 },
 });

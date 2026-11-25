@@ -1,18 +1,13 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { Tabs } from "expo-router";
-import { View, TouchableOpacity, StyleSheet, Platform, PanResponder } from "react-native";
+import { View, TouchableOpacity, StyleSheet, PanResponder } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "@/constants/theme";
 import { Sidebar } from "@/components/Sidebar";
 import { useAuth } from "@/lib/auth";
 import { featureFlags } from "@/lib/feature-flags";
-
-type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
-
-function TabIcon({ name, color }: { name: IoniconsName; color: string }) {
-  return <Ionicons name={name} size={23} color={color} />;
-}
+import { tabBarAppearance, tabOptions } from "@/components/TabBarAppearance";
 
 export default function TabLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -20,7 +15,7 @@ export default function TabLayout() {
   const { session } = useAuth();
 
   // Edge swipe to open sidebar
-  const panResponder = useRef(
+  const [panResponder] = useState(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
@@ -39,10 +34,7 @@ export default function TabLayout() {
         }
       },
     })
-  ).current;
-
-  // Extra bottom padding so tabs are above Android gesture/nav bar
-  const tabBarHeight = 60 + Math.max(insets.bottom, Platform.OS === "android" ? 12 : 0);
+  );
 
   const renderHeaderLeft = () => (
     <TouchableOpacity
@@ -71,33 +63,13 @@ export default function TabLayout() {
           headerStyle: { backgroundColor: "transparent" },
           headerTintColor: Colors.dark.text,
           headerShadowVisible: false,
-          tabBarStyle: {
-            backgroundColor: Colors.dark.card,
-            borderTopColor: Colors.dark.border,
-            borderTopWidth: 1,
-            height: tabBarHeight,
-            paddingBottom: Math.max(insets.bottom, Platform.OS === "android" ? 10 : 20),
-            paddingTop: 8,
-            elevation: 0,
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: -4 },
-            shadowOpacity: 0.2,
-            shadowRadius: 16,
-          },
-          tabBarActiveTintColor: Colors.primary[400],
-          tabBarInactiveTintColor: Colors.dark.textMuted,
-          tabBarLabelStyle: {
-            fontSize: 10,
-            fontWeight: "600",
-            marginTop: 1,
-          },
+          ...tabBarAppearance(insets.bottom),
         }}
       >
         <Tabs.Screen
           name="index"
           options={{
-            title: "Home",
-            tabBarIcon: ({ color }) => <TabIcon name="home" color={color} />,
+            ...tabOptions("home"),
             headerShown: true,
             headerTransparent: true,
             headerTitle: "",
@@ -107,8 +79,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="courses"
           options={{
-            title: "Courses",
-            tabBarIcon: ({ color }) => <TabIcon name="library" color={color} />,
+            ...tabOptions("courses"),
             headerTransparent: true,
             headerTitle: "",
             // Marketplace is deferred past v1. href: null keeps the route
@@ -120,8 +91,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="vocabulary"
           options={{
-            title: "Vocab",
-            tabBarIcon: ({ color }) => <TabIcon name="book" color={color} />,
+            ...tabOptions("vocabulary"),
             headerTransparent: true,
             headerTitle: "",
           }}
@@ -129,8 +99,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="grammar"
           options={{
-            title: "Grammar",
-            tabBarIcon: ({ color }) => <TabIcon name="school" color={color} />,
+            ...tabOptions("grammar"),
             headerTransparent: true,
             headerTitle: "",
           }}
@@ -150,8 +119,7 @@ export default function TabLayout() {
           <Tabs.Screen
             name="practice"
             options={{
-              title: "Practice",
-              tabBarIcon: ({ color }) => <TabIcon name="albums" color={color} />,
+              ...tabOptions("practice"),
               headerTransparent: true,
               headerTitle: "",
             }}
@@ -159,8 +127,7 @@ export default function TabLayout() {
           <Tabs.Screen
             name="profile"
             options={{
-              title: "Profile",
-              tabBarIcon: ({ color }) => <TabIcon name="person-circle" color={color} />,
+              ...tabOptions("profile"),
               headerShown: true,
               headerTransparent: true,
               headerTitle: "",

@@ -1,6 +1,10 @@
 export const APP_ENVIRONMENTS = ["development", "test", "preview", "staging", "production"];
 
 export const PRODUCTION_SUPABASE_PROJECT_REF = "teylstfbjtutssnfmhhu";
+export const PRODUCTION_SUPABASE_HOSTS = new Set([
+  `${PRODUCTION_SUPABASE_PROJECT_REF}.supabase.co`,
+  "supabase.japangolearn.com",
+]);
 
 const NON_PRODUCTION_ENVIRONMENTS = new Set(["development", "test", "preview", "staging"]);
 
@@ -54,10 +58,7 @@ export function validatePublicEnvironment(input, names = {}) {
     throw new Error("Hosted Supabase URLs must use HTTPS");
   }
 
-  if (
-    NON_PRODUCTION_ENVIRONMENTS.has(appEnv) &&
-    parsedUrl.hostname.toLowerCase().includes(PRODUCTION_SUPABASE_PROJECT_REF)
-  ) {
+  if (NON_PRODUCTION_ENVIRONMENTS.has(appEnv) && PRODUCTION_SUPABASE_HOSTS.has(parsedUrl.hostname.toLowerCase())) {
     throw new Error(`${appEnv} must not connect to the production Supabase project`);
   }
 

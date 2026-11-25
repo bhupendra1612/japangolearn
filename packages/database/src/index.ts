@@ -22,6 +22,7 @@ export const DATABASE_TABLES = [
   "activity_events",
   "xp_ledger",
   "mastery_records",
+  "mock_exam_attempts",
   "daily_quest_completions",
   "user_roles",
   "teacher_profiles",
@@ -68,6 +69,7 @@ export type Profile = {
   current_jlpt_level: JlptLevel | string;
   xp: number;
   streak_days: number;
+  daily_xp_goal?: number;
   onboarding_completed: boolean;
   role: UserRole;
   created_at?: string;
@@ -171,7 +173,7 @@ export type PracticeList = {
   item_count?: number;
 };
 
-export type PracticeItemType = "vocabulary" | "kana" | "kanji" | "grammar";
+export type PracticeItemType = "vocabulary" | "kana" | "kanji" | "grammar" | "listening";
 
 export type PracticeListItem = {
   id: string;

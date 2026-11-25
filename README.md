@@ -16,11 +16,10 @@ Fresh monorepo foundation for the JapanGoLearn language-learning product.
 
 ## Supabase
 
-This repo is prepared to use the existing Supabase project:
+This repo uses the self-hosted Supabase instance on the JapanGoLearn VPS:
 
-- project ref: `teylstfbjtutssnfmhhu`
-- dashboard: `https://supabase.com/dashboard/project/teylstfbjtutssnfmhhu`
-- public URL: `https://teylstfbjtutssnfmhhu.supabase.co`
+- public URL: `https://supabase.japangolearn.com`
+- Studio: access through the VPS SSH tunnel on `127.0.0.1:13100`
 
 Copy `.env.example` to `.env.local` for web/admin development. For mobile development, pull the configured EAS development environment into the ignored app-local file:
 
@@ -29,6 +28,13 @@ pnpm --filter @japangolearn/mobile exec eas env:pull development --path .env.loc
 ```
 
 Mobile preview and production updates use their matching EAS environments through the root release scripts.
+
+For Expo Go on a physical phone, `127.0.0.1` points to the phone, not the laptop.
+Set `apps/mobile/.env.local` to a reachable Supabase URL and its **publishable**
+key, then restart Expo so the values are rebuilt into the app. This repository
+currently has only the production Supabase project; testing against it requires
+`EXPO_PUBLIC_APP_ENV=production` and affects live account data. Never use a
+service-role or secret key in an `EXPO_PUBLIC_` variable.
 
 ## SaaS implementation roadmap
 

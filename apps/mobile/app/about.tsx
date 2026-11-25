@@ -4,19 +4,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
-import {
-  DELETE_ACCOUNT_URL,
-  PRIVACY_URL,
-  SITE_URL,
-  SUPPORT_EMAIL,
-  TERMS_URL,
-} from "@/constants/links";
+import { DELETE_ACCOUNT_URL, SITE_URL, SUPPORT_EMAIL, TERMS_URL } from "@/constants/links";
 
 const LEGAL_LINKS = [
   {
     icon: "shield-checkmark-outline" as const,
     label: "Privacy Policy",
-    url: PRIVACY_URL,
+    route: "/privacy" as const,
   },
   {
     icon: "document-text-outline" as const,
@@ -126,14 +120,20 @@ export default function AboutScreen() {
             <React.Fragment key={link.label}>
               <TouchableOpacity
                 style={s.linkRow}
-                onPress={() => openUrl(link.url)}
+                onPress={() => ("route" in link ? router.push(link.route!) : openUrl(link.url))}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={link.label}
               >
                 <View style={[s.iconBox, { backgroundColor: Colors.dark.surface }]}>
                   <Ionicons name={link.icon} size={20} color={Colors.dark.textSecondary} />
                 </View>
                 <Text style={s.linkRowText}>{link.label}</Text>
-                <Ionicons name="open-outline" size={16} color={Colors.dark.textMuted} />
+                <Ionicons
+                  name={"route" in link ? "chevron-forward" : "open-outline"}
+                  size={16}
+                  color={Colors.dark.textMuted}
+                />
               </TouchableOpacity>
               {i < arr.length - 1 && <View style={s.divider} />}
             </React.Fragment>

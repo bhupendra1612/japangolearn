@@ -1,12 +1,10 @@
 # Supabase Project
 
-This monorepo uses the existing Supabase project:
+This monorepo uses the self-hosted Supabase instance on the JapanGoLearn VPS:
 
 - name: `japanese`
-- ref: `teylstfbjtutssnfmhhu`
-- region: `ap-south-1`
-- public URL: `https://teylstfbjtutssnfmhhu.supabase.co`
-- dashboard: `https://supabase.com/dashboard/project/teylstfbjtutssnfmhhu`
+- public URL: `https://supabase.japangolearn.com`
+- Studio: access through the VPS SSH tunnel on `127.0.0.1:13100`
 
 ## Schema source of truth
 
@@ -34,8 +32,8 @@ pnpm seed:kanji
 ```
 
 `pnpm db:types` uses the Supabase CLI to generate live TypeScript types from
-project `teylstfbjtutssnfmhhu`. It requires `supabase login` or
-`SUPABASE_ACCESS_TOKEN`.
+the configured database connection. It requires the database URL or an SSH
+tunnel to the VPS.
 
 `pnpm seed:kanji` reads env values from root/app `.env.local` files and upserts
 `supabase/seed/kanji/n5-remaining.json` into the `kanji` table.

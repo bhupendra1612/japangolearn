@@ -4,9 +4,10 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Dimensions,
+  useWindowDimensions,
   Animated,
   ScrollView,
+  SectionList,
   ActivityIndicator,
 } from "react-native";
 import * as Speech from "expo-speech";
@@ -14,32 +15,41 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { supabase } from "@/lib/supabase";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { AddToListModal } from "@/components/AddToListModal";
 import { AuthPromptModal } from "@/components/AuthPromptModal";
 import StrokeWriter from "@/components/StrokeWriter";
+import KanaPractice from "@/components/KanaPractice";
 import { useAuth } from "@/lib/auth";
 import { useAndroidBack } from "@/lib/use-android-back";
 import { LoadError } from "@/components/LoadError";
-import { captureException } from "@/lib/monitoring";
-import { readCache, writeCache } from "@/lib/offline-cache";
+import { getRememberedKana, loadKana } from "@/lib/kana-loader";
+import { auditKanaInventory, kanaBreakdown, type KanaType } from "@/lib/kana-catalog";
+import { kanaLearningInfo } from "@/lib/kana-learning-info";
 import { isOfflineError } from "@/lib/connectivity";
 import { OfflineNotice } from "@/components/OfflineNotice";
 import type { Kana } from "@japangolearn/database";
-import { createXpAttemptKey } from "@japangolearn/content";
-import { toGradedAnswerPayload, type GradedAnswer, type OfflineJson } from "@japangolearn/core";
-import { submitLearningAttemptWithQueue } from "@/lib/offline-queue";
 
 // ─── Types ───
 type ViewMode = "grid" | "detail" | "quiz";
 
 // ─── Constants ───
-const { width: SCREEN_W } = Dimensions.get("window");
 const GRID_COLS = 5;
 const CARD_GAP = 6;
 const GRID_PAD = 16;
-const CARD_SIZE = Math.floor((SCREEN_W - GRID_PAD * 2 - CARD_GAP * (GRID_COLS - 1)) / GRID_COLS);
+
+const KANA_COLORS = {
+  bg: "#0C1322",
+  card: "#172238",
+  surface: "#203047",
+  border: "#2D3C53",
+  text: "#F3F5FC",
+  textSecondary: "#B8C5D9",
+  textMuted: "#95A6C0",
+  lavender: "#C4B8F0",
+  teal: "#8CDECF",
+  gold: "#EAC88F",
+};
 
 const GROUP_LABELS: Record<string, { label: string; kana: string }> = {
   "a-row": { label: "Vowels", kana: "あ" },
@@ -59,6 +69,7 @@ const GROUP_LABELS: Record<string, { label: string; kana: string }> = {
   "ba-row": { label: "Ba", kana: "ば" },
   "pa-row": { label: "Pa", kana: "ぱ" },
   combo: { label: "Combos", kana: "拗" },
+  loanword: { label: "Loanword sounds", kana: "ファ" },
 };
 
 const GROUP_COLORS: Record<string, string> = {
@@ -79,18 +90,8 @@ const GROUP_COLORS: Record<string, string> = {
   "ba-row": "#E879F9",
   "pa-row": "#A3E635",
   combo: "#FACC15",
+  loanword: "#38BDF8",
 };
-
-const STROKE_COLORS = [
-  "#A78BFA",
-  "#60A5FA",
-  "#34D399",
-  "#F472B6",
-  "#FBBF24",
-  "#FB7185",
-  "#22D3EE",
-  "#E879F9",
-];
 
 function formatGroup(group: string): string {
   return GROUP_LABELS[group]?.label || group;
@@ -99,6 +100,8 @@ function formatGroup(group: string): string {
 // ─── Main Component ───
 export default function WritingScreen() {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const chartWidth = Math.min(width, 640);
   const { session } = useAuth();
   // Set when another screen wants a specific character opened. The type comes
   // with it because the grid only ever loads one syllabary at a time, so a
@@ -116,20 +119,36 @@ export default function WritingScreen() {
   // See vocabulary.tsx: when the detail was opened from another screen, back
   // pops that route instead of returning to this tab's grid.
   const openedViaFocusRef = useRef(false);
-  const [kanaList, setKanaList] = useState<Kana[]>([]);
+  const [kanaList, setKanaList] = useState<Kana[]>(() => getRememberedKana("hiragana")?.data ?? []);
   const [loadFailed, setLoadFailed] = useState(false);
   const [offline, setOffline] = useState(false);
   const [servedFrom, setServedFrom] = useState<number | null>(null);
-  const [kanaType, setKanaType] = useState<"hiragana" | "katakana">("hiragana");
+  const [kanaType, setKanaType] = useState<KanaType>("hiragana");
+  const requestRef = useRef<AbortController | null>(null);
   const [mode, setMode] = useState<ViewMode>("grid");
   // Detail state
   const [selectedKana, setSelectedKana] = useState<Kana | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [strokeReplay, setStrokeReplay] = useState(0);
+  const [loadedStrokes, setLoadedStrokes] = useState<{ id: number; count: number | null } | null>(
+    null
+  );
+  const speechRequestRef = useRef(0);
+  const onStrokesLoaded = useCallback(
+    (count: number | null) => {
+      if (selectedKana) setLoadedStrokes({ id: selectedKana.id, count });
+    },
+    [selectedKana]
+  );
 
   // Closing detail or quiz. Returns to the grid, unless the detail was opened
   // from another screen, in which case it pops back to that screen. Only detail
   // is ever focus-opened, so the quiz path always just returns to the grid.
   const closeOverlay = useCallback(() => {
+    speechRequestRef.current += 1;
+    void Speech.stop();
+    setIsSpeaking(false);
     setMode("grid");
     // Opened from a practice list: navigate back to that list by id. See
     // vocabulary.tsx — router.back() across tab navigators is not reliable.
@@ -141,61 +160,47 @@ export default function WritingScreen() {
 
   // Detail and quiz are local state, not routes, so Android's back button would
   // otherwise leave the screen entirely instead of returning to the grid.
-  useAndroidBack(mode !== "grid", closeOverlay);
+  useAndroidBack(mode === "detail", closeOverlay);
 
   // Custom List State
   const [showAddListModal, setShowAddListModal] = useState(false);
   const [showListAuthPrompt, setShowListAuthPrompt] = useState(false);
   const [showHindi, setShowHindi] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [showRomaji, setShowRomaji] = useState(false);
+  const [loading, setLoading] = useState(() => !getRememberedKana("hiragana"));
+  const [refreshing, setRefreshing] = useState(false);
   const [activeGroup, setActiveGroup] = useState("All");
 
-  // Quiz state
-  const [quizPool, setQuizPool] = useState<Kana[]>([]);
-  const [quizIndex, setQuizIndex] = useState(0);
-  const [quizOptions, setQuizOptions] = useState<string[]>([]);
-  const [quizAnswer, setQuizAnswer] = useState<string | null>(null);
-  const [quizScore, setQuizScore] = useState({ correct: 0, total: 0 });
-  const [quizDone, setQuizDone] = useState(false);
-  const [quizAttemptKey, setQuizAttemptKey] = useState(() => createXpAttemptKey());
-  const answersRef = useRef<GradedAnswer[]>([]);
-  const questionShownAtRef = useRef<number>(Date.now());
+  const practiceReturnMode = useRef<"grid" | "detail">("grid");
 
   // Animations
-  const cardAnim = useRef(new Animated.Value(0)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [cardAnim] = useState(() => new Animated.Value(0));
 
   const isHiragana = kanaType === "hiragana";
 
   const fetchKana = useCallback(async () => {
-    setLoading(true);
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    const remembered = getRememberedKana(kanaType);
+    setKanaList(remembered?.data ?? []);
+    setLoading(!remembered);
+    setRefreshing(true);
     setLoadFailed(false);
-    const { data, error } = await supabase
-      .from("kana")
-      .select("*")
-      .eq("type", kanaType)
-      .order("sort_order");
-
-    if (!error && data) {
-      setKanaList(data);
-      setServedFrom(null);
-      void writeCache(`kana-${kanaType}`, data);
-      setLoading(false);
-      return;
-    }
-
-    captureException(error, { screen: "writing", kanaType });
-    setOffline(isOfflineError(error));
-
-    const cached = await readCache<Kana[]>(`kana-${kanaType}`);
-    if (cached) {
-      setKanaList(cached.data);
-      setServedFrom(cached.savedAt);
-    } else {
-      setLoadFailed(true);
-    }
-    setLoading(false);
+    setServedFrom(null);
+    setOffline(false);
+    await loadKana(
+      kanaType,
+      (result) => {
+        setKanaList(result.data);
+        setLoading(false);
+        setRefreshing(result.refreshing);
+        setLoadFailed(!!result.error && result.data.length === 0);
+        setOffline(isOfflineError(result.error));
+        setServedFrom(result.error && result.data.length > 0 ? result.savedAt : null);
+      },
+      controller.signal
+    );
   }, [kanaType]);
 
   useEffect(() => {
@@ -203,13 +208,18 @@ export default function WritingScreen() {
     setSelectedKana(null);
     setActiveGroup("All");
     setMode("grid");
+    return () => requestRef.current?.abort();
   }, [fetchKana]);
 
   // Filtered list
   const filtered = useMemo(() => {
-    if (activeGroup === "All") return kanaList;
-    return kanaList.filter((k) => k.group_name === activeGroup);
-  }, [kanaList, activeGroup]);
+    return kanaList.filter(
+      (k) => k.type === kanaType && (activeGroup === "All" || k.group_name === activeGroup)
+    );
+  }, [kanaList, kanaType, activeGroup]);
+
+  const inventory = useMemo(() => auditKanaInventory(kanaList, kanaType), [kanaList, kanaType]);
+  const breakdown = useMemo(() => kanaBreakdown(kanaList), [kanaList]);
 
   const groupNames = useMemo(() => {
     return ["All", ...Array.from(new Set(kanaList.map((k) => k.group_name)))];
@@ -217,32 +227,54 @@ export default function WritingScreen() {
 
   // Groups for sectioned grid
   const groupedKana = useMemo(() => {
-    const groups: { name: string; data: Kana[] }[] = [];
-    const seen = new Set<string>();
+    const groups = new Map<string, Kana[]>();
     for (const k of filtered) {
-      if (!seen.has(k.group_name)) {
-        seen.add(k.group_name);
-        groups.push({
-          name: k.group_name,
-          data: filtered.filter((x) => x.group_name === k.group_name),
-        });
-      }
+      const group = groups.get(k.group_name) ?? [];
+      group.push(k);
+      groups.set(k.group_name, group);
     }
-    return groups;
+    return [...groups].map(([name, items]) => {
+      const columns = name === "combo" || name === "loanword" ? 3 : GRID_COLS;
+      const data: Kana[][] = [];
+      for (let i = 0; i < items.length; i += columns) data.push(items.slice(i, i + columns));
+      return { name, count: items.length, columns, data };
+    });
   }, [filtered]);
+
+  const filteredIndices = useMemo(
+    () => new Map(filtered.map((kana, index) => [kana.id, index])),
+    [filtered]
+  );
 
   // ─── Helpers ───
   const speakKana = useCallback((kana: Kana) => {
-    Speech.stop();
+    const request = ++speechRequestRef.current;
     setIsSpeaking(true);
-    Speech.speak(kana.character, {
-      language: "ja-JP",
-      pitch: 1.1,
-      rate: 0.7,
-      onDone: () => setIsSpeaking(false),
-      onError: () => setIsSpeaking(false),
-    });
+    const finish = () => {
+      if (speechRequestRef.current === request) setIsSpeaking(false);
+    };
+    void Speech.stop()
+      .then(() => {
+        if (speechRequestRef.current !== request) return;
+        Speech.speak(kana.character, {
+          language: "ja-JP",
+          pitch: 1.1,
+          rate: 0.7,
+          onDone: finish,
+          onStopped: finish,
+          onError: finish,
+        });
+      })
+      .catch(finish);
   }, []);
+
+  useEffect(
+    () => () => {
+      speechRequestRef.current += 1;
+      void Speech.stop();
+    },
+    []
+  );
 
   const openAddToList = () => {
     if (session) {
@@ -287,7 +319,7 @@ export default function WritingScreen() {
       return;
     }
 
-    if (kanaList.length === 0) return;
+    if (loading || kanaList.length === 0 || kanaList.some((kana) => kana.type !== kanaType)) return;
 
     const index = filtered.findIndex((kana) => String(kana.id) === focusItemId);
     if (index >= 0) {
@@ -302,7 +334,7 @@ export default function WritingScreen() {
     } else {
       consumedFocusRef.current = focusKey;
     }
-  }, [focusItemId, focusKey, focusKanaType, kanaType, kanaList, filtered, openDetail]);
+  }, [focusItemId, focusKey, focusKanaType, kanaType, kanaList, filtered, openDetail, loading]);
 
   const navigateKana = useCallback(
     (direction: 1 | -1) => {
@@ -324,182 +356,213 @@ export default function WritingScreen() {
     [filtered, selectedIndex, speakKana, cardAnim]
   );
 
-  // ─── Quiz Logic ───
-  const setupQuizQuestion = useCallback(
-    (pool: Kana[], idx: number) => {
-      if (idx >= pool.length) {
-        setQuizDone(true);
-        return;
-      }
-      const target = pool[idx];
-      const others = kanaList.filter((kana) => kana.id !== target.id);
-      const shuffled = others.sort(() => Math.random() - 0.5).slice(0, 3);
-      const options = [...shuffled.map((kana) => kana.romaji), target.romaji].sort(
-        () => Math.random() - 0.5
-      );
-      setQuizOptions(options);
-      setQuizAnswer(null);
-      questionShownAtRef.current = Date.now();
-    },
-    [kanaList]
+  const startQuiz = () => {
+    speechRequestRef.current += 1;
+    void Speech.stop();
+    setIsSpeaking(false);
+    practiceReturnMode.current = mode === "detail" ? "detail" : "grid";
+    setMode("quiz");
+  };
+  const renderPronunciationControls = () => (
+    <View style={s.pronunciationButtons}>
+      <TouchableOpacity
+        style={[s.pronunciationBtn, showRomaji && s.romajiBtnActive]}
+        onPress={() => setShowRomaji((shown) => !shown)}
+        accessibilityRole="button"
+        accessibilityLabel={showRomaji ? "Hide romaji pronunciation" : "Show romaji pronunciation"}
+        accessibilityState={{ selected: showRomaji }}
+        testID="kana-romaji-toggle"
+        activeOpacity={0.8}
+      >
+        <Text style={[s.pronunciationIcon, { color: "#99C7FA" }]}>Aa</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[s.pronunciationBtn, showHindi && s.hindiBtnActive]}
+        onPress={() => setShowHindi((shown) => !shown)}
+        accessibilityRole="button"
+        accessibilityLabel={showHindi ? "Hide Hindi pronunciation" : "Show Hindi pronunciation"}
+        accessibilityState={{ selected: showHindi }}
+        testID="kana-hindi-toggle"
+        activeOpacity={0.8}
+      >
+        <Text style={[s.pronunciationIcon, { color: "#F0B3CE" }]}>अ</Text>
+      </TouchableOpacity>
+    </View>
   );
 
-  const startQuiz = useCallback(() => {
-    const pool = [...filtered]
-      .sort(() => Math.random() - 0.5)
-      .slice(0, Math.min(20, filtered.length));
-    setQuizPool(pool);
-    setQuizIndex(0);
-    setQuizScore({ correct: 0, total: 0 });
-    setQuizAnswer(null);
-    setQuizDone(false);
-    setQuizAttemptKey(createXpAttemptKey());
-    answersRef.current = [];
-    setupQuizQuestion(pool, 0);
-    setMode("quiz");
-    fadeAnim.setValue(0);
-    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-  }, [filtered, fadeAnim, setupQuizQuestion]);
-
-  const handleQuizAnswer = useCallback(
-    (answer: string) => {
-      if (quizAnswer) return;
-      setQuizAnswer(answer);
-      const current = quizPool[quizIndex];
-      const correct = answer === current?.romaji;
-      setQuizScore((s) => ({
-        correct: s.correct + (correct ? 1 : 0),
-        total: s.total + 1,
-      }));
-      if (current) {
-        answersRef.current.push({
-          itemType: "kana",
-          itemId: String(current.id),
-          isCorrect: correct,
-          prompt: current.character,
-          answer,
-          correctAnswer: current.romaji,
-          responseMs: Date.now() - questionShownAtRef.current,
-        });
-        speakKana(current);
-      }
-
-      setTimeout(async () => {
-        const next = quizIndex + 1;
-        setQuizIndex(next);
-        if (next >= quizPool.length) {
-          if (session) {
-            const payload = toGradedAnswerPayload(answersRef.current);
-            const result = await submitLearningAttemptWithQueue(supabase, {
-              activityType: "writing_quiz",
-              attemptKey: quizAttemptKey,
-              answers: payload as unknown as OfflineJson,
-              expectedUserId: session.user.id,
-            });
-            if (result.status === "failed") {
-              console.error("Failed to record writing quiz", result.error);
-            }
-          }
-          setQuizDone(true);
-        } else {
-          setupQuizQuestion(quizPool, next);
-        }
-      }, 1200);
-    },
-    [quizAnswer, quizPool, quizIndex, quizAttemptKey, session, speakKana, setupQuizQuestion]
+  const renderChartGuide = () => (
+    <View style={s.chartGuide} testID="kana-learning-guide">
+      <View style={s.guideHeading}>
+        <Ionicons name="library-outline" size={19} color={KANA_COLORS.lavender} />
+        <Text style={s.guideTitle}>Your {kanaType} chart</Text>
+      </View>
+      <Text style={s.guideDescription} testID="kana-total-count">
+        {kanaList.length} learning entries in the full chart. Combinations are sound pairs, not
+        extra basic letters.
+      </Text>
+      <View style={s.chartStats}>
+        {[
+          { label: "Basic", count: breakdown.basic, color: KANA_COLORS.lavender },
+          { label: "With marks", count: breakdown.marked, color: KANA_COLORS.gold },
+          { label: "Combinations", count: breakdown.combinations, color: KANA_COLORS.teal },
+          ...(breakdown.loanwords
+            ? [{ label: "Loanword sounds", count: breakdown.loanwords, color: "#99C7FA" }]
+            : []),
+        ].map((stat) => (
+          <View key={stat.label} style={[s.chartStat, { borderColor: stat.color + "35" }]}>
+            <Text style={[s.chartStatCount, { color: stat.color }]}>{stat.count}</Text>
+            <Text style={s.chartStatLabel}>{stat.label}</Text>
+          </View>
+        ))}
+      </View>
+      <Text style={s.guideTitle}>A simple way to learn</Text>
+      {[
+        {
+          title: "Start with one row",
+          body: "Learn the vowels first, then one row at a time. Use the row filters to focus on a small set.",
+        },
+        {
+          title: "Listen, trace, then recall",
+          body: "Open a character, listen and follow the strokes. Write it from memory, then use Replay to check. Hide Aa / अ when you are ready to recall the sound.",
+        },
+        {
+          title: "Notice marks and small kana",
+          body: isHiragana
+            ? "Compare は → ば → ぱ. Small ゃ・ゅ・ょ join the previous kana: きゃ is one beat; きや is two. Small っ adds a beat to the next consonant, as in きって."
+            : "Compare ハ → バ → パ. Keep the second kana small in pairs such as キャ and ファ. Small ッ adds a beat to the next consonant; ー lengthens a vowel, as in コーヒー.",
+        },
+        {
+          title: "Review in short sessions",
+          body: "Start with 10 practice questions, then try 15 or 20. Revisit the characters you miss and say each sound aloud.",
+        },
+      ].map((step, index) => (
+        <View key={step.title} style={s.guideStep}>
+          <View style={s.guideStepNumber}>
+            <Text style={s.guideStepNumberText}>{index + 1}</Text>
+          </View>
+          <View style={s.guideStepContent}>
+            <Text style={s.guideStepTitle}>{step.title}</Text>
+            <Text style={s.guideStepText}>{step.body}</Text>
+          </View>
+        </View>
+      ))}
+      <Text style={s.guideNote}>
+        Hindi is an approximate sound guide. Use Listen to hear the Japanese pronunciation.
+      </Text>
+    </View>
   );
 
   // ═══════════════════ GRID MODE ═══════════════════
   const renderGrid = () => (
-    <View style={s.flex}>
-      {/* Hero Banner */}
-      <View style={s.heroBanner}>
-        <LinearGradient
-          colors={[Colors.primary[700], Colors.primary[900]]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={s.heroGradient}
-        >
-          <View style={s.heroLeft}>
-            <Text style={s.heroKana}>{isHiragana ? "あ" : "ア"}</Text>
-          </View>
-          <View style={s.heroRight}>
-            <Text style={s.heroTitle}>{isHiragana ? "Hiragana" : "Katakana"}</Text>
-            <Text style={s.heroSubtitle}>{filtered.length} characters to master</Text>
-            <View style={s.heroActions}>
-              <TouchableOpacity style={s.heroQuizBtn} onPress={startQuiz} activeOpacity={0.8}>
-                <Ionicons name="help-circle" size={16} color="#fff" />
-                <Text style={s.heroQuizBtnText}>Quiz Me</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-          {/* Decorative */}
-          <Text style={s.heroDecorative}>{isHiragana ? "ひらがな" : "カタカナ"}</Text>
-        </LinearGradient>
-      </View>
-
-      {/* Type Toggle */}
-      <View style={s.toggleRow}>
-        <TouchableOpacity
-          style={[s.toggleBtn, isHiragana && s.toggleActive]}
-          onPress={() => setKanaType("hiragana")}
-          activeOpacity={0.8}
-        >
-          <Text style={[s.toggleKana, isHiragana && s.toggleKanaActive]}>ひ</Text>
-          <Text style={[s.toggleLabel, isHiragana && s.toggleLabelActive]}>Hiragana</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[s.toggleBtn, !isHiragana && s.toggleActive]}
-          onPress={() => setKanaType("katakana")}
-          activeOpacity={0.8}
-        >
-          <Text style={[s.toggleKana, !isHiragana && s.toggleKanaActive]}>カ</Text>
-          <Text style={[s.toggleLabel, !isHiragana && s.toggleLabelActive]}>Katakana</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[s.hindiBtn, showHindi && s.hindiBtnActive]}
-          onPress={() => setShowHindi(!showHindi)}
-          activeOpacity={0.8}
-        >
-          <Text style={[s.hindiBtnText, showHindi && { color: "#fff" }]}>हिं</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Group Filter */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={s.chipRow}
-        style={s.chipScroll}
+    <View style={[s.chartContainer, { maxWidth: chartWidth }]}>
+      <LinearGradient
+        colors={isHiragana ? ["#292744", "#172E40"] : ["#183B43", "#1A2943"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={s.chartHeaderPanel}
+        testID="kana-chart-header"
       >
-        {groupNames.map((g) => {
-          const active = g === activeGroup;
-          const color = GROUP_COLORS[g] || Colors.primary[400];
-          return (
-            <TouchableOpacity
-              key={g}
-              style={[s.chip, active && { backgroundColor: color + "25", borderColor: color }]}
-              onPress={() => setActiveGroup(g)}
-              activeOpacity={0.7}
-            >
-              {g !== "All" && (
-                <View
-                  style={[s.chipDot, { backgroundColor: active ? color : Colors.dark.textMuted }]}
-                />
-              )}
-              <Text style={[s.chipText, active && { color }]}>{formatGroup(g)}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+        <View style={s.chartHeader}>
+          <View style={s.chartHeading}>
+            <Text style={s.chartTitle}>{isHiragana ? "Hiragana" : "Katakana"}</Text>
+            {refreshing && !loading && (
+              <ActivityIndicator
+                size="small"
+                color={KANA_COLORS.teal}
+                accessibilityLabel="Refreshing character chart"
+              />
+            )}
+          </View>
+          <TouchableOpacity
+            style={[s.chartQuizBtn, (loading || filtered.length === 0) && s.disabled]}
+            onPress={startQuiz}
+            disabled={loading || filtered.length === 0}
+            accessibilityRole="button"
+            accessibilityLabel="Start kana quiz"
+            activeOpacity={0.8}
+          >
+            <Ionicons name="create-outline" size={17} color="#fff" />
+            <Text style={s.chartQuizText}>Practice</Text>
+          </TouchableOpacity>
+        </View>
 
-      {servedFrom !== null && (
+        <View style={s.chartControls}>
+          <View style={s.toggleRow}>
+            {(["hiragana", "katakana"] as const).map((type) => {
+              const active = kanaType === type;
+              return (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    s.toggleBtn,
+                    active && (isHiragana ? s.toggleHiraganaActive : s.toggleKatakanaActive),
+                  ]}
+                  onPress={() => setKanaType(type)}
+                  accessibilityRole="tab"
+                  accessibilityLabel={type === "hiragana" ? "Hiragana" : "Katakana"}
+                  accessibilityState={{ selected: active }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[s.toggleKana, active && s.toggleKanaActive]}>
+                    {type === "hiragana" ? "ひ" : "カ"}
+                  </Text>
+                  <Text style={[s.toggleLabel, active && s.toggleLabelActive]}>
+                    {type === "hiragana" ? "Hiragana" : "Katakana"}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {renderPronunciationControls()}
+        </View>
+
+        <ScrollView
+          key={kanaType}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={s.chipRow}
+          style={s.chipScroll}
+        >
+          {groupNames.map((group) => {
+            const active = group === activeGroup;
+            const color = GROUP_COLORS[group] || Colors.primary[400];
+            return (
+              <TouchableOpacity
+                key={group}
+                style={[s.chip, active && { backgroundColor: color + "25", borderColor: color }]}
+                onPress={() => setActiveGroup(group)}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  group === "All" ? "Show all kana" : "Show " + formatGroup(group) + " group"
+                }
+                accessibilityState={{ selected: active }}
+                activeOpacity={0.7}
+              >
+                <Text style={[s.chipText, active && { color }]}>{formatGroup(group)}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </LinearGradient>
+      {servedFrom !== null && offline && (
         <OfflineNotice savedAt={servedFrom} onRetry={() => void fetchKana()} />
       )}
+      {servedFrom !== null && !offline && (
+        <TouchableOpacity
+          onPress={() => void fetchKana()}
+          accessibilityRole="button"
+          style={s.savedNotice}
+        >
+          <Text style={s.chartMeta}>Showing saved characters. Tap to retry the refresh.</Text>
+        </TouchableOpacity>
+      )}
+      {!loading && !refreshing && !loadFailed && inventory.missing.length > 0 && (
+        <Text style={s.inventoryNotice}>
+          {inventory.missing.length} chart entries are unavailable. Connect and refresh for the
+          complete chart.
+        </Text>
+      )}
 
-      {/* Sectioned Grid */}
       {loading ? (
         <View style={s.centerBox}>
           <ActivityIndicator color={Colors.primary[400]} size="large" />
@@ -509,54 +572,82 @@ export default function WritingScreen() {
         <LoadError
           onRetry={() => void fetchKana()}
           offline={offline}
-          message={`We could not load ${kanaType}.`}
+          message={"We could not load " + kanaType + "."}
         />
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.gridScroll}>
-          {groupedKana.map((group) => {
-            const color = GROUP_COLORS[group.name] || Colors.primary[400];
+        <SectionList
+          testID="kana-character-list"
+          key={kanaType + "-" + activeGroup}
+          sections={groupedKana}
+          style={s.flex}
+          contentContainerStyle={s.gridScroll}
+          showsVerticalScrollIndicator={false}
+          stickySectionHeadersEnabled={false}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={5}
+          extraData={showRomaji + "-" + showHindi + "-" + chartWidth}
+          keyExtractor={(row) => String(row[0].id)}
+          renderSectionHeader={({ section }) => (
+            <View style={s.groupHeader}>
+              <View
+                style={[
+                  s.groupDot,
+                  { backgroundColor: GROUP_COLORS[section.name] || Colors.primary[400] },
+                ]}
+              />
+              <Text style={s.groupTitle}>{formatGroup(section.name)}</Text>
+              <View style={s.groupLine} />
+              <Text style={s.groupCount}>{section.count}</Text>
+            </View>
+          )}
+          renderItem={({ item: row, section }) => {
+            const cardWidth =
+              (chartWidth - GRID_PAD * 2 - CARD_GAP * (section.columns - 1)) / section.columns;
             return (
-              <View key={group.name} style={s.groupSection}>
-                {/* Group header */}
-                <View style={s.groupHeader}>
-                  <View style={[s.groupDot, { backgroundColor: color }]} />
-                  <Text style={s.groupTitle}>{formatGroup(group.name)}</Text>
-                  <View style={[s.groupLine, { backgroundColor: color + "30" }]} />
-                  <Text style={s.groupCount}>{group.data.length}</Text>
-                </View>
-
-                {/* Cards */}
-                <View style={s.gridRow}>
-                  {group.data.map((kana) => {
-                    const globalIdx = filtered.findIndex((k) => k.id === kana.id);
-                    return (
-                      <TouchableOpacity
-                        key={kana.id}
-                        style={[
-                          s.kanaCard,
-                          kana.is_dakuten && s.kanaCardDakuten,
-                          kana.is_combo && s.kanaCardCombo,
-                        ]}
-                        activeOpacity={0.7}
-                        onPress={() => openDetail(kana, globalIdx)}
-                      >
-                        <Text style={s.kanaStrokeCount}>{kana.stroke_count}画</Text>
-                        <Text style={s.kanaChar}>{kana.character}</Text>
-                        <Text style={s.kanaRomaji} numberOfLines={1}>
-                          {showHindi && kana.romaji_hindi ? kana.romaji_hindi : kana.romaji}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+              <View style={s.gridRow}>
+                {row.map((kana) => (
+                  <TouchableOpacity
+                    key={kana.id}
+                    style={[
+                      s.kanaCard,
+                      {
+                        width: cardWidth,
+                        minHeight: Math.max(78, cardWidth + (showRomaji && showHindi ? 28 : 8)),
+                      },
+                      kana.is_dakuten && s.kanaCardDakuten,
+                      kana.is_combo && s.kanaCardCombo,
+                    ]}
+                    onPress={() => openDetail(kana, filteredIndices.get(kana.id) ?? 0)}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      "Open " +
+                      kana.character +
+                      (showRomaji ? ", " + kana.romaji : "") +
+                      (showHindi && kana.romaji_hindi ? ", " + kana.romaji_hindi : "")
+                    }
+                    accessibilityHint="View stroke order and play pronunciation"
+                    testID={"kana-card-" + kana.id}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={s.kanaChar}>{kana.character}</Text>
+                    {showRomaji && (
+                      <Text style={s.kanaRomaji} numberOfLines={1}>
+                        {kana.romaji}
+                      </Text>
+                    )}
+                    {showHindi && kana.romaji_hindi && (
+                      <Text style={s.kanaHindi} numberOfLines={1}>
+                        {kana.romaji_hindi}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                ))}
               </View>
             );
-          })}
-
-          <Text style={s.footerText}>
-            {isHiragana ? "ひらがな" : "カタカナ"} · {kanaList.length} characters
-          </Text>
-        </ScrollView>
+          }}
+          ListFooterComponent={renderChartGuide()}
+        />
       )}
     </View>
   );
@@ -567,371 +658,219 @@ export default function WritingScreen() {
     const total = filtered.length;
     const canPrev = selectedIndex > 0;
     const canNext = selectedIndex < total - 1;
-    const strokeHints = selectedKana.stroke_hint?.split(", ") || [];
     const color = GROUP_COLORS[selectedKana.group_name] || Colors.primary[400];
+    const info = kanaLearningInfo(selectedKana);
+    const strokeCount = loadedStrokes?.id === selectedKana.id ? loadedStrokes.count : null;
 
     return (
-      <Animated.ScrollView
-        style={[s.flex, { opacity: cardAnim }]}
-        contentContainerStyle={s.detailScroll}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Top bar */}
-        <View style={s.detailTopBar}>
-          <TouchableOpacity onPress={closeOverlay} style={s.backBtn} activeOpacity={0.7}>
-            <Ionicons name="arrow-back" size={22} color={Colors.dark.text} />
-          </TouchableOpacity>
-          <Text style={s.detailCounter}>
-            {selectedIndex + 1} / {total}
-          </Text>
+      <View style={[s.detailFrame, { maxWidth: chartWidth }]}>
+        {/* Stays in reach even while the learner reads the notes below. */}
+        <LinearGradient
+          colors={["#292744", "#172E40"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={s.detailTopBar}
+        >
           <TouchableOpacity
-            onPress={startQuiz}
-            style={s.topQuizBtn}
+            onPress={closeOverlay}
+            style={s.backBtn}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Start quiz"
+            accessibilityLabel="Back to character chart"
           >
-            <Ionicons name="help-circle-outline" size={20} color={Colors.primary[400]} />
+            <Ionicons name="arrow-back" size={21} color={KANA_COLORS.text} />
           </TouchableOpacity>
-        </View>
-
-        {/* Large Character Card */}
-        <View style={s.detailCharCard}>
-          <LinearGradient colors={[color + "15", "transparent"]} style={s.detailCharGlow} />
-          <View style={[s.detailGridBox, { overflow: "hidden" }]}>
-            <StrokeWriter
-              character={selectedKana.character}
-              size={180}
-              color={Colors.dark.text}
-              outlineColor={color + "30"}
-              isDrawing={true}
-            />
+          <View style={s.detailHeading}>
+            <Text style={s.detailScript}>{isHiragana ? "Hiragana" : "Katakana"}</Text>
+            <Text style={s.detailCounter} testID="kana-detail-position">
+              {selectedIndex + 1} of {total}
+            </Text>
           </View>
-
-          {/* Romaji */}
-          <Text style={[s.detailRomaji, { color }]}>
-            {showHindi && selectedKana.romaji_hindi
-              ? selectedKana.romaji_hindi
-              : selectedKana.romaji}
-          </Text>
-          {showHindi && selectedKana.romaji_hindi && (
-            <Text style={s.detailRomajiSub}>{selectedKana.romaji}</Text>
-          )}
-
-          {/* Action buttons */}
-          <View style={s.detailActions}>
-            <TouchableOpacity
-              style={[s.detailActionBtn, isSpeaking && { backgroundColor: Colors.primary[600] }]}
-              onPress={() => speakKana(selectedKana)}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name={isSpeaking ? "volume-high" : "volume-medium-outline"}
-                size={20}
-                color={isSpeaking ? "#fff" : Colors.primary[400]}
-              />
-              <Text style={[s.detailActionText, isSpeaking && { color: "#fff" }]}>
-                {isSpeaking ? "Playing..." : "Audio"}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={s.detailActionBtnSecondary}
-              onPress={openAddToList}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="add" size={20} color={Colors.primary[300]} />
-              <Text style={s.detailActionTextSecondary}>Add to List</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Badges */}
-          <View style={s.badgeRow}>
-            <View style={[s.badge, { backgroundColor: color + "18", borderColor: color + "40" }]}>
-              <Text style={[s.badgeText, { color }]}>{formatGroup(selectedKana.group_name)}</Text>
-            </View>
-            {selectedKana.is_dakuten && (
-              <View style={[s.badge, { backgroundColor: "#F59E0B18", borderColor: "#F59E0B40" }]}>
-                <Text style={[s.badgeText, { color: "#F59E0B" }]}>Dakuten</Text>
-              </View>
-            )}
-            {selectedKana.is_combo && (
-              <View style={[s.badge, { backgroundColor: "#10B98118", borderColor: "#10B98140" }]}>
-                <Text style={[s.badgeText, { color: "#10B981" }]}>Combo</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Stroke Order Card */}
-        <View style={s.card}>
-          <View style={s.cardHeader}>
-            <Ionicons name="pencil" size={16} color={color} />
-            <Text style={s.cardTitle}>Stroke Order</Text>
-            <View style={[s.strokeCountBadge, { backgroundColor: color + "20" }]}>
-              <Text style={[s.strokeCountText, { color }]}>
-                {selectedKana.stroke_count} stroke{selectedKana.stroke_count !== 1 ? "s" : ""}
-              </Text>
-            </View>
-          </View>
-
-          {/* Stroke dots */}
-          <View style={s.strokeDotsRow}>
-            {Array.from({ length: selectedKana.stroke_count }).map((_, i) => (
-              <View
-                key={i}
-                style={[s.strokeDot, { backgroundColor: STROKE_COLORS[i % STROKE_COLORS.length] }]}
-              >
-                <Text style={s.strokeDotNum}>{i + 1}</Text>
-              </View>
-            ))}
-          </View>
-
-          {/* Stroke hints */}
-          {strokeHints.length > 0 && (
-            <View style={s.strokeHintList}>
-              {strokeHints.map((hint, i) => (
-                <View key={i} style={s.strokeHintRow}>
-                  <View
-                    style={[
-                      s.strokeHintNum,
-                      { backgroundColor: STROKE_COLORS[i % STROKE_COLORS.length] },
-                    ]}
-                  >
-                    <Text style={s.strokeHintNumText}>{i + 1}</Text>
-                  </View>
-                  <Text style={s.strokeHintText}>{hint.replace(/^\d+→\s*/, "")}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* Character Info Card */}
-        <View style={s.card}>
-          <View style={s.cardHeader}>
-            <Ionicons name="information-circle" size={16} color={Colors.accent[400]} />
-            <Text style={s.cardTitle}>Details</Text>
-          </View>
-          {[
-            { label: "Character", value: selectedKana.character },
-            { label: "Romaji", value: selectedKana.romaji },
-            ...(selectedKana.romaji_hindi
-              ? [{ label: "Hindi", value: selectedKana.romaji_hindi }]
-              : []),
-            { label: "Type", value: isHiragana ? "Hiragana" : "Katakana" },
-            { label: "Group", value: formatGroup(selectedKana.group_name) },
-            { label: "Strokes", value: `${selectedKana.stroke_count}` },
-          ].map((item, i, arr) => (
-            <View
-              key={item.label}
-              style={[s.infoRow, i === arr.length - 1 && { borderBottomWidth: 0 }]}
-            >
-              <Text style={s.infoLabel}>{item.label}</Text>
-              <Text style={s.infoValue}>{item.value}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Navigation */}
-        <View style={s.detailNav}>
           <TouchableOpacity
-            style={[s.navBtn, !canPrev && s.navBtnDisabled]}
+            style={[s.quickNavBtn, !canPrev && s.navBtnDisabled]}
             onPress={() => navigateKana(-1)}
             disabled={!canPrev}
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityLabel="Previous character"
             accessibilityState={{ disabled: !canPrev }}
+            testID="kana-previous"
           >
-            <Ionicons
-              name="chevron-back"
-              size={20}
-              color={canPrev ? Colors.dark.text : Colors.dark.textMuted}
-            />
-            <Text style={[s.navBtnText, !canPrev && { color: Colors.dark.textMuted }]}>
-              Previous
-            </Text>
+            <Ionicons name="chevron-back" size={22} color={KANA_COLORS.text} />
           </TouchableOpacity>
-
           <TouchableOpacity
-            style={[s.navBtnPrimary, !canNext && { opacity: 0.4 }]}
+            style={[s.quickNavBtn, s.quickNavNext, !canNext && s.navBtnDisabled]}
             onPress={() => navigateKana(1)}
             disabled={!canNext}
             activeOpacity={0.7}
-          >
-            <Text style={s.navBtnPrimaryText}>Next</Text>
-            <Ionicons name="chevron-forward" size={20} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </Animated.ScrollView>
-    );
-  };
-
-  // ═══════════════════ QUIZ MODE ═══════════════════
-  const renderQuiz = () => {
-    // Results screen
-    if (quizDone) {
-      const pct = quizScore.total > 0 ? Math.round((quizScore.correct / quizScore.total) * 100) : 0;
-      const emoji = pct >= 90 ? "🏆" : pct >= 70 ? "🎉" : pct >= 50 ? "💪" : "📚";
-      const message =
-        pct >= 90
-          ? "Outstanding!"
-          : pct >= 70
-            ? "Great job!"
-            : pct >= 50
-              ? "Good effort!"
-              : "Keep practicing!";
-
-      return (
-        <View style={s.quizContainer}>
-          <View style={s.quizResultCard}>
-            <Text style={s.quizResultEmoji}>{emoji}</Text>
-            <Text style={s.quizResultTitle}>Quiz Complete!</Text>
-            <Text style={s.quizResultMessage}>{message}</Text>
-
-            {/* Score ring */}
-            <View style={s.scoreRing}>
-              <Text style={s.scoreRingPct}>{pct}%</Text>
-              <Text style={s.scoreRingLabel}>Accuracy</Text>
-            </View>
-
-            <View style={s.scoreDetail}>
-              <View style={s.scoreItem}>
-                <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                <Text style={s.scoreItemText}>{quizScore.correct} correct</Text>
-              </View>
-              <View style={s.scoreItem}>
-                <Ionicons name="close-circle" size={20} color="#EF4444" />
-                <Text style={s.scoreItemText}>{quizScore.total - quizScore.correct} wrong</Text>
-              </View>
-            </View>
-
-            <View style={s.quizResultActions}>
-              <TouchableOpacity style={s.retryBtn} onPress={startQuiz} activeOpacity={0.7}>
-                <Ionicons name="refresh" size={18} color="#fff" />
-                <Text style={s.retryBtnText}>Try Again</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={s.backGridBtn}
-                onPress={() => setMode("grid")}
-                activeOpacity={0.7}
-              >
-                <Text style={s.backGridBtnText}>Back to Grid</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      );
-    }
-
-    // Active question
-    const current = quizPool[quizIndex];
-    if (!current) return null;
-    const progress = quizPool.length > 0 ? (quizIndex + 1) / quizPool.length : 0;
-
-    return (
-      <View style={s.quizContainer}>
-        {/* Quiz header */}
-        <View style={s.quizHeader}>
-          <TouchableOpacity
-            onPress={() => setMode("grid")}
-            activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Exit quiz"
+            accessibilityLabel="Next character"
+            accessibilityState={{ disabled: !canNext }}
+            testID="kana-next"
           >
-            <Ionicons name="close" size={24} color={Colors.dark.textMuted} />
+            <Ionicons name="chevron-forward" size={22} color="#fff" />
           </TouchableOpacity>
-          <View style={s.quizProgressWrap}>
-            <View style={s.quizProgressBar}>
-              <LinearGradient
-                colors={[Colors.primary[500], Colors.accent[500]]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[s.quizProgressFill, { width: `${Math.round(progress * 100)}%` as any }]}
-              />
-            </View>
-            <Text style={s.quizProgressText}>
-              {quizIndex + 1}/{quizPool.length}
-            </Text>
-          </View>
-          <View style={s.quizScoreBadge}>
-            <Text style={s.quizScoreText}>
-              {quizScore.correct}/{quizScore.total}
-            </Text>
-          </View>
-        </View>
+        </LinearGradient>
 
-        {/* Question */}
-        <View style={s.quizQuestionCard}>
-          <Text style={s.quizPrompt}>What is the reading of this character?</Text>
-
-          <TouchableOpacity onPress={() => speakKana(current)} activeOpacity={0.8}>
-            <View style={s.quizCharBox}>
-              <Text style={s.quizChar}>{current.character}</Text>
-            </View>
-          </TouchableOpacity>
-
-          <Text style={s.quizTapHint}>Tap character to hear pronunciation</Text>
-        </View>
-
-        {/* Options */}
-        <View style={s.quizOptions}>
-          {quizOptions.map((opt) => {
-            const isCorrectOpt = opt === current.romaji;
-            const isSelectedOpt = quizAnswer === opt;
-            const answered = quizAnswer !== null;
-
-            let optStyle = s.quizOptBtn;
-            let textStyle = s.quizOptText;
-            if (answered) {
-              if (isCorrectOpt) {
-                optStyle = { ...s.quizOptBtn, ...s.quizOptCorrect };
-                textStyle = { ...s.quizOptText, color: "#10B981" };
-              } else if (isSelectedOpt) {
-                optStyle = { ...s.quizOptBtn, ...s.quizOptWrong };
-                textStyle = { ...s.quizOptText, color: "#EF4444" };
-              } else {
-                optStyle = { ...s.quizOptBtn, opacity: 0.4 };
-              }
-            }
-
-            return (
+        <Animated.ScrollView
+          key={selectedKana.id}
+          style={[s.flex, { opacity: cardAnim }]}
+          contentContainerStyle={s.detailScroll}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={s.detailCharCard}>
+            <LinearGradient
+              colors={[color + "18", "#172F3B"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={s.detailCharGlow}
+              pointerEvents="none"
+            />
+            <View style={s.characterToolbar}>
+              <View>
+                <Text style={s.stageTitle}>STROKE ORDER</Text>
+                <Text style={s.stageSubtitle}>
+                  {strokeCount !== null
+                    ? `${strokeCount} stroke${strokeCount === 1 ? "" : "s"} · `
+                    : ""}
+                  {formatGroup(selectedKana.group_name)}
+                </Text>
+              </View>
               <TouchableOpacity
-                key={opt}
-                style={optStyle}
-                onPress={() => handleQuizAnswer(opt)}
-                disabled={answered}
+                style={s.replayBtn}
+                onPress={() => setStrokeReplay((value) => value + 1)}
                 activeOpacity={0.7}
                 accessibilityRole="button"
-                accessibilityState={{ disabled: answered }}
-                // After answering, right and wrong are shown only by a coloured
-                // icon, which a screen-reader user cannot perceive. Say it.
-                accessibilityLabel={
-                  answered
-                    ? isCorrectOpt
-                      ? `${opt}, correct answer`
-                      : isSelectedOpt
-                        ? `${opt}, your answer, incorrect`
-                        : opt
-                    : opt
-                }
+                accessibilityLabel="Replay stroke animation"
+                accessibilityHint="Restart the strokes from the beginning"
+                testID="kana-replay"
               >
-                {answered && isCorrectOpt && (
-                  <Ionicons name="checkmark-circle" size={22} color="#10B981" />
-                )}
-                {answered && isSelectedOpt && !isCorrectOpt && (
-                  <Ionicons name="close-circle" size={22} color="#EF4444" />
-                )}
-                <Text style={textStyle}>{opt}</Text>
+                <Ionicons name="refresh-outline" size={18} color={Colors.primary[300]} />
+                <Text style={s.replayText}>Replay</Text>
               </TouchableOpacity>
-            );
-          })}
-        </View>
+            </View>
+            <View style={s.detailGridBox}>
+              <StrokeWriter
+                key={selectedKana.id + ":" + strokeReplay}
+                character={selectedKana.character}
+                size={selectedKana.is_combo ? Math.min(240, chartWidth - 82) : 168}
+                color={KANA_COLORS.text}
+                outlineColor={color + "30"}
+                isDrawing
+                showUnavailableMessage
+                onLoad={onStrokesLoaded}
+              />
+            </View>
+            {showRomaji && <Text style={[s.detailRomaji, { color }]}>{selectedKana.romaji}</Text>}
+            {showHindi && selectedKana.romaji_hindi && (
+              <Text style={[s.detailRomajiSub, { color }]}>{selectedKana.romaji_hindi}</Text>
+            )}
+            <View style={s.detailActions}>
+              <TouchableOpacity
+                style={[s.detailActionBtn, isSpeaking && { backgroundColor: "#257B7C" }]}
+                onPress={() => speakKana(selectedKana)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Play character pronunciation"
+                testID="kana-audio"
+              >
+                <Ionicons
+                  name={isSpeaking ? "volume-high" : "volume-medium-outline"}
+                  size={20}
+                  color={isSpeaking ? "#fff" : KANA_COLORS.teal}
+                />
+                <Text style={[s.detailActionText, isSpeaking && { color: "#fff" }]}>
+                  {isSpeaking ? "Playing…" : "Listen"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={s.detailActionBtnSecondary}
+                onPress={startQuiz}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel="Practice kana recognition"
+                accessibilityHint="Start a reading quiz from this character group"
+                testID="kana-practice"
+              >
+                <Ionicons name="create-outline" size={20} color={KANA_COLORS.lavender} />
+                <Text style={s.detailActionTextSecondary}>Practice</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={s.detailPronunciation}>{renderPronunciationControls()}</View>
+
+          <View style={s.card}>
+            <View style={s.cardHeader}>
+              <Ionicons name="bulb-outline" size={18} color={color} />
+              <Text style={s.cardTitle}>Learning tips</Text>
+              <View style={[s.badge, { backgroundColor: color + "18", borderColor: color + "40" }]}>
+                <Text style={[s.badgeText, { color }]}>{info.kind}</Text>
+              </View>
+            </View>
+            {info.composition && <Text style={s.compositionText}>{info.composition}</Text>}
+            {info.tips.map((tip) => (
+              <Text key={tip} style={s.learningTip}>
+                {tip}
+              </Text>
+            ))}
+            {!selectedKana.is_combo && !info.mark && selectedKana.stroke_hint && (
+              <View style={s.writingNotes}>
+                <Text style={s.writingNotesTitle}>Writing notes</Text>
+                <Text style={s.learningTip}>
+                  {selectedKana.stroke_hint.replace(/,\s*(?=\d+→)/g, "\n")}
+                </Text>
+              </View>
+            )}
+            <Text style={s.practiceTip}>
+              Try it: watch once, write from memory, then replay to check.
+            </Text>
+          </View>
+
+          <View style={s.card}>
+            <View style={s.cardHeader}>
+              <Ionicons name="information-circle-outline" size={18} color={Colors.accent[400]} />
+              <Text style={s.cardTitle}>Character details</Text>
+            </View>
+            {[
+              { label: "Character", value: selectedKana.character },
+              ...(info.counterpart
+                ? [{ label: info.counterpartLabel, value: info.counterpart }]
+                : []),
+              ...(showRomaji ? [{ label: "Romaji", value: selectedKana.romaji }] : []),
+              ...(showHindi && selectedKana.romaji_hindi
+                ? [{ label: "Hindi", value: selectedKana.romaji_hindi }]
+                : []),
+              { label: "Type", value: info.kind },
+              ...(info.mark && selectedKana.is_combo
+                ? [{ label: "Sound mark", value: info.mark }]
+                : []),
+              { label: "Group", value: formatGroup(selectedKana.group_name) },
+              ...(strokeCount !== null ? [{ label: "Strokes", value: String(strokeCount) }] : []),
+            ].map((item, index, items) => (
+              <View
+                key={item.label}
+                style={[s.infoRow, index === items.length - 1 && { borderBottomWidth: 0 }]}
+              >
+                <Text style={s.infoLabel}>{item.label}</Text>
+                <Text style={s.infoValue}>{item.value}</Text>
+              </View>
+            ))}
+            <TouchableOpacity
+              style={s.saveCharacterBtn}
+              onPress={openAddToList}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Add character to a practice list"
+            >
+              <Ionicons name="bookmark-outline" size={18} color={Colors.primary[300]} />
+              <Text style={s.detailActionText}>Add to practice list</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.ScrollView>
       </View>
     );
   };
-
   // ═══════════════════ RENDER ═══════════════════
   return (
     /*
@@ -944,7 +883,16 @@ export default function WritingScreen() {
     <View style={[s.container, { paddingTop: insets.top }]}>
       {mode === "grid" && renderGrid()}
       {mode === "detail" && renderDetail()}
-      {mode === "quiz" && renderQuiz()}
+      {mode === "quiz" && (
+        <KanaPractice
+          key={session?.user.id ?? "guest"}
+          kana={kanaList}
+          script={kanaType}
+          initialGroup={activeGroup}
+          groupLabel={formatGroup(activeGroup)}
+          onClose={() => setMode(practiceReturnMode.current)}
+        />
+      )}
 
       {selectedKana && (
         <AddToListModal
@@ -981,10 +929,76 @@ export default function WritingScreen() {
 // ════════════════════════ STYLES ════════════════════════
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.dark.bg },
+  container: { flex: 1, backgroundColor: KANA_COLORS.bg },
   flex: { flex: 1 },
+  chartContainer: { flex: 1, width: "100%", alignSelf: "center" },
+  chartHeaderPanel: {
+    flexShrink: 0,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
+    borderBottomWidth: 1,
+    borderColor: "#395066",
+    paddingBottom: 6,
+  },
+  chartHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: GRID_PAD,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  chartHeading: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+  chartTitle: { color: KANA_COLORS.text, fontSize: 25, fontWeight: "800", letterSpacing: -0.5 },
+  chartQuizBtn: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingHorizontal: 13,
+    borderRadius: 14,
+    backgroundColor: "#7058B9",
+    borderWidth: 1,
+    borderColor: "#9780D4",
+  },
+  chartQuizText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  disabled: { opacity: 0.4 },
+  chartControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: GRID_PAD,
+    gap: 8,
+    marginBottom: 6,
+  },
+  pronunciationButtons: { flexDirection: "row", gap: 6, flexShrink: 0 },
+  pronunciationBtn: {
+    width: 44,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: KANA_COLORS.border,
+    borderRadius: 12,
+    backgroundColor: "#101F32",
+  },
+  romajiBtnActive: {
+    backgroundColor: "#304765",
+    borderColor: "#7FAAD9",
+  },
+  hindiBtnActive: { backgroundColor: "#48374D", borderColor: "#C991AE" },
+  pronunciationIcon: { color: KANA_COLORS.textSecondary, fontWeight: "700", fontSize: 17 },
+  detailPronunciation: { paddingHorizontal: GRID_PAD, marginBottom: 16 },
+  chartMeta: { flex: 1, color: KANA_COLORS.textSecondary, fontSize: 11, lineHeight: 17 },
+  savedNotice: { paddingHorizontal: GRID_PAD, paddingBottom: 10 },
+  inventoryNotice: {
+    color: Colors.gold[300],
+    fontSize: 11,
+    paddingHorizontal: GRID_PAD,
+    paddingBottom: 10,
+  },
   centerBox: { flex: 1, justifyContent: "center", alignItems: "center", gap: Spacing.md },
-  loadingText: { color: Colors.dark.textMuted, fontSize: FontSize.sm, marginTop: Spacing.sm },
+  loadingText: { color: KANA_COLORS.textMuted, fontSize: FontSize.sm, marginTop: Spacing.sm },
 
   // ── Hero ──
   heroBanner: {
@@ -1036,39 +1050,30 @@ const s = StyleSheet.create({
 
   // ── Toggle ──
   toggleRow: {
+    flex: 1,
     flexDirection: "row",
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
-    gap: Spacing.sm,
+    gap: 6,
   },
   toggleBtn: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-    backgroundColor: Colors.dark.card,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1.5,
-    borderColor: Colors.dark.border,
+    gap: 4,
+    minHeight: 44,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    backgroundColor: "#101F32",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: KANA_COLORS.border,
   },
-  toggleActive: { backgroundColor: Colors.primary[800] + "CC", borderColor: Colors.primary[500] },
-  toggleKana: { fontSize: 20, color: Colors.dark.textMuted },
+  toggleHiraganaActive: { backgroundColor: "#443E68", borderColor: "#A497D2" },
+  toggleKatakanaActive: { backgroundColor: "#23525A", borderColor: "#78BDB5" },
+  toggleKana: { fontSize: 16, color: KANA_COLORS.textMuted },
   toggleKanaActive: { color: "#fff" },
-  toggleLabel: { fontSize: 12, fontWeight: FontWeight.bold, color: Colors.dark.textMuted },
+  toggleLabel: { fontSize: 12, fontWeight: FontWeight.bold, color: KANA_COLORS.textMuted },
   toggleLabelActive: { color: "#fff" },
-  hindiBtn: {
-    width: 48,
-    borderRadius: BorderRadius.lg,
-    backgroundColor: Colors.dark.card,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: Colors.dark.border,
-  },
-  hindiBtnActive: { backgroundColor: Colors.primary[600], borderColor: Colors.primary[500] },
-  hindiBtnText: { fontSize: 18, fontWeight: FontWeight.extrabold, color: Colors.dark.textMuted },
 
   // ── Filter Chips ──
   /*
@@ -1082,21 +1087,22 @@ const s = StyleSheet.create({
    * flexShrink: 0 stops the surrounding flex column squeezing the row when the
    * grid below is long.
    */
-  chipScroll: { flexShrink: 0, marginBottom: Spacing.sm },
-  chipRow: { paddingHorizontal: Spacing.lg, paddingVertical: 4, gap: 6, alignItems: "center" },
+  chipScroll: { flexGrow: 0, flexShrink: 0 },
+  chipRow: { paddingHorizontal: GRID_PAD, paddingVertical: 2, gap: 6, alignItems: "center" },
   chip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
     paddingHorizontal: 14,
-    height: 32,
-    backgroundColor: Colors.dark.card,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: Colors.dark.border,
+    minHeight: 44,
+    paddingVertical: 8,
+    backgroundColor: "#142439",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: KANA_COLORS.border,
   },
   chipDot: { width: 6, height: 6, borderRadius: 3 },
-  chipText: { color: Colors.dark.textMuted, fontSize: 12, fontWeight: FontWeight.bold },
+  chipText: { color: KANA_COLORS.textSecondary, fontSize: 12, fontWeight: FontWeight.bold },
 
   // ── Grid ──
   gridScroll: { paddingHorizontal: GRID_PAD, paddingBottom: 32 },
@@ -1105,66 +1111,180 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.sm,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
+    marginTop: Spacing.md,
     paddingHorizontal: 2,
   },
   groupDot: { width: 8, height: 8, borderRadius: 4 },
   groupTitle: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.bold,
-    color: Colors.dark.textSecondary,
+    color: KANA_COLORS.textSecondary,
   },
-  groupLine: { flex: 1, height: 1 },
+  groupLine: { flex: 1, height: 1, backgroundColor: KANA_COLORS.border },
   groupCount: {
     fontSize: FontSize.xs,
-    color: Colors.dark.textMuted,
+    color: KANA_COLORS.textMuted,
     fontWeight: FontWeight.semibold,
   },
-  gridRow: { flexDirection: "row", flexWrap: "wrap", gap: CARD_GAP },
+  gridRow: { flexDirection: "row", gap: CARD_GAP, marginBottom: CARD_GAP },
   kanaCard: {
-    width: CARD_SIZE,
-    height: CARD_SIZE + 8,
-    backgroundColor: Colors.dark.card,
+    paddingVertical: 12,
+    backgroundColor: KANA_COLORS.card,
     borderRadius: BorderRadius.md,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: KANA_COLORS.border,
     position: "relative",
   },
-  kanaCardDakuten: { borderColor: "#F59E0B40", backgroundColor: "#F59E0B08" },
-  kanaCardCombo: { borderColor: "#10B98140", backgroundColor: "#10B98108" },
+  kanaCardDakuten: { borderColor: "#EAC88F45", backgroundColor: "#292A33" },
+  kanaCardCombo: { borderColor: "#8CDECF45", backgroundColor: "#162D36" },
   kanaStrokeCount: {
     position: "absolute",
     top: 3,
     right: 4,
     fontSize: 8,
-    color: Colors.dark.textMuted,
+    color: KANA_COLORS.textMuted,
     fontWeight: FontWeight.semibold,
   },
-  kanaChar: { fontSize: 22, fontWeight: FontWeight.bold, color: Colors.dark.text },
-  kanaRomaji: { fontSize: 9, color: Colors.dark.textMuted, marginTop: 2 },
+  kanaChar: { fontSize: 28, fontWeight: FontWeight.bold, color: KANA_COLORS.text },
+  kanaRomaji: { fontSize: 12, color: "#99C7FA", marginTop: 4 },
+  kanaHindi: { fontSize: 12, color: "#F0B3CE", marginTop: 3 },
+  chartGuide: {
+    marginTop: 24,
+    padding: 16,
+    gap: 14,
+    backgroundColor: KANA_COLORS.card,
+    borderWidth: 1,
+    borderColor: KANA_COLORS.border,
+    borderRadius: 20,
+  },
+  guideHeading: { flexDirection: "row", alignItems: "center", gap: 8 },
+  guideTitle: { flexShrink: 1, fontSize: 16, fontWeight: "700", color: KANA_COLORS.text },
+  guideDescription: { fontSize: 12, lineHeight: 19, color: KANA_COLORS.textSecondary },
+  chartStats: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chartStat: {
+    flexGrow: 1,
+    flexBasis: "45%",
+    padding: 10,
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 12,
+    backgroundColor: "#122033",
+  },
+  chartStatCount: { fontSize: 20, fontWeight: "700" },
+  chartStatLabel: { fontSize: 11, color: KANA_COLORS.textSecondary },
+  guideStep: { flexDirection: "row", gap: 10 },
+  guideStepNumber: {
+    width: 26,
+    height: 26,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#293F4F",
+  },
+  guideStepNumberText: { color: KANA_COLORS.teal, fontSize: 12, fontWeight: "700" },
+  guideStepContent: { flex: 1, gap: 4 },
+  guideStepTitle: { color: KANA_COLORS.text, fontSize: 13, fontWeight: "600" },
+  guideStepText: { color: KANA_COLORS.textSecondary, fontSize: 12, lineHeight: 20 },
+  guideNote: {
+    color: KANA_COLORS.gold,
+    fontSize: 12,
+    lineHeight: 19,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: KANA_COLORS.border,
+  },
   footerText: {
     textAlign: "center",
-    color: Colors.dark.textMuted,
+    color: KANA_COLORS.textMuted,
     fontSize: 12,
     marginTop: Spacing.xl,
     paddingBottom: Spacing.md,
   },
 
   // ── Detail Mode ──
-  detailScroll: { paddingBottom: 40 },
+  detailFrame: { flex: 1, width: "100%", alignSelf: "center" },
+  detailScroll: { paddingTop: 16, paddingBottom: 40 },
   detailTopBar: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 8,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
   },
-  backBtn: { width: 36, height: 36, justifyContent: "center", alignItems: "center" },
+  backBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 13,
+    backgroundColor: "#203047",
+    borderWidth: 1,
+    borderColor: KANA_COLORS.border,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  detailHeading: { flex: 1, gap: 3 },
+  detailScript: { color: KANA_COLORS.text, fontSize: 16, fontWeight: "700" },
+  quickNavBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 13,
+    backgroundColor: KANA_COLORS.card,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: KANA_COLORS.border,
+  },
+  quickNavNext: { backgroundColor: "#2A626D", borderColor: "#569A9E" },
+  characterToolbar: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 12,
+  },
+  stageTitle: {
+    fontSize: 10,
+    letterSpacing: 1.1,
+    fontWeight: "700",
+    color: KANA_COLORS.textSecondary,
+  },
+  stageSubtitle: { color: KANA_COLORS.textSecondary, fontSize: 12, marginTop: 5 },
+  replayBtn: {
+    minHeight: 44,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderRadius: 12,
+    backgroundColor: KANA_COLORS.surface,
+  },
+  replayText: { color: KANA_COLORS.lavender, fontSize: 12, fontWeight: "600" },
+  compositionText: { color: KANA_COLORS.text, fontSize: 24, fontWeight: "600", marginBottom: 12 },
+  learningTip: { color: KANA_COLORS.textSecondary, fontSize: 13, lineHeight: 21, marginBottom: 10 },
+  practiceTip: { color: KANA_COLORS.teal, fontSize: 12, lineHeight: 19, marginTop: 2 },
+  writingNotes: {
+    marginTop: 2,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: KANA_COLORS.border,
+  },
+  writingNotesTitle: { color: KANA_COLORS.text, fontSize: 12, fontWeight: "600", marginBottom: 6 },
+  saveCharacterBtn: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: KANA_COLORS.surface,
+    borderRadius: 12,
+    marginTop: 12,
+  },
   detailCounter: {
     fontSize: FontSize.sm,
-    color: Colors.dark.textMuted,
+    color: KANA_COLORS.textMuted,
     fontWeight: FontWeight.semibold,
   },
   topQuizBtn: { width: 36, height: 36, justifyContent: "center", alignItems: "center" },
@@ -1172,38 +1292,39 @@ const s = StyleSheet.create({
   detailCharCard: {
     marginHorizontal: Spacing.lg,
     marginBottom: Spacing.lg,
-    backgroundColor: Colors.dark.card,
+    backgroundColor: KANA_COLORS.card,
     borderRadius: BorderRadius["2xl"],
-    padding: Spacing["2xl"],
+    padding: Spacing.lg,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: KANA_COLORS.border,
     overflow: "hidden",
   },
   detailCharGlow: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: BorderRadius["2xl"],
   },
   detailGridBox: {
-    backgroundColor: Colors.dark.bg + "CC",
+    backgroundColor: KANA_COLORS.bg + "CC",
     borderRadius: BorderRadius.xl,
     padding: 4,
     borderWidth: 1.5,
-    borderColor: Colors.dark.border,
-    marginBottom: Spacing.xl,
+    borderColor: KANA_COLORS.border,
+    marginBottom: 8,
   },
   detailRomaji: { fontSize: 32, fontWeight: FontWeight.extrabold, marginBottom: 2 },
   detailRomajiSub: {
     fontSize: FontSize.sm,
-    color: Colors.dark.textMuted,
+    color: KANA_COLORS.textMuted,
     marginBottom: Spacing.sm,
   },
   detailActions: {
+    width: "100%",
     flexDirection: "row",
     gap: Spacing.md,
     justifyContent: "center",
-    marginTop: Spacing.xl,
-    marginBottom: Spacing["3xl"],
+    marginTop: 12,
+    marginBottom: 0,
   },
   detailActionBtn: {
     flex: 1,
@@ -1212,10 +1333,10 @@ const s = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     paddingVertical: 12,
-    backgroundColor: Colors.primary[900] + "40",
+    backgroundColor: "#164B55",
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    borderColor: Colors.primary[700] + "50",
+    borderColor: "#38747D",
   },
   detailActionBtnSecondary: {
     flex: 1,
@@ -1224,13 +1345,13 @@ const s = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     paddingVertical: 12,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: KANA_COLORS.surface,
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: KANA_COLORS.border,
   },
-  detailActionText: { color: Colors.primary[300], fontWeight: FontWeight.bold },
-  detailActionTextSecondary: { color: Colors.dark.text, fontWeight: FontWeight.bold },
+  detailActionText: { color: KANA_COLORS.teal, fontWeight: FontWeight.bold },
+  detailActionTextSecondary: { color: KANA_COLORS.lavender, fontWeight: FontWeight.bold },
 
   badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: Spacing.xl },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1 },
@@ -1240,11 +1361,11 @@ const s = StyleSheet.create({
   card: {
     marginHorizontal: Spacing.lg,
     marginBottom: Spacing.lg,
-    backgroundColor: Colors.dark.card,
+    backgroundColor: KANA_COLORS.card,
     borderRadius: BorderRadius.xl,
     padding: Spacing.lg,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: KANA_COLORS.border,
   },
   cardHeader: {
     flexDirection: "row",
@@ -1255,7 +1376,7 @@ const s = StyleSheet.create({
   cardTitle: {
     fontSize: FontSize.base,
     fontWeight: FontWeight.bold,
-    color: Colors.dark.text,
+    color: KANA_COLORS.text,
     flex: 1,
   },
 
@@ -1291,7 +1412,7 @@ const s = StyleSheet.create({
   strokeHintText: {
     flex: 1,
     fontSize: FontSize.sm,
-    color: Colors.dark.textSecondary,
+    color: KANA_COLORS.textSecondary,
     lineHeight: 20,
   },
 
@@ -1301,10 +1422,10 @@ const s = StyleSheet.create({
     alignItems: "center",
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.dark.border,
+    borderBottomColor: KANA_COLORS.border,
   },
-  infoLabel: { fontSize: FontSize.sm, color: Colors.dark.textMuted, fontWeight: FontWeight.medium },
-  infoValue: { fontSize: FontSize.sm, color: Colors.dark.text, fontWeight: FontWeight.semibold },
+  infoLabel: { fontSize: FontSize.sm, color: KANA_COLORS.textMuted, fontWeight: FontWeight.medium },
+  infoValue: { fontSize: FontSize.sm, color: KANA_COLORS.text, fontWeight: FontWeight.semibold },
 
   // ── Detail Nav ──
   detailNav: {
@@ -1320,13 +1441,13 @@ const s = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
     paddingVertical: Spacing.lg,
-    backgroundColor: Colors.dark.card,
+    backgroundColor: KANA_COLORS.card,
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: KANA_COLORS.border,
   },
   navBtnDisabled: { opacity: 0.35 },
-  navBtnText: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.dark.text },
+  navBtnText: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: KANA_COLORS.text },
   navBtnPrimary: {
     flex: 1.5,
     flexDirection: "row",
@@ -1343,164 +1464,4 @@ const s = StyleSheet.create({
     elevation: 6,
   },
   navBtnPrimaryText: { fontSize: FontSize.sm, fontWeight: FontWeight.bold, color: "#fff" },
-
-  // ═══ Quiz Mode ═══
-  quizContainer: { flex: 1, paddingHorizontal: Spacing.lg },
-  quizHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.md,
-    paddingVertical: Spacing.lg,
-  },
-  quizProgressWrap: { flex: 1, gap: 4 },
-  quizProgressBar: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.dark.surface,
-    overflow: "hidden",
-  },
-  quizProgressFill: { height: "100%", borderRadius: 3 },
-  quizProgressText: {
-    fontSize: 10,
-    color: Colors.dark.textMuted,
-    fontWeight: FontWeight.semibold,
-    textAlign: "center",
-  },
-  quizScoreBadge: {
-    backgroundColor: Colors.primary[900] + "80",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: Colors.primary[700],
-  },
-  quizScoreText: { fontSize: 12, fontWeight: FontWeight.bold, color: Colors.primary[300] },
-
-  quizQuestionCard: {
-    backgroundColor: Colors.dark.card,
-    borderRadius: BorderRadius["2xl"],
-    padding: Spacing["2xl"],
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-    marginBottom: Spacing.xl,
-  },
-  quizPrompt: { fontSize: FontSize.sm, color: Colors.dark.textMuted, marginBottom: Spacing.xl },
-  quizCharBox: {
-    width: 140,
-    height: 140,
-    borderRadius: 24,
-    backgroundColor: Colors.dark.bg,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: Colors.primary[700] + "60",
-    marginBottom: Spacing.md,
-  },
-  quizChar: { fontSize: 80, fontWeight: FontWeight.bold, color: Colors.dark.text },
-  quizTapHint: { fontSize: 11, color: Colors.dark.textMuted },
-
-  quizOptions: { gap: Spacing.md },
-  quizOptBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: Spacing.sm,
-    paddingVertical: Spacing.lg,
-    backgroundColor: Colors.dark.card,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1.5,
-    borderColor: Colors.dark.border,
-  } as any,
-  quizOptCorrect: {
-    backgroundColor: "rgba(16,185,129,0.12)",
-    borderColor: "#10B981",
-    borderWidth: 2,
-  },
-  quizOptWrong: {
-    backgroundColor: "rgba(239,68,68,0.12)",
-    borderColor: "#EF4444",
-    borderWidth: 2,
-  },
-  quizOptText: {
-    fontSize: FontSize.lg,
-    fontWeight: FontWeight.bold,
-    color: Colors.dark.text,
-  } as any,
-
-  // ── Quiz Results ──
-  quizResultCard: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: Spacing.xl,
-  },
-  quizResultEmoji: { fontSize: 64, marginBottom: Spacing.md },
-  quizResultTitle: {
-    fontSize: FontSize["2xl"],
-    fontWeight: FontWeight.bold,
-    color: Colors.dark.text,
-    marginBottom: 4,
-  },
-  quizResultMessage: {
-    fontSize: FontSize.base,
-    color: Colors.dark.textSecondary,
-    marginBottom: Spacing["2xl"],
-  },
-  scoreRing: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 4,
-    borderColor: Colors.primary[500],
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: Spacing.xl,
-    backgroundColor: Colors.primary[900] + "40",
-  },
-  scoreRingPct: { fontSize: 32, fontWeight: FontWeight.extrabold, color: Colors.primary[300] },
-  scoreRingLabel: { fontSize: 11, color: Colors.dark.textMuted, fontWeight: FontWeight.semibold },
-  scoreDetail: {
-    flexDirection: "row",
-    gap: Spacing["3xl"],
-    marginBottom: Spacing["3xl"],
-  },
-  scoreItem: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
-  scoreItemText: {
-    fontSize: FontSize.sm,
-    color: Colors.dark.textSecondary,
-    fontWeight: FontWeight.semibold,
-  },
-  quizResultActions: { flexDirection: "row", gap: Spacing.md, width: "100%" },
-  retryBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: Spacing.sm,
-    paddingVertical: Spacing.lg,
-    backgroundColor: Colors.primary[600],
-    borderRadius: BorderRadius.lg,
-    shadowColor: Colors.primary[500],
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  retryBtnText: { fontSize: FontSize.base, fontWeight: FontWeight.bold, color: "#fff" },
-  backGridBtn: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: Spacing.lg,
-    backgroundColor: Colors.dark.card,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-  },
-  backGridBtnText: {
-    fontSize: FontSize.base,
-    fontWeight: FontWeight.semibold,
-    color: Colors.dark.textSecondary,
-  },
 });

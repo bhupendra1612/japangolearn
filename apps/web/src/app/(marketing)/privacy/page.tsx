@@ -24,14 +24,14 @@ export default function PrivacyPage() {
         </h1>
 
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-6">
-          <p className="text-gray-600 dark:text-gray-400">Last updated: 19 August 2026</p>
+          <p className="text-gray-600 dark:text-gray-400">Last updated: 3 October 2026</p>
 
           <p className={body}>
-            This policy explains what JapanGoLearn collects, why, and what you can do about it. It
-            covers both the website at japangolearn.com and the{" "}
-            <strong>JapanGoLearn Android app</strong> (package <code>com.japangolearn.app</code>),
-            which share a single account and database. Where the app and the website differ, that is
-            called out below.
+            JapanGoLearn is operated by Digital Rise 24, based in India. This policy explains what
+            we collect, why, and what you can do about it. It covers both the website at
+            japangolearn.com and the <strong>JapanGoLearn Android app</strong> (package{" "}
+            <code>com.japangolearn.app</code>), which share a single account and database. Where the
+            app and the website differ, that is called out below.
           </p>
 
           <h2 className={heading}>1. Information you give us</h2>
@@ -75,7 +75,8 @@ export default function PrivacyPage() {
           <p className={body}>
             Please note that profile photos are stored in a publicly readable location, which means
             anyone who has the direct image link can view it. Do not upload a photo you would not be
-            comfortable sharing. You can replace or remove your photo at any time from your profile.
+            comfortable sharing. You can replace your photo from your profile. Contact
+            support@japangolearn.com to request removal of uploaded images.
           </p>
           <p className={body}>
             The Android app requests only these permissions: internet access, network state, reading
@@ -96,25 +97,28 @@ export default function PrivacyPage() {
             <li>We do not sell or rent your personal information to anyone.</li>
             <li>We do not share it with advertisers or data brokers.</li>
             <li>We do not show third-party advertising in the app or on the website.</li>
+            <li>The app is free, with no subscriptions or in-app purchases.</li>
             <li>We do not track you across other apps or websites.</li>
             <li>
               We do not collect your location, contacts, calendar, call logs, messages, or the list
               of apps installed on your device.
             </li>
             <li>
-              The current version of the Android app sends <strong>no</strong> usage analytics and{" "}
-              <strong>no</strong> automatic crash reports to any third party. If we enable crash
-              reporting in a future version, we will update this policy and the app&apos;s Play
-              Store data-safety listing before doing so.
+              Optional Sentry crash reporting and separate usage analytics depend on the app
+              version&apos;s configuration. The in-app Privacy policy shows whether each is enabled
+              in your version and describes the data involved. We update relevant notices and store
+              disclosures when data practices change. Google Play may independently provide Android
+              vitals reports from devices whose users share diagnostics with Google.
             </li>
           </ul>
 
           <h2 className={heading}>6. Where your data is stored</h2>
           <p className={body}>
-            Your account and study data are stored with Supabase, our database and authentication
-            provider, on servers in the Asia Pacific (Mumbai, India) region. Data is encrypted in
-            transit and at rest. Access to the production database is restricted to the account
-            owner, and per-user access rules prevent one account from reading another&apos;s data.
+            Your account and study data are stored in Digital Rise 24&apos;s Supabase account.
+            Supabase provides database, authentication and file-storage services; our current
+            primary project is hosted in the Asia Pacific (Mumbai, India) region. We use encrypted
+            connections and account access controls. Service providers may process technical
+            information in other countries. No system can guarantee absolute security.
           </p>
 
           <h2 className={heading}>7. Third-party services</h2>
@@ -149,7 +153,7 @@ export default function PrivacyPage() {
 
           <h2 className={heading}>9. Deleting your account</h2>
           <p className={body}>
-            You can delete your account and its associated data at any time. There are two ways:
+            You can request deletion of your account and its associated data. Available options:
           </p>
           <ul className={list}>
             <li>
@@ -163,22 +167,35 @@ export default function PrivacyPage() {
               </Link>
               , which you can use whether or not you have the app installed.
             </li>
+            <li>
+              <strong>By email</strong> — contact support@japangolearn.com from your registered
+              address. We may need to verify account ownership.
+            </li>
           </ul>
           <p className={body}>
-            Deletion removes your account, profile, study history, saved lists, achievements, and
-            uploaded profile photo. It takes effect immediately and cannot be undone. In the rare
-            case where a record must be retained for legal or accounting reasons, we anonymise your
-            profile and permanently disable sign-in instead, so the remaining record cannot be
-            linked back to you. Routine encrypted backups may hold a copy for up to 30 days before
-            they expire.
+            We retain account and study information while needed to provide the service, then delete
+            it or remove identifying details unless retention is necessary for a legal or security
+            purpose. The automatic deletion flow removes accounts and linked records where possible.
+            Some linked records or uploaded files require additional cleanup. If linked records
+            prevent complete deletion, account access may be disabled while remaining data needs
+            review. Disabling access alone does not mean all records have been erased. Contact us to
+            request a review or confirmation of complete removal.
+          </p>
+          <p className={body}>
+            We aim to resolve verified privacy and deletion requests within 30 days and explain if
+            more time is needed; applicable legal deadlines take precedence. Backup copies, where
+            enabled, may remain until overwritten or expired under the provider&apos;s configured
+            retention schedule. Contact us for the schedule applicable to your request. Uninstalling
+            the app does not delete your online account.
           </p>
 
           <h2 className={heading}>10. Children</h2>
           <p className={body}>
-            JapanGoLearn is not directed at children. You must be at least 13 years old to create an
-            account, and older if the law where you live sets a higher age for consenting to the
-            processing of personal data. We do not knowingly collect information from children under
-            13. If you believe a child has created an account, contact us and we will delete it.
+            JapanGoLearn is intended for learners aged 13 and above, not children under 13. Learners
+            aged 13–17 should involve a parent or guardian. Local age and parental-consent
+            requirements still apply, including any higher minimum age. The current app does not
+            verify age or collect verified parental consent. Parents or guardians can contact us to
+            review inappropriate collection and arrange removal where appropriate.
           </p>
 
           <h2 className={heading}>11. Cookies</h2>
@@ -197,7 +214,8 @@ export default function PrivacyPage() {
 
           <h2 className={heading}>13. Contact</h2>
           <p className={body}>
-            For any privacy question, or to request a copy or deletion of your data, contact us at{" "}
+            For any privacy question, or to request a copy, correction or deletion of your data,
+            contact Digital Rise 24, India, at{" "}
             <a href="mailto:support@japangolearn.com" className={linkClass}>
               support@japangolearn.com
             </a>

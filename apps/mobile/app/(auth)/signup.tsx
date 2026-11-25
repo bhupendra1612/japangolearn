@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -19,7 +19,7 @@ import { Link, router, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/lib/auth";
 import { getSafeRedirectTo, setPendingRedirect } from "@/lib/auth-navigation";
 import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
-import { PRIVACY_URL, TERMS_URL } from "@/constants/links";
+import { TERMS_URL } from "@/constants/links";
 import { DEFAULT_JLPT_LEVEL, JLPT_SIGNUP_LEVELS } from "@/constants/jlpt";
 import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT_MESSAGE } from "@japangolearn/content";
 
@@ -39,8 +39,8 @@ export default function SignupScreen() {
   const [awaitingOtp, setAwaitingOtp] = useState(false);
   const [otp, setOtp] = useState("");
   const [resendIn, setResendIn] = useState(0);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  const [fadeAnim] = useState(() => new Animated.Value(0));
+  const [slideAnim] = useState(() => new Animated.Value(30));
 
   const openUrl = (url: string) => {
     Linking.openURL(url).catch(() => {
@@ -338,7 +338,7 @@ export default function SignupScreen() {
               and{" "}
               <Text
                 style={styles.consentLink}
-                onPress={() => openUrl(PRIVACY_URL)}
+                onPress={() => router.push("/privacy")}
                 accessibilityRole="link"
               >
                 Privacy Policy

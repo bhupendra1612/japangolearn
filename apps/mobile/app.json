@@ -10,11 +10,6 @@
     "experiments": {
       "reactCompiler": true
     },
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0F0B1E"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.japangolearn.app",
@@ -36,7 +31,9 @@
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.CAMERA"
       ],
-      "permissions": ["android.permission.MODIFY_AUDIO_SETTINGS"]
+      "permissions": [
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -54,7 +51,26 @@
           "photosPermission": "JapanGoLearn uses your photo library so you can choose a profile picture.",
           "cameraPermission": false
         }
-      ]
+      ],
+      "expo-sqlite",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      "expo-sharing",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0F0B1E"
+        }
+      ],
+      "expo-status-bar"
     ],
     "extra": {
       "router": {},

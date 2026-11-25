@@ -25,6 +25,19 @@ describe("validatePublicEnvironment", () => {
     }
   );
 
+  it.each(["development", "test", "preview", "staging"])(
+    "rejects the self-hosted production endpoint in %s",
+    (appEnv) => {
+      expect(() =>
+        validatePublicEnvironment({
+          ...valid,
+          appEnv,
+          supabaseUrl: "https://supabase.japangolearn.com",
+        })
+      ).toThrow("must not connect to the production Supabase project");
+    }
+  );
+
   it("allows the production project only in production", () => {
     expect(
       validatePublicEnvironment({
@@ -33,6 +46,16 @@ describe("validatePublicEnvironment", () => {
         supabaseUrl: `https://${PRODUCTION_SUPABASE_PROJECT_REF}.supabase.co`,
       }).appEnv
     ).toBe("production");
+  });
+
+  it("allows the self-hosted production endpoint only in production", () => {
+    expect(
+      validatePublicEnvironment({
+        ...valid,
+        appEnv: "production",
+        supabaseUrl: "https://supabase.japangolearn.com",
+      }).supabaseUrl
+    ).toBe("https://supabase.japangolearn.com");
   });
 
   it("accepts local HTTP for local Supabase", () => {

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -8,29 +8,33 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
+  Linking,
+  Modal,
+  BackHandler,
+  AppState,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
+import Constants from "expo-constants";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { captureException } from "@/lib/monitoring";
-import { router } from "expo-router";
-import { Colors, Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
+import { router, useFocusEffect } from "expo-router";
+import { Spacing, BorderRadius, FontSize, FontWeight } from "@/constants/theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  getXpLevelProgress,
-  MIN_PASSWORD_LENGTH,
-  PASSWORD_TOO_SHORT_MESSAGE,
-} from "@japangolearn/content";
+import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT_MESSAGE } from "@japangolearn/content";
 import { JLPT_SIGNUP_LEVELS } from "@/constants/jlpt";
+import { TERMS_URL, SUPPORT_EMAIL } from "@/constants/links";
+import {
+  ProfileOverview,
+  profilePalette as palette,
+  type ProfileAction,
+} from "@/components/ProfileOverview";
+import { loadProfileProgress, saveDailyGoal, type ProfileProgress } from "@/lib/profile-progress";
 
-const AVATAR_SIZE = 100;
-
-/** Short blurbs, because these render in narrow buttons rather than a list. */
 const LEVEL_BLURB: Record<string, string> = {
   N5: "Beginner",
   N4: "Elementary",
@@ -38,161 +42,195 @@ const LEVEL_BLURB: Record<string, string> = {
   N2: "Upper-Intermediate",
   N1: "Advanced",
 };
-
-/**
- * Derived from the shared list so availability has one source of truth. This
- * was a third hand-maintained copy of the levels, and it had already drifted —
- * it called N2 "Advanced" while the rest of the product calls it
- * Upper-Intermediate.
- */
 const JLPT_LEVELS = JLPT_SIGNUP_LEVELS.map((level) => ({
   value: level.value,
   label: level.value,
   desc: LEVEL_BLURB[level.value] ?? level.desc,
   available: level.available,
 }));
-
 type Section = "view" | "edit-profile" | "change-password";
 
 export default function ProfileScreen() {
-  const insets = useSafeAreaInsets();
-  const { user, profile, signOut, deleteAccount, updateProfile, updatePassword, uploadAvatar } =
-    useAuth();
+  const { user } = useAuth();
+  // Reset private UI and pending forms when the signed-in account changes.
+  return <ProfileContent key={user?.id ?? "guest"} />;
+}
 
-  // UI state
+function ProfileContent() {
+  const insets = useSafeAreaInsets();
+  const {
+    user,
+    profile,
+    signOut,
+    deleteAccount,
+    updateProfile,
+    updatePassword,
+    uploadAvatar,
+    refreshProfile,
+  } = useAuth();
   const [activeSection, setActiveSection] = useState<Section>("view");
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-
-  // Edit form state
   const [editName, setEditName] = useState("");
   const [editJlpt, setEditJlpt] = useState("");
-
-  // Password form state
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNewPass, setShowNewPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
-
-  // Activity counts per day for the last seven days, keyed by ISO date. Moved
-  // here from Home along with the calendar that renders it.
-  const [weekActivity, setWeekActivity] = useState<Record<string, number>>({});
-
+  const [progress, setProgress] = useState<ProfileProgress | null>(null);
+  const [progressLoading, setProgressLoading] = useState(true);
+  const [progressError, setProgressError] = useState(false);
+  const [savingGoal, setSavingGoal] = useState(false);
+  const [confirmation, setConfirmation] = useState<"sign-out" | "delete" | "delete-final" | null>(
+    null
+  );
+  const [signingOut, setSigningOut] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const refreshAuthRef = useRef(refreshProfile);
+  const progressRequest = useRef<AbortController | null>(null);
+  const userId = user?.id;
   useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 6);
+    refreshAuthRef.current = refreshProfile;
+  }, [refreshProfile]);
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [activeSection]);
 
-    void (async () => {
-      const { data, error } = await supabase
-        .from("activity_log")
-        .select("created_at")
-        .eq("user_id", user.id)
-        .gte("created_at", weekAgo.toISOString());
-
-      if (cancelled) return;
-      // The rest of Profile does not depend on this, so an empty calendar is a
-      // better failure than an error screen — but it must still be reported.
-      if (error) {
-        captureException(error, { screen: "profile" });
-        return;
-      }
-      const map: Record<string, number> = {};
-      data?.forEach((row: { created_at: string }) => {
-        const date = new Date(row.created_at).toISOString().split("T")[0];
-        map[date] = (map[date] || 0) + 1;
-      });
-      setWeekActivity(map);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
-
-  const weekDays = Array.from({ length: 7 }).map((_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    const dateStr = d.toISOString().split("T")[0];
-    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    return {
-      date: dateStr,
-      dayName: dayNames[d.getDay()],
-      dayNum: d.getDate(),
-      isToday: i === 6,
-      count: weekActivity[dateStr] || 0,
-    };
-  });
-
-  // Computed profile data
-  const xp = profile?.xp ?? 0;
-  const streak = profile?.streak_days ?? 0;
-  const jlptLevel = profile?.current_jlpt_level ?? "N5";
-  const name = profile?.display_name || user?.email?.split("@")[0] || "Learner";
-  const initial = name[0]?.toUpperCase() || "?";
-  const avatarUrl = profile?.avatar_url;
-
-  const xpLevel = getXpLevelProgress(xp);
-
-  // Member since
-  const memberSince = user?.created_at
-    ? new Date(user.created_at).toLocaleDateString("en-US", {
-        month: "long",
-        year: "numeric",
-      })
-    : "";
-
-  const showFeedback = useCallback((msg: string, isError: boolean) => {
-    if (isError) {
-      setErrorMsg(msg);
-      setSuccessMsg("");
-    } else {
-      setSuccessMsg(msg);
-      setErrorMsg("");
+  const fetchProgress = useCallback(async () => {
+    progressRequest.current?.abort();
+    const request = new AbortController();
+    progressRequest.current = request;
+    if (!userId) {
+      setProgressLoading(false);
+      return;
     }
-    setTimeout(() => {
-      setSuccessMsg("");
-      setErrorMsg("");
-    }, 3000);
-  }, []);
+    setProgressLoading(true);
+    setProgressError(false);
+    const timeout = setTimeout(() => {
+      if (progressRequest.current === request && !request.signal.aborted) {
+        request.abort();
+        setProgressError(true);
+        setProgressLoading(false);
+      }
+    }, 15000);
+    try {
+      const result = await loadProfileProgress(supabase, userId, new Date(), request.signal);
+      if (!request.signal.aborted) setProgress(result);
+    } catch (error) {
+      if (!request.signal.aborted) {
+        setProgressError(true);
+        captureException(error, { screen: "profile", action: "progress" });
+      }
+    } finally {
+      clearTimeout(timeout);
+      if (!request.signal.aborted) setProgressLoading(false);
+    }
+  }, [userId]);
 
+  useFocusEffect(
+    useCallback(() => {
+      void fetchProgress();
+      void refreshAuthRef.current();
+      const subscription = AppState.addEventListener("change", (state) => {
+        if (state === "active") {
+          void fetchProgress();
+          void refreshAuthRef.current();
+        }
+      });
+      return () => {
+        subscription.remove();
+        progressRequest.current?.abort();
+      };
+    }, [fetchProgress])
+  );
+
+  const closeForm = useCallback(() => {
+    if (saving) return;
+    setActiveSection("view");
+    setNewPassword("");
+    setConfirmPassword("");
+    setErrorMsg("");
+  }, [saving]);
+  useFocusEffect(
+    useCallback(() => {
+      if (activeSection === "view" || Platform.OS !== "android") return;
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        closeForm();
+        return true;
+      });
+      return () => subscription.remove();
+    }, [activeSection, closeForm])
+  );
+
+  const showFeedback = useCallback((message: string, error: boolean) => {
+    setErrorMsg(error ? message : "");
+    setSuccessMsg(error ? "" : message);
+  }, []);
+  const handleSaveGoal = async (goal: number) => {
+    if (!userId || savingGoal) return false;
+    setSavingGoal(true);
+    // A previous read must not overwrite the newly saved target.
+    progressRequest.current?.abort();
+    try {
+      await saveDailyGoal(supabase, goal);
+      await refreshAuthRef.current();
+      setProgress((current) => (current ? { ...current, dailyTarget: goal } : current));
+      showFeedback("Daily goal updated.", false);
+      await fetchProgress();
+      return true;
+    } catch (error) {
+      captureException(error, { screen: "profile", action: "save-goal" });
+      showFeedback("Could not save your goal. Check your connection and try again.", true);
+      return false;
+    } finally {
+      setSavingGoal(false);
+      setProgressLoading(false);
+    }
+  };
   // --- Avatar upload ---
   const handlePickAvatar = async () => {
-    const permResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permResult.granted) {
-      Alert.alert(
-        "Permission Required",
-        "Please allow access to your photo library to upload an avatar."
-      );
-      return;
-    }
+    if (uploadingAvatar) return;
+    try {
+      const permResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permResult.granted) {
+        Alert.alert(
+          "Permission Required",
+          "Please allow access to your photo library to upload an avatar."
+        );
+        return;
+      }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-      base64: true,
-    });
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
+      });
 
-    if (result.canceled || !result.assets?.[0]) return;
-    if (!result.assets[0].base64) {
-      showFeedback("Could not read image data", true);
-      return;
-    }
+      if (result.canceled || !result.assets?.[0]) return;
+      if (!result.assets[0].base64) {
+        showFeedback("Could not read image data", true);
+        return;
+      }
 
-    setUploadingAvatar(true);
-    const { error } = await uploadAvatar(result.assets[0].uri, result.assets[0].base64);
-    setUploadingAvatar(false);
+      setUploadingAvatar(true);
+      const { error } = await uploadAvatar(result.assets[0].uri, result.assets[0].base64);
+      setUploadingAvatar(false);
 
-    if (error) {
-      showFeedback(error.message || "Failed to upload avatar", true);
-    } else {
-      showFeedback("Avatar updated!", false);
+      if (error) {
+        showFeedback(error.message || "Failed to upload avatar", true);
+      } else {
+        showFeedback("Avatar updated!", false);
+      }
+    } catch (error) {
+      captureException(error, { screen: "profile", action: "avatar" });
+      showFeedback("Could not open or upload that photo. Please try again.", true);
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -206,22 +244,28 @@ export default function ProfileScreen() {
   };
 
   const handleSaveProfile = async () => {
-    if (!editName.trim()) {
-      showFeedback("Display name cannot be empty", true);
+    if (editName.trim().length < 2) {
+      showFeedback("Use at least 2 characters for your name", true);
       return;
     }
+    if (saving) return;
     setSaving(true);
-    const { error } = await updateProfile({
-      display_name: editName,
-      current_jlpt_level: editJlpt,
-    });
-    setSaving(false);
-
-    if (error) {
-      showFeedback(error.message || "Failed to update profile", true);
-    } else {
+    try {
+      const { error } = await updateProfile({
+        display_name: editName.trim(),
+        current_jlpt_level: editJlpt,
+      });
+      if (error) throw error;
       showFeedback("Profile updated!", false);
       setActiveSection("view");
+    } catch (error) {
+      captureException(error, { screen: "profile", action: "edit" });
+      showFeedback(
+        error instanceof Error ? error.message : "Could not update your profile. Please retry.",
+        true
+      );
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -245,406 +289,143 @@ export default function ProfileScreen() {
       showFeedback("Passwords do not match", true);
       return;
     }
+    if (saving) return;
     setSaving(true);
-    const { error } = await updatePassword(newPassword);
-    setSaving(false);
-
-    if (error) {
-      showFeedback(error.message || "Failed to change password", true);
-    } else {
+    try {
+      const { error } = await updatePassword(newPassword);
+      if (error) throw error;
       showFeedback("Password changed successfully!", false);
+      setNewPassword("");
+      setConfirmPassword("");
       setActiveSection("view");
+    } catch (error) {
+      captureException(error, { screen: "profile", action: "password" });
+      showFeedback(
+        error instanceof Error ? error.message : "Could not change your password. Please retry.",
+        true
+      );
+    } finally {
+      setSaving(false);
     }
   };
 
-  // --- Sign out ---
-  const handleSignOut = () => {
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Sign Out",
-        style: "destructive",
-        onPress: async () => {
-          await signOut();
-          // app/index.tsx decides where a signed-out user belongs. Navigating
-          // straight to "(auth)" here races the <Stack.Protected> swap.
-          router.replace("/");
-        },
-      },
-    ]);
+  const onAction = (action: ProfileAction) => {
+    switch (action) {
+      case "edit":
+        openEditProfile();
+        break;
+      case "password":
+        openChangePassword();
+        break;
+      case "avatar":
+        void handlePickAvatar();
+        break;
+      case "practice":
+        router.push("/(tabs)/practice");
+        break;
+      case "achievements":
+        router.push("/(tabs)/achievements");
+        break;
+      case "history":
+        router.push("/exam/history");
+        break;
+      case "downloads":
+        router.push("/exam/downloads");
+        break;
+      case "about":
+        router.push("/about");
+        break;
+      case "privacy":
+        router.push("/privacy");
+        break;
+      case "sign-out":
+        setConfirmation("sign-out");
+        break;
+      case "delete":
+        setConfirmation("delete");
+        break;
+      default: {
+        const url = action === "terms" ? TERMS_URL : `mailto:${SUPPORT_EMAIL}`;
+        void Linking.openURL(url).catch(() =>
+          showFeedback(
+            action === "support"
+              ? `Please email ${SUPPORT_EMAIL}.`
+              : "Could not open the page. Please try again.",
+            true
+          )
+        );
+      }
+    }
+  };
+  const confirmAccountAction = async () => {
+    if (deletingAccount || signingOut) return;
+    if (confirmation === "delete") {
+      setConfirmation("delete-final");
+      return;
+    }
+    try {
+      if (confirmation === "delete-final") {
+        setDeletingAccount(true);
+        const { error } = await deleteAccount();
+        if (error) throw error;
+      } else if (confirmation === "sign-out") {
+        setSigningOut(true);
+        await signOut();
+      } else return;
+      setConfirmation(null);
+      router.replace("/");
+    } catch (error) {
+      captureException(error, { screen: "profile", action: confirmation });
+      setConfirmation(null);
+      showFeedback("Could not complete that action. Please try again.", true);
+    } finally {
+      setDeletingAccount(false);
+      setSigningOut(false);
+    }
   };
 
-  // --- Delete account ---
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      "Delete Account",
-      "This permanently deletes your account, learning progress, and personal data. This cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Continue",
-          style: "destructive",
-          onPress: () => {
-            Alert.alert(
-              "Are you absolutely sure?",
-              "Your account and data will be permanently deleted right now.",
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Delete Forever",
-                  style: "destructive",
-                  onPress: async () => {
-                    setDeletingAccount(true);
-                    const { error } = await deleteAccount();
-                    setDeletingAccount(false);
-                    if (error) {
-                      showFeedback(error.message || "Failed to delete account", true);
-                    } else {
-                      router.replace("/");
-                    }
-                  },
-                },
-              ]
-            );
-          },
-        },
-      ]
-    );
-  };
-
-  // =================== RENDER ===================
-
-  const renderAvatar = () => (
-    <TouchableOpacity
-      style={s.avatarTouchable}
-      onPress={handlePickAvatar}
-      activeOpacity={0.8}
-      disabled={uploadingAvatar}
-    >
-      <View style={s.avatarOuter}>
-        {avatarUrl ? (
-          <Image source={{ uri: avatarUrl }} style={s.avatarImage} />
-        ) : (
-          <LinearGradient
-            colors={[Colors.primary[500], Colors.primary[700]]}
-            style={s.avatarFallback}
-          >
-            <Text style={s.avatarInitial}>{initial}</Text>
-          </LinearGradient>
-        )}
-        {uploadingAvatar ? (
-          <View style={s.avatarOverlay}>
-            <ActivityIndicator color="#fff" size="small" />
-          </View>
-        ) : (
-          <View style={s.cameraIcon}>
-            <Ionicons name="camera" size={14} color="#fff" />
-          </View>
-        )}
-      </View>
-      <View style={s.levelBadge}>
-        <Text style={s.levelBadgeText}>Lv.{xpLevel.level}</Text>
-      </View>
-    </TouchableOpacity>
-  );
-
-  const renderFeedback = () => {
-    if (!successMsg && !errorMsg) return null;
-    return (
-      <View style={[s.feedbackBox, errorMsg ? s.feedbackError : s.feedbackSuccess]}>
+  const renderFeedback = () =>
+    !successMsg && !errorMsg ? null : (
+      <View
+        style={[s.feedbackBox, errorMsg ? s.feedbackError : s.feedbackSuccess]}
+        accessibilityLiveRegion="polite"
+      >
         <Ionicons
-          name={errorMsg ? "alert-circle" : "checkmark-circle"}
-          size={16}
-          color={errorMsg ? "#EF4444" : "#10B981"}
+          name={errorMsg ? "alert-circle-outline" : "checkmark-circle"}
+          size={18}
+          color={errorMsg ? palette.danger : palette.teal}
         />
-        <Text style={[s.feedbackText, { color: errorMsg ? "#EF4444" : "#10B981" }]}>
+        <Text style={[s.feedbackText, { color: errorMsg ? palette.danger : palette.teal }]}>
           {errorMsg || successMsg}
         </Text>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss message"
+          style={s.dismissFeedback}
+          onPress={() => {
+            setErrorMsg("");
+            setSuccessMsg("");
+          }}
+        >
+          <Ionicons name="close" color={palette.muted} size={18} />
+        </TouchableOpacity>
       </View>
     );
-  };
-
-  // --- VIEW MODE ---
-  const renderViewMode = () => (
-    <>
-      {/* Header card with gradient */}
-      <View style={[s.headerCard, { marginTop: -insets.top }]}>
-        <LinearGradient
-          colors={[Colors.primary[700], Colors.primary[900], Colors.dark.bg]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[s.headerGradient, { height: 140 + insets.top }]}
-        >
-          {/* Decorative kanji */}
-          <Text style={[s.decorativeKanji, { top: insets.top + 10 }]}>学</Text>
-          <Text style={s.decorativeKanji2}>道</Text>
-        </LinearGradient>
-
-        <View style={s.headerContent}>
-          {renderAvatar()}
-          <Text style={s.profileName}>{name}</Text>
-          <Text style={s.profileEmail}>{user?.email}</Text>
-          {memberSince ? (
-            <View style={s.memberRow}>
-              <Ionicons name="calendar-outline" size={12} color={Colors.dark.textMuted} />
-              <Text style={s.memberText}>Joined {memberSince}</Text>
-            </View>
-          ) : null}
-        </View>
-      </View>
-
-      {renderFeedback()}
-
-      {/* XP Progress Card */}
-      <View style={s.card}>
-        <View style={s.cardHeader}>
-          <View style={s.cardTitleRow}>
-            <Ionicons name="star" size={18} color={Colors.gold[400]} />
-            <Text style={s.cardTitle}>Experience</Text>
-          </View>
-          <Text style={s.xpBadge}>{xp.toLocaleString()} XP</Text>
-        </View>
-        <View style={s.xpBarOuter}>
-          <LinearGradient
-            colors={[Colors.primary[500], Colors.accent[500]]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={[s.xpBarFill, { width: `${Math.round(xpLevel.progress * 100)}%` as any }]}
-          />
-        </View>
-        <View style={s.xpLabelRow}>
-          <Text style={s.xpLabel}>Level {xpLevel.level}</Text>
-          <Text style={s.xpLabel}>
-            {xpLevel.current} / {xpLevel.needed} XP
-          </Text>
-          <Text style={s.xpLabel}>Level {xpLevel.level + 1}</Text>
-        </View>
-      </View>
-
-      {/* Stats Row */}
-      <View style={s.statsRow}>
-        <View style={[s.statCard, { borderColor: "#F9731630" }]}>
-          <View style={[s.statIconBg, { backgroundColor: "#F9731618" }]}>
-            <Ionicons name="flame" size={22} color="#F97316" />
-          </View>
-          <Text style={[s.statValue, { color: "#F97316" }]}>{streak}</Text>
-          <Text style={s.statLabel}>Day Streak</Text>
-        </View>
-        <View style={[s.statCard, { borderColor: Colors.primary[400] + "30" }]}>
-          <View style={[s.statIconBg, { backgroundColor: Colors.primary[400] + "18" }]}>
-            <Ionicons name="flag" size={22} color={Colors.primary[400]} />
-          </View>
-          <Text style={[s.statValue, { color: Colors.primary[400] }]}>{jlptLevel}</Text>
-          <Text style={s.statLabel}>JLPT Level</Text>
-        </View>
-        <View style={[s.statCard, { borderColor: Colors.gold[400] + "30" }]}>
-          <View style={[s.statIconBg, { backgroundColor: Colors.gold[400] + "18" }]}>
-            <Ionicons name="trophy" size={22} color={Colors.gold[400]} />
-          </View>
-          <Text style={[s.statValue, { color: Colors.gold[400] }]}>Lv.{xpLevel.level}</Text>
-          <Text style={s.statLabel}>Player</Text>
-        </View>
-      </View>
-
-      {/* This Week */}
-      <View style={s.card}>
-        <View style={s.cardHeader}>
-          <View style={s.cardTitleRow}>
-            <Ionicons name="flame" size={18} color="#F97316" />
-            <Text style={s.cardTitle}>This Week</Text>
-          </View>
-          <Text style={s.xpBadge}>{streak} day streak</Text>
-        </View>
-        <View style={s.weekRow}>
-          {weekDays.map((day) => {
-            const active = day.count > 0;
-            const intensity = day.count >= 5 ? 1 : day.count >= 2 ? 0.7 : day.count >= 1 ? 0.45 : 0;
-            return (
-              <View key={day.date} style={s.weekCol}>
-                <Text style={s.weekDayName}>{day.dayName}</Text>
-                <View
-                  style={[
-                    s.weekDot,
-                    active && {
-                      backgroundColor: `rgba(16,185,129,${intensity})`,
-                      borderColor: "#10B981",
-                    },
-                    day.isToday && s.weekDotToday,
-                  ]}
-                >
-                  <Text style={[s.weekDotNum, active && { color: "#fff" }]}>{day.dayNum}</Text>
-                </View>
-                {active && <Text style={s.weekCount}>{day.count}</Text>}
-              </View>
-            );
-          })}
-        </View>
-      </View>
-
-      {/* Progress */}
-      <View style={s.card}>
-        <Text style={s.sectionTitle}>Progress</Text>
-
-        <TouchableOpacity
-          style={[s.actionItem, { borderBottomWidth: 0 }]}
-          onPress={() => router.push("/(tabs)/achievements")}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel="Trophies"
-        >
-          <View style={[s.actionIconBg, { backgroundColor: Colors.gold[400] + "20" }]}>
-            <Ionicons name="trophy-outline" size={18} color={Colors.gold[400]} />
-          </View>
-          <View style={s.actionTextWrap}>
-            <Text style={s.actionLabel}>Trophies</Text>
-            <Text style={s.actionDesc}>Achievements you have unlocked</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={Colors.dark.textMuted} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Actions List */}
-      <View style={s.card}>
-        <Text style={s.sectionTitle}>Account</Text>
-
-        <TouchableOpacity style={s.actionItem} onPress={openEditProfile} activeOpacity={0.7}>
-          <View style={[s.actionIconBg, { backgroundColor: Colors.primary[600] + "20" }]}>
-            <Ionicons name="person-outline" size={18} color={Colors.primary[400]} />
-          </View>
-          <View style={s.actionTextWrap}>
-            <Text style={s.actionLabel}>Edit Profile</Text>
-            <Text style={s.actionDesc}>Name, JLPT level</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={Colors.dark.textMuted} />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={s.actionItem} onPress={openChangePassword} activeOpacity={0.7}>
-          <View style={[s.actionIconBg, { backgroundColor: Colors.accent[600] + "20" }]}>
-            <Ionicons name="lock-closed-outline" size={18} color={Colors.accent[400]} />
-          </View>
-          <View style={s.actionTextWrap}>
-            <Text style={s.actionLabel}>Change Password</Text>
-            <Text style={s.actionDesc}>Update your password</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={Colors.dark.textMuted} />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={s.actionItem} onPress={handlePickAvatar} activeOpacity={0.7}>
-          <View style={[s.actionIconBg, { backgroundColor: Colors.sakura[500] + "20" }]}>
-            <Ionicons name="image-outline" size={18} color={Colors.sakura[400]} />
-          </View>
-          <View style={s.actionTextWrap}>
-            <Text style={s.actionLabel}>Change Avatar</Text>
-            <Text style={s.actionDesc}>Upload a profile picture</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={Colors.dark.textMuted} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Settings */}
-      <View style={s.card}>
-        <Text style={s.sectionTitle}>Settings</Text>
-
-        {[
-          {
-            icon: "notifications-outline" as const,
-            label: "Notifications",
-            detail: "Not available yet",
-            color: Colors.gold[400],
-            route: null,
-          },
-          {
-            icon: "language-outline" as const,
-            label: "App Language",
-            detail: "English UI only",
-            color: Colors.accent[400],
-            route: null,
-          },
-          {
-            icon: "information-circle-outline" as const,
-            label: "About",
-            detail: "v1.0.0",
-            color: Colors.dark.textSecondary,
-            route: "/about",
-          },
-        ].map((item, i, arr) => (
-          <TouchableOpacity
-            key={item.label}
-            style={[s.actionItem, i === arr.length - 1 && { borderBottomWidth: 0 }]}
-            activeOpacity={item.route ? 0.7 : 1}
-            disabled={!item.route}
-            accessibilityState={{ disabled: !item.route }}
-            onPress={() => {
-              if (item.route) router.push(item.route as any);
-            }}
-          >
-            <View style={[s.actionIconBg, { backgroundColor: item.color + "18" }]}>
-              <Ionicons name={item.icon} size={18} color={item.color} />
-            </View>
-            <Text style={s.actionLabelFull}>{item.label}</Text>
-            <Text style={s.actionDetail}>{item.detail}</Text>
-            {item.route && (
-              <Ionicons name="chevron-forward" size={16} color={Colors.dark.textMuted} />
-            )}
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Account Info */}
-      <View style={s.card}>
-        <Text style={s.sectionTitle}>Account Details</Text>
-        {[
-          { label: "Email", value: user?.email || "-" },
-          { label: "Display Name", value: name },
-          { label: "JLPT Level", value: jlptLevel },
-          { label: "Total XP", value: `${xp.toLocaleString()} XP` },
-          { label: "Player Level", value: `Level ${xpLevel.level}` },
-          { label: "Role", value: profile?.role || "user" },
-          ...(memberSince ? [{ label: "Member Since", value: memberSince }] : []),
-        ].map((item, i, arr) => (
-          <View
-            key={item.label}
-            style={[s.infoRow, i === arr.length - 1 && { borderBottomWidth: 0 }]}
-          >
-            <Text style={s.infoLabel}>{item.label}</Text>
-            <Text style={s.infoValue}>{item.value}</Text>
-          </View>
-        ))}
-      </View>
-
-      {/* Sign Out */}
-      <TouchableOpacity style={s.signOutBtn} onPress={handleSignOut} activeOpacity={0.7}>
-        <Ionicons name="log-out-outline" size={20} color="#EF4444" />
-        <Text style={s.signOutText}>Sign Out</Text>
-      </TouchableOpacity>
-
-      {/* Delete Account */}
-      <TouchableOpacity
-        style={s.deleteAccountBtn}
-        onPress={handleDeleteAccount}
-        activeOpacity={0.7}
-        disabled={deletingAccount}
-      >
-        {deletingAccount ? (
-          <ActivityIndicator color={Colors.dark.textMuted} size="small" />
-        ) : (
-          <Text style={s.deleteAccountText}>Delete Account</Text>
-        )}
-      </TouchableOpacity>
-
-      <Text style={s.footer}>{"一歩一歩、前へ進もう\nStep by step, move forward"}</Text>
-    </>
-  );
-
   // --- EDIT PROFILE FORM ---
   const renderEditProfile = () => (
     <View style={s.formContainer}>
       <View style={s.formHeader}>
-        <TouchableOpacity onPress={() => setActiveSection("view")} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={26} color={Colors.dark.text} />
+        <TouchableOpacity
+          onPress={closeForm}
+          disabled={saving}
+          accessibilityRole="button"
+          accessibilityLabel="Back to profile"
+          style={s.backBtn}
+        >
+          <Ionicons name="arrow-back" size={26} color={palette.text} />
         </TouchableOpacity>
         <Text style={s.formTitle}>Edit Profile</Text>
-        <View style={{ width: 30 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       {renderFeedback()}
@@ -657,8 +438,10 @@ export default function ProfileScreen() {
             style={s.input}
             value={editName}
             onChangeText={setEditName}
+            accessibilityLabel="Display name"
+            editable={!saving}
             placeholder="Your display name"
-            placeholderTextColor={Colors.dark.textMuted}
+            placeholderTextColor={palette.muted}
             maxLength={50}
           />
           <Text style={s.fieldHint}>{editName.length}/50 characters</Text>
@@ -687,7 +470,8 @@ export default function ProfileScreen() {
                   disabled={locked}
                   activeOpacity={0.7}
                   accessibilityRole="radio"
-                  accessibilityState={{ selected: isActive, disabled: locked }}
+                  aria-checked={isActive}
+                  accessibilityState={{ checked: isActive, disabled: locked }}
                   accessibilityLabel={
                     locked ? `${lvl.label}, coming soon, not yet available` : lvl.label
                   }
@@ -709,13 +493,18 @@ export default function ProfileScreen() {
       <View style={s.formActions}>
         <TouchableOpacity
           style={s.secondaryBtn}
-          onPress={() => setActiveSection("view")}
+          onPress={closeForm}
+          disabled={saving}
+          accessibilityRole="button"
+          accessibilityLabel="Back to profile"
           activeOpacity={0.7}
         >
           <Text style={s.secondaryBtnText}>Cancel</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[s.primaryBtn, saving && { opacity: 0.6 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Save profile changes"
           onPress={handleSaveProfile}
           disabled={saving}
           activeOpacity={0.7}
@@ -734,11 +523,17 @@ export default function ProfileScreen() {
   const renderChangePassword = () => (
     <View style={s.formContainer}>
       <View style={s.formHeader}>
-        <TouchableOpacity onPress={() => setActiveSection("view")} style={s.backBtn}>
-          <Ionicons name="arrow-back" size={26} color={Colors.dark.text} />
+        <TouchableOpacity
+          onPress={closeForm}
+          disabled={saving}
+          accessibilityRole="button"
+          accessibilityLabel="Back to profile"
+          style={s.backBtn}
+        >
+          <Ionicons name="arrow-back" size={26} color={palette.text} />
         </TouchableOpacity>
         <Text style={s.formTitle}>Change Password</Text>
-        <View style={{ width: 30 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       {renderFeedback()}
@@ -752,19 +547,28 @@ export default function ProfileScreen() {
               value={newPassword}
               onChangeText={setNewPassword}
               placeholder="Enter new password"
-              placeholderTextColor={Colors.dark.textMuted}
+              placeholderTextColor={palette.muted}
+              accessibilityLabel="New password"
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="newPassword"
               secureTextEntry={!showNewPass}
               autoFocus
             />
-            <TouchableOpacity onPress={() => setShowNewPass(!showNewPass)} style={s.eyeBtn}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={showNewPass ? "Hide new password" : "Show new password"}
+              onPress={() => setShowNewPass(!showNewPass)}
+              style={s.eyeBtn}
+            >
               <Ionicons
                 name={showNewPass ? "eye-off-outline" : "eye-outline"}
                 size={20}
-                color={Colors.dark.textMuted}
+                color={palette.muted}
               />
             </TouchableOpacity>
           </View>
-          <Text style={s.fieldHint}>Minimum 6 characters</Text>
+          <Text style={s.fieldHint}>Minimum {MIN_PASSWORD_LENGTH} characters</Text>
         </View>
 
         <View style={s.fieldGroup}>
@@ -775,14 +579,25 @@ export default function ProfileScreen() {
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               placeholder="Confirm new password"
-              placeholderTextColor={Colors.dark.textMuted}
+              placeholderTextColor={palette.muted}
+              accessibilityLabel="Confirm new password"
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="newPassword"
               secureTextEntry={!showConfirmPass}
             />
-            <TouchableOpacity onPress={() => setShowConfirmPass(!showConfirmPass)} style={s.eyeBtn}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={
+                showConfirmPass ? "Hide confirmation password" : "Show confirmation password"
+              }
+              onPress={() => setShowConfirmPass(!showConfirmPass)}
+              style={s.eyeBtn}
+            >
               <Ionicons
                 name={showConfirmPass ? "eye-off-outline" : "eye-outline"}
                 size={20}
-                color={Colors.dark.textMuted}
+                color={palette.muted}
               />
             </TouchableOpacity>
           </View>
@@ -795,66 +610,21 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {/* Strength indicator */}
-      {newPassword.length > 0 && (
-        <View style={s.card}>
-          <Text style={s.fieldLabel}>Password Strength</Text>
-          <View style={s.strengthRow}>
-            {[1, 2, 3, 4].map((level) => {
-              const strength =
-                newPassword.length >= 12 &&
-                /[A-Z]/.test(newPassword) &&
-                /[0-9]/.test(newPassword) &&
-                /[^A-Za-z0-9]/.test(newPassword)
-                  ? 4
-                  : newPassword.length >= 8 &&
-                      /[A-Z]/.test(newPassword) &&
-                      /[0-9]/.test(newPassword)
-                    ? 3
-                    : newPassword.length >= 6
-                      ? 2
-                      : 1;
-              const active = level <= strength;
-              const color =
-                strength <= 1
-                  ? "#EF4444"
-                  : strength === 2
-                    ? "#F97316"
-                    : strength === 3
-                      ? "#FBBF24"
-                      : "#10B981";
-              return (
-                <View
-                  key={level}
-                  style={[s.strengthBar, { backgroundColor: active ? color : Colors.dark.surface }]}
-                />
-              );
-            })}
-          </View>
-          <Text style={s.fieldHint}>
-            {newPassword.length < MIN_PASSWORD_LENGTH
-              ? "Too short"
-              : newPassword.length < 8
-                ? "Fair"
-                : newPassword.length < 12 ||
-                    !/[A-Z]/.test(newPassword) ||
-                    !/[0-9]/.test(newPassword)
-                  ? "Good"
-                  : "Strong"}
-          </Text>
-        </View>
-      )}
-
       <View style={s.formActions}>
         <TouchableOpacity
           style={s.secondaryBtn}
-          onPress={() => setActiveSection("view")}
+          onPress={closeForm}
+          disabled={saving}
+          accessibilityRole="button"
+          accessibilityLabel="Back to profile"
           activeOpacity={0.7}
         >
           <Text style={s.secondaryBtnText}>Cancel</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[s.primaryBtn, saving && { opacity: 0.6 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Update password"
           onPress={handleChangePassword}
           disabled={saving}
           activeOpacity={0.7}
@@ -871,163 +641,171 @@ export default function ProfileScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: Colors.dark.bg }}
+      style={{ flex: 1, backgroundColor: palette.bg }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
+        ref={scrollRef}
         style={s.container}
         contentContainerStyle={[
           s.scrollContent,
           { paddingTop: activeSection === "view" ? 0 : insets.top + 50 },
         ]}
-        showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          activeSection === "view" ? (
+            <RefreshControl
+              refreshing={progressLoading && !!progress}
+              onRefresh={() => {
+                void fetchProgress();
+                void refreshAuthRef.current();
+              }}
+              tintColor={palette.teal}
+              colors={[palette.teal]}
+              progressViewOffset={insets.top + 50}
+            />
+          ) : undefined
+        }
       >
-        {activeSection === "view" && renderViewMode()}
+        {activeSection === "view" && (
+          <ProfileOverview
+            name={profile?.display_name || user?.email?.split("@")[0] || "Learner"}
+            email={user?.email ?? ""}
+            avatarUrl={profile?.avatar_url}
+            memberSince={
+              user?.created_at
+                ? new Date(user.created_at).toLocaleDateString("en-US", {
+                    month: "long",
+                    year: "numeric",
+                  })
+                : ""
+            }
+            xp={profile?.xp ?? 0}
+            streak={profile?.streak_days ?? 0}
+            jlptLevel={profile?.current_jlpt_level ?? "N5"}
+            topInset={insets.top}
+            version={Constants.expoConfig?.version ?? "—"}
+            progress={progress}
+            progressLoading={progressLoading}
+            progressError={progressError}
+            uploadingAvatar={uploadingAvatar}
+            deletingAccount={deletingAccount}
+            savingGoal={savingGoal}
+            onAction={onAction}
+            onRetry={() => void fetchProgress()}
+            onSaveGoal={handleSaveGoal}
+          />
+        )}
         {activeSection === "edit-profile" && renderEditProfile()}
         {activeSection === "change-password" && renderChangePassword()}
       </ScrollView>
+      {activeSection === "view" && (successMsg || errorMsg) ? (
+        <View style={s.feedbackFloating}>{renderFeedback()}</View>
+      ) : null}
+      <Modal
+        visible={confirmation !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!deletingAccount && !signingOut) setConfirmation(null);
+        }}
+      >
+        <View style={s.modalBackdrop}>
+          <View style={s.modalCard} accessibilityViewIsModal>
+            <Ionicons
+              name={confirmation === "sign-out" ? "log-out-outline" : "warning-outline"}
+              size={28}
+              color={palette.danger}
+            />
+            <Text style={s.formTitle}>
+              {confirmation === "sign-out"
+                ? "Sign out?"
+                : confirmation === "delete"
+                  ? "Delete your account?"
+                  : "Permanently delete account?"}
+            </Text>
+            <Text style={s.modalBody}>
+              {confirmation === "sign-out"
+                ? "Your saved progress will be here when you return."
+                : "This permanently deletes your account, learning progress and personal data. This cannot be undone."}
+            </Text>
+            <TouchableOpacity
+              style={s.dangerBtn}
+              disabled={deletingAccount || signingOut}
+              accessibilityRole="button"
+              accessibilityLabel={
+                confirmation === "sign-out"
+                  ? "Confirm sign out"
+                  : confirmation === "delete"
+                    ? "Continue to delete confirmation"
+                    : "Delete forever"
+              }
+              onPress={() => void confirmAccountAction()}
+            >
+              {deletingAccount || signingOut ? (
+                <ActivityIndicator color={palette.bg} />
+              ) : (
+                <Text style={s.primaryBtnText}>
+                  {confirmation === "sign-out"
+                    ? "Sign out"
+                    : confirmation === "delete"
+                      ? "Continue"
+                      : "Delete forever"}
+                </Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.cancelModal}
+              disabled={deletingAccount || signingOut}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel account action"
+              onPress={() => setConfirmation(null)}
+            >
+              <Text style={s.secondaryBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
 
-// ======================== STYLES ========================
-
 const s = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.dark.bg,
+  container: { flex: 1, backgroundColor: palette.bg },
+  scrollContent: { paddingBottom: 30 },
+  card: {
+    backgroundColor: palette.card,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: palette.border,
+    padding: 18,
+    marginHorizontal: 16,
+    marginBottom: 16,
   },
-  scrollContent: {
-    paddingBottom: 40,
-  },
-
-  // --- Header Card ---
-  headerCard: {
-    marginBottom: Spacing.xl,
-    overflow: "hidden",
-  },
-  headerGradient: {
-    height: 140,
-    position: "relative",
-    overflow: "hidden",
-  },
-  decorativeKanji: {
-    position: "absolute",
-    top: 10,
-    right: 20,
-    fontSize: 80,
-    color: "rgba(255,255,255,0.06)",
-    fontWeight: FontWeight.bold,
-  },
-  decorativeKanji2: {
-    position: "absolute",
-    bottom: -10,
-    left: 16,
-    fontSize: 64,
-    color: "rgba(255,255,255,0.04)",
-    fontWeight: FontWeight.bold,
-  },
-  headerContent: {
-    alignItems: "center",
-    marginTop: -(AVATAR_SIZE / 2),
-    paddingBottom: Spacing["2xl"],
-    paddingHorizontal: Spacing.xl,
-  },
-
-  // --- Avatar ---
-  avatarTouchable: {
-    position: "relative",
-    marginBottom: Spacing.md,
-  },
-  avatarOuter: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
-    borderWidth: 3,
-    borderColor: Colors.dark.bg,
-    overflow: "hidden",
-    backgroundColor: Colors.dark.card,
-    shadowColor: Colors.primary[500],
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 10,
-  },
-  avatarImage: {
+  feedbackFloating: { position: "absolute", bottom: 8, left: 0, right: 0 },
+  dismissFeedback: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  modalBackdrop: { flex: 1, justifyContent: "center", padding: 24, backgroundColor: "#050B18CC" },
+  modalCard: {
+    padding: 24,
+    gap: 18,
+    borderRadius: 24,
+    backgroundColor: palette.card,
+    borderWidth: 1,
+    borderColor: palette.border,
+    maxWidth: 420,
     width: "100%",
-    height: "100%",
+    alignSelf: "center",
   },
-  avatarFallback: {
-    width: "100%",
-    height: "100%",
+  modalBody: { fontSize: 14, lineHeight: 22, color: palette.muted },
+  dangerBtn: {
+    minHeight: 48,
+    borderRadius: 12,
+    alignItems: "center",
     justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: palette.danger,
   },
-  avatarInitial: {
-    fontSize: 40,
-    fontWeight: FontWeight.bold,
-    color: "#fff",
-  },
-  avatarOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    borderRadius: AVATAR_SIZE / 2,
-  },
-  cameraIcon: {
-    position: "absolute",
-    bottom: 2,
-    right: 2,
-    backgroundColor: Colors.primary[500],
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: Colors.dark.bg,
-  },
-  levelBadge: {
-    position: "absolute",
-    bottom: 0,
-    left: -2,
-    backgroundColor: Colors.gold[500],
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    borderRadius: BorderRadius.full,
-    borderWidth: 2,
-    borderColor: Colors.dark.bg,
-  },
-  levelBadgeText: {
-    fontSize: 10,
-    fontWeight: FontWeight.bold,
-    color: "#000",
-  },
-
-  // --- Profile Info ---
-  profileName: {
-    fontSize: FontSize["2xl"],
-    fontWeight: FontWeight.bold,
-    color: Colors.dark.text,
-    marginBottom: 2,
-  },
-  profileEmail: {
-    fontSize: FontSize.sm,
-    color: Colors.dark.textMuted,
-    marginBottom: Spacing.xs,
-  },
-  memberRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  memberText: {
-    fontSize: FontSize.xs,
-    color: Colors.dark.textMuted,
-  },
-
+  cancelModal: { minHeight: 44, alignItems: "center", justifyContent: "center" },
   // --- Feedback ---
   feedbackBox: {
     flexDirection: "row",
@@ -1041,245 +819,17 @@ const s = StyleSheet.create({
     borderWidth: 1,
   },
   feedbackSuccess: {
-    backgroundColor: "rgba(16,185,129,0.1)",
+    backgroundColor: "#1B3A3D",
     borderColor: "rgba(16,185,129,0.25)",
   },
   feedbackError: {
-    backgroundColor: "rgba(239,68,68,0.1)",
+    backgroundColor: "#452C3B",
     borderColor: "rgba(239,68,68,0.25)",
   },
   feedbackText: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.medium,
     flex: 1,
-  },
-
-  // --- Cards ---
-  card: {
-    backgroundColor: Colors.dark.card,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.lg,
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: Spacing.md,
-  },
-  cardTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-  },
-  cardTitle: {
-    fontSize: FontSize.base,
-    fontWeight: FontWeight.semibold,
-    color: Colors.dark.text,
-  },
-  sectionTitle: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.bold,
-    color: Colors.dark.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: Spacing.lg,
-  },
-
-  // --- XP Bar ---
-  xpBadge: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.bold,
-    color: Colors.gold[400],
-  },
-  xpBarOuter: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.dark.surface,
-    overflow: "hidden",
-    marginBottom: Spacing.sm,
-  },
-  xpBarFill: {
-    height: "100%",
-    borderRadius: 4,
-  },
-  xpLabelRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  xpLabel: {
-    fontSize: FontSize.xs,
-    color: Colors.dark.textMuted,
-  },
-
-  // --- Stats ---
-  statsRow: {
-    flexDirection: "row",
-    gap: Spacing.sm,
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.lg,
-  },
-
-  // ── This Week (moved from Home) ──
-  weekRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  weekCol: { alignItems: "center", flex: 1, gap: 4 },
-  weekDayName: { fontSize: 10, color: Colors.dark.textMuted, fontWeight: FontWeight.semibold },
-  weekDot: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: Colors.dark.surface,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: Colors.dark.border,
-  },
-  weekDotToday: {
-    borderColor: Colors.primary[500],
-    borderWidth: 2,
-  },
-  weekDotNum: { fontSize: 12, fontWeight: FontWeight.bold, color: Colors.dark.textMuted },
-  weekCount: { fontSize: 9, color: "#10B981", fontWeight: FontWeight.bold },
-  statCard: {
-    flex: 1,
-    backgroundColor: Colors.dark.card,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    alignItems: "center",
-    borderWidth: 1,
-  },
-  statIconBg: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: Spacing.sm,
-  },
-  statValue: {
-    fontSize: FontSize.lg,
-    fontWeight: FontWeight.bold,
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: 10,
-    color: Colors.dark.textMuted,
-    textAlign: "center",
-    fontWeight: FontWeight.medium,
-  },
-
-  // --- Action Items ---
-  actionItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: Spacing.md,
-    gap: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.dark.border,
-  },
-  actionIconBg: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  actionTextWrap: {
-    flex: 1,
-  },
-  actionLabel: {
-    fontSize: FontSize.sm,
-    color: Colors.dark.text,
-    fontWeight: FontWeight.semibold,
-  },
-  actionLabelFull: {
-    flex: 1,
-    fontSize: FontSize.sm,
-    color: Colors.dark.text,
-    fontWeight: FontWeight.medium,
-  },
-  actionDesc: {
-    fontSize: FontSize.xs,
-    color: Colors.dark.textMuted,
-    marginTop: 1,
-  },
-  actionDetail: {
-    fontSize: FontSize.xs,
-    color: Colors.dark.textMuted,
-    marginRight: Spacing.xs,
-  },
-
-  // --- Info Rows ---
-  infoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.dark.border,
-  },
-  infoLabel: {
-    fontSize: FontSize.sm,
-    color: Colors.dark.textMuted,
-    fontWeight: FontWeight.medium,
-  },
-  infoValue: {
-    fontSize: FontSize.sm,
-    color: Colors.dark.text,
-    fontWeight: FontWeight.semibold,
-    maxWidth: "60%",
-    textAlign: "right",
-  },
-
-  // --- Sign Out ---
-  signOutBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: Spacing.sm,
-    paddingVertical: Spacing.lg,
-    borderRadius: BorderRadius.lg,
-    backgroundColor: "rgba(239, 68, 68, 0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.18)",
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing["2xl"],
-  },
-  signOutText: {
-    color: "#EF4444",
-    fontSize: FontSize.base,
-    fontWeight: FontWeight.semibold,
-  },
-
-  // --- Delete Account ---
-  deleteAccountBtn: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: Spacing.md,
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.lg,
-    minHeight: 20,
-  },
-  deleteAccountText: {
-    color: Colors.dark.textMuted,
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.medium,
-    textDecorationLine: "underline",
-  },
-
-  // --- Footer ---
-  footer: {
-    textAlign: "center",
-    fontSize: FontSize.sm,
-    color: Colors.dark.textMuted,
-    lineHeight: 20,
-    paddingBottom: Spacing.xl,
   },
 
   // ======== FORMS ========
@@ -1294,15 +844,15 @@ const s = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   backBtn: {
-    width: 30,
-    height: 30,
+    width: 44,
+    height: 44,
     justifyContent: "center",
     alignItems: "center",
   },
   formTitle: {
     fontSize: FontSize.xl,
     fontWeight: FontWeight.bold,
-    color: Colors.dark.text,
+    color: palette.text,
   },
   fieldGroup: {
     marginBottom: Spacing.xl,
@@ -1310,12 +860,12 @@ const s = StyleSheet.create({
   fieldLabel: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
-    color: Colors.dark.textSecondary,
+    color: palette.muted,
     marginBottom: Spacing.sm,
   },
   fieldHint: {
     fontSize: FontSize.xs,
-    color: Colors.dark.textMuted,
+    color: palette.muted,
     marginTop: Spacing.xs,
   },
   fieldError: {
@@ -1329,31 +879,31 @@ const s = StyleSheet.create({
     marginTop: Spacing.xs,
   },
   input: {
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: palette.surface,
     borderRadius: BorderRadius.md,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
     fontSize: FontSize.base,
-    color: Colors.dark.text,
+    color: palette.text,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: palette.border,
   },
 
   // Password
   passwordWrap: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: palette.surface,
     borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: palette.border,
   },
   passwordInput: {
     flex: 1,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
     fontSize: FontSize.base,
-    color: Colors.dark.text,
+    color: palette.text,
   },
   eyeBtn: {
     paddingHorizontal: Spacing.md,
@@ -1376,21 +926,23 @@ const s = StyleSheet.create({
   // JLPT Selector
   jlptRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: Spacing.sm,
     marginTop: Spacing.sm,
   },
   jlptBtn: {
-    flex: 1,
+    width: "30%",
+    minHeight: 62,
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.md,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: palette.surface,
     alignItems: "center",
     borderWidth: 1.5,
-    borderColor: Colors.dark.border,
+    borderColor: palette.border,
   },
   jlptBtnActive: {
-    backgroundColor: Colors.primary[600] + "30",
-    borderColor: Colors.primary[500],
+    backgroundColor: "#C4B8F018",
+    borderColor: palette.lavender,
   },
   jlptBtnLocked: {
     opacity: 0.4,
@@ -1398,18 +950,18 @@ const s = StyleSheet.create({
   jlptBtnLabel: {
     fontSize: FontSize.base,
     fontWeight: FontWeight.bold,
-    color: Colors.dark.textSecondary,
+    color: palette.muted,
   },
   jlptBtnLabelActive: {
-    color: Colors.primary[300],
+    color: palette.lavender,
   },
   jlptBtnDesc: {
     fontSize: 9,
-    color: Colors.dark.textMuted,
+    color: palette.muted,
     marginTop: 2,
   },
   jlptBtnDescActive: {
-    color: Colors.primary[400],
+    color: palette.lavender,
   },
 
   // Form Actions
@@ -1423,13 +975,13 @@ const s = StyleSheet.create({
     flex: 1,
     paddingVertical: Spacing.lg,
     borderRadius: BorderRadius.lg,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: palette.surface,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: palette.border,
   },
   secondaryBtnText: {
-    color: Colors.dark.textSecondary,
+    color: palette.muted,
     fontSize: FontSize.base,
     fontWeight: FontWeight.semibold,
   },
@@ -1437,16 +989,16 @@ const s = StyleSheet.create({
     flex: 2,
     paddingVertical: Spacing.lg,
     borderRadius: BorderRadius.lg,
-    backgroundColor: Colors.primary[600],
+    backgroundColor: palette.lavender,
     alignItems: "center",
-    shadowColor: Colors.primary[500],
+    shadowColor: palette.lavender,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
   },
   primaryBtnText: {
-    color: "#fff",
+    color: palette.bg,
     fontSize: FontSize.base,
     fontWeight: FontWeight.bold,
   },

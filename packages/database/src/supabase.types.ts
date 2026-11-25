@@ -1059,6 +1059,60 @@ export type Database = {
           },
         ];
       };
+      mock_exam_attempts: {
+        Row: {
+          answers: Json;
+          completed_at: string;
+          correct_answers: number;
+          created_at: string;
+          duration_seconds: number;
+          exam_id: string;
+          exam_title: string;
+          id: string;
+          mode: string;
+          raw_score_percent: number;
+          section_id: string | null;
+          section_results: Json;
+          started_at: string;
+          total_questions: number;
+          user_id: string;
+        };
+        Insert: {
+          answers?: Json;
+          completed_at: string;
+          correct_answers: number;
+          created_at?: string;
+          duration_seconds: number;
+          exam_id: string;
+          exam_title: string;
+          id: string;
+          mode: string;
+          raw_score_percent: number;
+          section_id?: string | null;
+          section_results?: Json;
+          started_at: string;
+          total_questions: number;
+          user_id: string;
+        };
+        Update: {
+          answers?: Json;
+          completed_at?: string;
+          correct_answers?: number;
+          created_at?: string;
+          duration_seconds?: number;
+          exam_id?: string;
+          exam_title?: string;
+          id?: string;
+          mode?: string;
+          raw_score_percent?: number;
+          section_id?: string | null;
+          section_results?: Json;
+          started_at?: string;
+          total_questions?: number;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       practice_list_items: {
         Row: {
           created_at: string;

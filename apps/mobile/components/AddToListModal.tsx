@@ -20,10 +20,12 @@ import type { PracticeStudyItem } from "@japangolearn/core";
 import { addPracticeListItemWithQueue, createPracticeListWithQueue } from "@/lib/offline-queue";
 import { readCache, updateCache, writeCache } from "@/lib/offline-cache";
 
+type AddablePracticeItemType = Exclude<PracticeItemType, "listening">;
+
 type AddToListModalProps = {
   visible: boolean;
   onClose: () => void;
-  itemType: PracticeItemType;
+  itemType: AddablePracticeItemType;
   itemId: number;
   itemTitle: string; // To show in the UI what we are adding
   studyItem?: PracticeStudyItem;
@@ -31,7 +33,7 @@ type AddToListModalProps = {
 
 // The noun used in the "already added" prompt, so it reads naturally for each
 // kind of content rather than a generic "item".
-const ITEM_NOUN: Record<PracticeItemType, string> = {
+const ITEM_NOUN: Record<AddablePracticeItemType, string> = {
   vocabulary: "word",
   kana: "character",
   kanji: "kanji",
@@ -422,12 +424,12 @@ export function AddToListModal({
 
 const s = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "flex-end",
     zIndex: 1000,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.6)",
   },
   modalContainer: {
@@ -566,14 +568,14 @@ const s = StyleSheet.create({
   // Sits above the sheet (zIndex on the parent overlay is 1000) so it reads as
   // a decision on top of the list, not a separate screen.
   confirmOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "center",
     alignItems: "center",
     padding: Spacing.xl,
     zIndex: 1100,
   },
   confirmBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0,0,0,0.6)",
   },
   confirmCard: {

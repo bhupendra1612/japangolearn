@@ -15,6 +15,7 @@ import {
   Modal,
   BackHandler,
   AppState,
+  type ScrollViewInstance,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -88,7 +89,7 @@ function ProfileContent() {
     null
   );
   const [signingOut, setSigningOut] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const refreshAuthRef = useRef(refreshProfile);
   const progressRequest = useRef<AbortController | null>(null);
   const userId = user?.id;

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Linking,
   type LayoutChangeEvent,
+  type ScrollViewInstance,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -47,7 +48,7 @@ const allIds = sections.map((section) => section.id);
 export default function PrivacyScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
-  const scroll = useRef<ScrollView>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
   const sectionPositions = useRef<Record<string, number>>({});
   const pendingJump = useRef<string | null>(null);
   const [expanded, setExpanded] = useState<string[]>([]);

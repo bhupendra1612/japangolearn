@@ -32,7 +32,11 @@ export function tabOptions(key: keyof typeof tabs): BottomTabNavigationOptions {
           focused && { backgroundColor: tab.color + "1C", borderColor: tab.color + "50" },
         ]}
       >
-        <Ionicons name={focused ? tab.selectedIcon : tab.icon} size={22} color={color} />
+        <Ionicons
+          name={focused ? tab.selectedIcon : tab.icon}
+          size={22}
+          color={typeof color === "string" ? color : tab.color}
+        />
       </View>
     ),
   };

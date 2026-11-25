@@ -11,6 +11,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  type ScrollViewInstance,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
@@ -211,7 +212,7 @@ function VocabularyStudy({ storageOwner }: { storageOwner: string }) {
     null
   );
   const listRef = useRef<FlatList<StudyWord>>(null);
-  const detailScroll = useRef<ScrollView>(null);
+  const detailScroll = useRef<ScrollViewInstance>(null);
   const bookmarkKey = `vocabulary-bookmarks:${storageOwner}`;
 
   const refresh = useCallback(() => {
@@ -620,7 +621,7 @@ function VocabularyStudy({ storageOwner }: { storageOwner: string }) {
               ListFooterComponent={
                 filtered.length ? (
                   <Text style={s.listFooter}>Listen. Recall. Use the word in a sentence.</Text>
-                ) : null
+                ) : undefined
               }
             />
           )}

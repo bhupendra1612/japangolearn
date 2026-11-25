@@ -550,7 +550,7 @@ function KanjiLibrary({ owner }: { owner: string }) {
         ListFooterComponent={
           items.length ? (
             <Text style={s.footer}>One character at a time. You’re building something good.</Text>
-          ) : null
+          ) : undefined
         }
       />
       {selected && (

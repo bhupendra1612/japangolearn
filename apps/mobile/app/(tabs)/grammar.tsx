@@ -227,7 +227,7 @@ export default function GrammarScreen() {
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          loading ? null : loadFailed ? (
+          loading ? undefined : loadFailed ? (
             <LoadError
               onRetry={() => void fetchPatterns()}
               offline={offline}

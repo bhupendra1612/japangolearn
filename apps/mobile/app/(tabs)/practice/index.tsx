@@ -434,7 +434,7 @@ export default function PracticeHubScreen() {
             ListHeaderComponent={
               reordering && lists.length > 1 ? (
                 <Text style={s.reorderHint}>Use the arrows to change the order</Text>
-              ) : null
+              ) : undefined
             }
             ListEmptyComponent={
               <View style={s.emptyBox}>

@@ -112,7 +112,7 @@ export default function TabLayout() {
             headerTitle: "",
             // Kept off the tab bar to hold the bar at five items. Writing is
             // still reachable from Quick Actions on Home and from the Sidebar.
-            href: null,
+            tabBarButton: () => null,
           }}
         />
         <Tabs.Protected guard={!!session}>
@@ -142,7 +142,7 @@ export default function TabLayout() {
               headerTitle: "",
               // Kept off the tab bar to hold the bar at five items. Trophies is
               // reached from the Progress card on Profile, and from the Sidebar.
-              href: null,
+              tabBarButton: () => null,
             }}
           />
         </Tabs.Protected>
@@ -150,7 +150,7 @@ export default function TabLayout() {
           name="kanji"
           options={{
             title: "Kanji",
-            href: null, // hides from tab bar
+            tabBarButton: () => null,
             headerTransparent: true,
             headerTitle: "",
           }}
